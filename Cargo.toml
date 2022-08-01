@@ -1,0 +1,6 @@
+[workspace]
+members = [
+  "engine",
+  "plugin-runtime",
+  "plugins/logic-base"
+]
