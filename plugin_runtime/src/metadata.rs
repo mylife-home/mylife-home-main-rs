@@ -20,6 +20,10 @@ pub struct PluginMetadata {
 }
 
 impl PluginMetadata {
+  pub fn from(builder: PluginMetadataBuilder) -> PluginMetadata {
+    builder.metadata
+  }
+
   pub fn get_name(&self) -> &str {
     &self.name
   }
@@ -127,10 +131,6 @@ impl PluginMetadataBuilder {
     };
 
     self.metadata.config.insert(name, config_item);
-  }
-
-  pub fn build(&mut self) -> PluginMetadata {
-    self.metadata
   }
 }
 
