@@ -1,11 +1,6 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}
+pub mod metadata;
+
+use std::ops::Deref;
 
 pub trait Plugin {
   fn init(&mut self) {
@@ -16,13 +11,13 @@ pub trait Plugin {
 }
 
 pub struct State<T> {
-  value: T;
+  value: T,
   // callbacks
 }
 
 impl<T> State<T> {
   pub fn change(&mut self, value: T) {
-    &self.value = value;
+    self.value = value;
     // callbacks
   }
 }
