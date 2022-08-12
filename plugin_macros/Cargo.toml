@@ -7,5 +7,7 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
+plugin_runtime = { path = "../plugin_runtime" }
 syn = "1.0"
 quote = "1.0"
+darling = "0.14.1"
