@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub enum PluginUsage {
   Sensor,
   Actuator,
@@ -7,6 +8,7 @@ pub enum PluginUsage {
   Ui,
 }
 
+#[derive(Debug)]
 pub struct PluginMetadata {
   // id
   name: String,
@@ -41,11 +43,13 @@ impl PluginMetadata {
   }
 }
 
+#[derive(Debug)]
 pub enum MemberType {
   Action,
   State,
 }
 
+#[derive(Debug)]
 pub enum Type {
   Range(i64, i64),
   Text,
@@ -55,6 +59,7 @@ pub enum Type {
   Complex,
 }
 
+#[derive(Debug)]
 pub struct Member {
   description: Option<String>,
   member_type: MemberType,
@@ -75,6 +80,7 @@ impl Member {
   }
 }
 
+#[derive(Debug)]
 pub enum ConfigType {
   String,
   Bool,
@@ -82,6 +88,7 @@ pub enum ConfigType {
   Float,
 }
 
+#[derive(Debug)]
 pub struct ConfigItem {
   description: Option<String>,
   value_type: ConfigType,
