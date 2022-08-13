@@ -61,8 +61,8 @@ struct ConfigAttribute {
     #[darling(default)]
     decription: Option<String>,
 
-    #[darling(default)]
-    value_type: Option<MConfigType>, // TODO: rename type
+    #[darling(default, rename = "value")]
+    value_type: Option<MConfigType>,
 }
 
 #[derive(Debug, FromField)]
@@ -77,8 +77,8 @@ struct StateAttribute {
     #[darling(default)]
     decription: Option<String>,
 
-    #[darling(default)]
-    value_type: Option<MType>, // TODO: rename type
+    #[darling(default, rename = "value")]
+    value_type: Option<MType>,
 }
 
 #[derive(Debug, FromField)]
@@ -93,8 +93,8 @@ struct ActionAttribute {
     #[darling(default)]
     decription: Option<String>,
 
-    #[darling(default)]
-    value_type: Option<MType>, // TODO: rename type
+    #[darling(default, rename = "value")]
+    value_type: Option<MType>,
 }
 
 #[proc_macro_derive(MylifePlugin, attributes(plugin_settings, config, state, action))]
