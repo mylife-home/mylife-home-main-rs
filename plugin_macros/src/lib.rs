@@ -52,9 +52,6 @@ struct PluginSettingsAttribute {
 #[derive(Debug, FromField)]
 #[darling(attributes(config))]
 struct ConfigAttribute {
-    ident: Option<syn::Ident>,
-    ty: syn::Type,
-
     #[darling(default)]
     name: Option<String>,
 
@@ -68,9 +65,6 @@ struct ConfigAttribute {
 #[derive(Debug, FromField)]
 #[darling(attributes(state))]
 struct StateAttribute {
-    ident: Option<syn::Ident>,
-    ty: syn::Type,
-
     #[darling(default)]
     name: Option<String>,
 
@@ -84,9 +78,6 @@ struct StateAttribute {
 #[derive(Debug, FromField)]
 #[darling(attributes(action))]
 struct ActionAttribute {
-    ident: Option<syn::Ident>,
-    ty: syn::Type,
-
     #[darling(default)]
     name: Option<String>,
 
@@ -99,10 +90,31 @@ struct ActionAttribute {
 
 #[proc_macro_derive(MylifePlugin, attributes(plugin_settings, config, state, action))]
 pub fn mylife_plugin(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input);
+    let input: DeriveInput = parse_macro_input!(input);
     let plugin_settings = PluginSettingsAttribute::from_derive_input(&input).expect("Wrong options");
     println!("PLUGIN SETTINGS: \"{:?}\"", plugin_settings);
 
-    println!("PLUGIN attr: \"{:?}\"", input);
+    if let syn::Data::Struct(s) = input.data {
+        match s.fields {
+            syn::Fields::Named(fields) => {
+                for field in fields.named.iter() {
+                    if let syn::Type::Path(syn::TypePath { qself: _, path }) = &field.ty {
+                        let field_type = path.segments.last().unwrap();
+                        println!("FIELD {} {} {:?}", field.ident.as_ref().unwrap(), field_type.ident, field_type.arguments);
+                    }
+
+                    let config = ConfigAttribute::from_field(field).unwrap();
+                    let state = StateAttribute::from_field(field).unwrap();
+                    let action = ActionAttribute::from_field(field).unwrap();
+                    println!("CONFIG: \"{:?}\"", config);
+                    println!("STATE: \"{:?}\"", state);
+                    println!("ACTION: \"{:?}\"", action);
+                }
+            },
+            syn::Fields::Unnamed(_) => panic!("Unhandled struct field type: Unnamed"),
+            syn::Fields::Unit => panic!("Unhandled struct field type: Unit"),
+        }
+    }
+
     TokenStream::new()
 }
