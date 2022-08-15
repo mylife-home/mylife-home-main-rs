@@ -10,14 +10,11 @@ pub trait Plugin {
 
 pub struct PluginData {
     metadata: metadata::PluginMetadata,
-    factory: fn(name: String, config: ConfigMap) -> Box<dyn Plugin>,
+    factory: fn() -> Box<dyn Plugin>,
 }
 
 impl PluginData {
-    pub fn new(
-        metadata: metadata::PluginMetadata,
-        factory: fn(name: String, config: ConfigMap) -> Box<dyn Plugin>,
-    ) -> PluginData {
+    pub fn new(metadata: metadata::PluginMetadata, factory: fn() -> Box<dyn Plugin>) -> PluginData {
         PluginData { metadata, factory }
     }
 
@@ -36,9 +33,7 @@ pub struct PluginRuntime {
 
 pub struct ConfigMap {}
 
-pub trait StateDef {
-
-}
+pub trait StateDef {}
 
 pub struct State<T> {
     value: T,
@@ -52,9 +47,7 @@ impl<T> State<T> {
     }
 }
 
-impl<T> StateDef for State<T> {
-
-}
+impl<T> StateDef for State<T> {}
 
 impl<T> Deref for State<T> {
     type Target = T;
@@ -64,18 +57,14 @@ impl<T> Deref for State<T> {
     }
 }
 
-pub trait ConfigDef {
-
-}
+pub trait ConfigDef {}
 
 pub struct Config<T> {
     value: T,
     // init
 }
 
-impl<T> ConfigDef for Config<T> {
-
-}
+impl<T> ConfigDef for Config<T> {}
 
 impl<T> Deref for Config<T> {
     type Target = T;
@@ -85,15 +74,11 @@ impl<T> Deref for Config<T> {
     }
 }
 
-pub trait ActionDef {
-
-}
+pub trait ActionDef {}
 
 pub struct Action<T> {
     value: T,
     // handler
 }
 
-impl<T> ActionDef for Action<T> {
-
-}
+impl<T> ActionDef for Action<T> {}

@@ -1,143 +1,167 @@
 use std::collections::HashMap;
 
+use crate::Plugin;
+
 #[derive(Debug)]
 pub enum PluginUsage {
-  Sensor,
-  Actuator,
-  Logic,
-  Ui,
+    Sensor,
+    Actuator,
+    Logic,
+    Ui,
 }
 
 #[derive(Debug)]
 pub struct PluginMetadata {
-  // id
-  name: String,
-  // module
-  usage: PluginUsage,
-  // version
-  description: Option<String>,
+    // id
+    name: String,
+    // module
+    usage: PluginUsage,
+    // version
+    description: Option<String>,
 
-  members: HashMap<String, Member>,
-  config: HashMap<String, ConfigItem>,
+    members: HashMap<String, Member>,
+    config: HashMap<String, ConfigItem>,
 }
 
 impl PluginMetadata {
-  pub fn from(builder: PluginMetadataBuilder) -> PluginMetadata {
-    builder.metadata
-  }
+    pub fn from(builder: PluginMetadataBuilder) -> PluginMetadata {
+        builder.metadata
+    }
 
-  pub fn get_name(&self) -> &str {
-    &self.name
-  }
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
 
-  pub fn get_description(&self) -> Option<&str> {
-    self.description.as_deref()
-  }
+    pub fn get_description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
 
-  pub fn get_members(&self) -> &HashMap<String, Member> {
-    &self.members
-  }
+    pub fn get_members(&self) -> &HashMap<String, Member> {
+        &self.members
+    }
 
-  pub fn get_config(&self) -> &HashMap<String, ConfigItem> {
-    &self.config
-  }
+    pub fn get_config(&self) -> &HashMap<String, ConfigItem> {
+        &self.config
+    }
 }
 
 #[derive(Debug)]
 pub enum MemberType {
-  Action,
-  State,
+    Action,
+    State,
 }
 
 #[derive(Debug)]
 pub enum Type {
-  Range(i64, i64),
-  Text,
-  Float,
-  Bool,
-  Enum(Vec<String>),
-  Complex,
+    Range(i64, i64),
+    Text,
+    Float,
+    Bool,
+    Enum(Vec<String>),
+    Complex,
 }
 
 #[derive(Debug)]
 pub struct Member {
-  description: Option<String>,
-  member_type: MemberType,
-  value_type: Type,
+    description: Option<String>,
+    member_type: MemberType,
+    value_type: Type,
 }
 
 impl Member {
-  pub fn get_description(&self) -> Option<&str> {
-    self.description.as_deref()
-  }
+    pub fn get_description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
 
-  pub fn get_member_type(&self) -> &MemberType {
-    &self.member_type
-  }
+    pub fn get_member_type(&self) -> &MemberType {
+        &self.member_type
+    }
 
-  pub fn get_value_type(&self) -> &Type {
-    &self.value_type
-  }
+    pub fn get_value_type(&self) -> &Type {
+        &self.value_type
+    }
 }
 
 #[derive(Debug)]
 pub enum ConfigType {
-  String,
-  Bool,
-  Integer,
-  Float,
+    String,
+    Bool,
+    Integer,
+    Float,
 }
 
 #[derive(Debug)]
 pub struct ConfigItem {
-  description: Option<String>,
-  value_type: ConfigType,
+    description: Option<String>,
+    value_type: ConfigType,
 }
 
 impl ConfigItem {
-  pub fn get_description(&self) -> Option<&str> {
-    self.description.as_deref()
-  }
+    pub fn get_description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
 
-  pub fn get_value_type(&self) -> &ConfigType {
-    &self.value_type
-  }
+    pub fn get_value_type(&self) -> &ConfigType {
+        &self.value_type
+    }
 }
 
 pub struct PluginMetadataBuilder {
-  metadata: PluginMetadata,
+    metadata: PluginMetadata,
 }
 
 impl PluginMetadataBuilder {
-  pub fn set_name(&mut self, name: String) {
-    self.metadata.name = name;
-  }
+    pub fn new() -> Self {
+        let mut metadata = PluginMetadata {
+            name: String::new(),
+            usage: PluginUsage::Logic,
+            description: None,
+            members: HashMap::new(),
+            config: HashMap::new(),
+        };
 
-  pub fn set_usage(&mut self, usage: PluginUsage) {
-    self.metadata.usage = usage;
-  }
+        PluginMetadataBuilder { metadata: metadata }
+    }
 
-  pub fn set_description(&mut self, description: Option<String>) {
-    self.metadata.description = description;
-  }
+    pub fn set_name(&mut self, name: String) {
+        self.metadata.name = name;
+    }
 
-  pub fn add_member(&mut self, name: String, description: Option<String>, member_type: MemberType, value_type: Type) {
-    let member = Member {
-      description: description,
-      member_type: member_type,
-      value_type: value_type
-    };
+    pub fn set_usage(&mut self, usage: PluginUsage) {
+        self.metadata.usage = usage;
+    }
 
-    self.metadata.members.insert(name, member);
-  }
+    pub fn set_description(&mut self, description: Option<String>) {
+        self.metadata.description = description;
+    }
 
-  pub fn add_config(&mut self, name: String, description: Option<String>, value_type: ConfigType) {
-    let config_item = ConfigItem {
-      description: description,
-      value_type: value_type
-    };
+    pub fn add_member(
+        &mut self,
+        name: String,
+        description: Option<String>,
+        member_type: MemberType,
+        value_type: Type,
+    ) {
+        let member = Member {
+            description: description,
+            member_type: member_type,
+            value_type: value_type,
+        };
 
-    self.metadata.config.insert(name, config_item);
-  }
+        self.metadata.members.insert(name, member);
+    }
+
+    pub fn add_config(
+        &mut self,
+        name: String,
+        description: Option<String>,
+        value_type: ConfigType,
+    ) {
+        let config_item = ConfigItem {
+            description: description,
+            value_type: value_type,
+        };
+
+        self.metadata.config.insert(name, config_item);
+    }
 }
-
