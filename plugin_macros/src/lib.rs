@@ -90,6 +90,7 @@ struct ActionAttribute {
 
 #[proc_macro_derive(MylifePlugin, attributes(plugin_settings, config, state, action))]
 pub fn mylife_plugin(input: TokenStream) -> TokenStream {
+    /*
     let input: DeriveInput = parse_macro_input!(input);
     let plugin_settings = PluginSettingsAttribute::from_derive_input(&input).expect("Wrong options");
     println!("PLUGIN SETTINGS: \"{:?}\"", plugin_settings);
@@ -101,6 +102,10 @@ pub fn mylife_plugin(input: TokenStream) -> TokenStream {
                     if let syn::Type::Path(syn::TypePath { qself: _, path }) = &field.ty {
                         let field_type = path.segments.last().unwrap();
                         println!("FIELD {} {} {:?}", field.ident.as_ref().unwrap(), field_type.ident, field_type.arguments);
+
+                        for attr in field.attrs.iter() {
+                            println!("ATTR {:?}", attr.path.get_ident().unwrap());
+                        }
                     }
 
                     let config = ConfigAttribute::from_field(field).unwrap();
@@ -115,6 +120,6 @@ pub fn mylife_plugin(input: TokenStream) -> TokenStream {
             syn::Fields::Unit => panic!("Unhandled struct field type: Unit"),
         }
     }
-
+*/
     TokenStream::new()
 }
