@@ -3,6 +3,26 @@ use properties::{StateDef, ConfigDef, ActionDef};
 pub mod metadata;
 pub mod properties;
 
+#[derive(Debug)]
+pub enum NetValue {
+    Int8(i8),
+    UInt8(i8),
+    Int32(i32),
+    UInt32(i32),
+    String(String),
+    Float(f64),
+    Bool(bool),
+    Complex(),
+}
+
+#[derive(Debug)]
+pub enum ConfigValue {
+    String(String),
+    Bool(bool),
+    Integer(i64),
+    Float(f64),
+}
+
 pub trait Plugin {
     fn runtime_data(&self) -> (&[&dyn StateDef], &[&dyn ActionDef], &[&dyn ConfigDef]);
     fn init(&mut self) {}

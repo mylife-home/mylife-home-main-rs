@@ -1,123 +1,116 @@
-use std::ops::Deref;
+pub mod state {
+    use crate::NetValue;
+    use std::ops::Deref;
 
-#[derive(Debug)]
-pub enum NetValue {
-    Int8(i8),
-    UInt8(i8),
-    Int32(i32),
-    UInt32(i32),
-    String(String),
-    Float(f64),
-    Bool(bool),
-    Complex(),
-}
+    pub trait Definition {
+        fn runtime_register(&mut self, handler: fn(value: &NetValue));
+        fn runtime_get(&self) -> &NetValue;
+    }
 
-#[derive(Debug)]
-pub enum ConfigValue {
-    String(String),
-    Bool(bool),
-    Integer(i64),
-    Float(f64),
-}
+    pub struct Int8 {
+        value: i8,
+        handler: Option<fn(value: NetValue)>,
+    }
 
-pub trait StateDef {
-    fn runtime_register(&mut self, handler: fn(value: &NetValue));
-    fn runtime_get(&self) -> &NetValue;
-}
+    impl Int8 {
+        pub fn change(&mut self, value: i8) {
+            self.value = value;
 
-pub struct State<T> {
-    value: T,
-    handler: Option<fn(value: NetValue)>,
-}
+            if let Some(handler) = self.handler {
+                handler(NetValue::Int8(self.value));
+            }
+        }
+    }
 
-impl<T> State<T> {
-    pub fn change(&mut self, value: T) {
-        self.value = value;
+    impl Definition for Int8 {
+        fn runtime_register(&mut self, handler: fn(value: NetValue)) {
+            self.handler = Some(handler);
+        }
 
-        if let Some(handler) = self.handler {
-            handler(&self.value);
+        fn runtime_get(&self) -> NetValue {
+            NetValue::Int8(self.value)
+        }
+    }
+
+    impl<T> Deref for Int8 {
+        type Target = i8;
+
+        fn deref(&self) -> &Self::Target {
+            &self.value
         }
     }
 }
 
-impl<T> StateDef for State<T> {
-    fn runtime_register(&mut self, handler: fn(value: &NetValue)) {
-        self.handler = Some(handler);
+pub mod config {
+    use crate::ConfigValue;
+    use std::ops::Deref;
+
+    // TODO: improve
+    pub enum ConfigError {
+        InvalidType,
     }
 
-    fn runtime_get(&self) -> &NetValue {
-        &self.value
+    pub trait Definition {
+        fn runtime_init(&mut self, value: ConfigValue) -> Result<(), ConfigError>;
     }
-}
 
-impl<T> Deref for State<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
+    pub struct Integer {
+        value: i64,
     }
-}
 
-// TODO: improve
-pub enum ConfigError {
-    InvalidType,
-}
+    impl Definition for Integer {
+        fn runtime_init(&mut self, value: ConfigValue) -> Result<(), ConfigError> {
+            // TODO: check type
+            self.value = value;
 
-pub trait ConfigDef {
-    fn runtime_init(&mut self, value: ConfigValue) -> Result<(), ConfigError>;
-}
-
-pub struct Config<T> {
-    value: T,
-}
-
-impl<T> ConfigDef for Config<T> {
-    fn runtime_init(&mut self, value: ConfigValue) -> Result<(), ConfigError> {
-        // TODO: check type
-        self.value = value;
-
-        Ok(())
-    }
-}
-
-impl<T> Deref for Config<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-pub enum ActionError {
-    NotBound,
-}
-
-pub trait ActionDef {
-    fn runtime_validate(&self) -> Result<(), ActionError>;
-    fn runtime_set(&self, value: NetValue);
-}
-
-pub struct Action<T> {
-    handler: Option<fn(value: T)>,
-}
-
-impl<T> Action<T> {
-    pub fn bind(&mut self, handler: fn(value: T)) {
-        self.handler = Some(handler);
-    }
-}
-
-impl<T> ActionDef for Action<T> {
-    fn runtime_validate(&self) -> Result<(), ActionError> {
-        if let None = self.handler {
-            Err(ActionError::NotBound)
-        } else {
             Ok(())
         }
     }
 
-    fn runtime_set(&self, value: NetValue) {
-        let handler = self.handler.as_ref().unwrap();
-        handler(value);
+    impl Deref for Integer {
+        type Target = i64;
+
+        fn deref(&self) -> &Self::Target {
+            &self.value
+        }
+    }
+}
+pub mod action {
+    use crate::NetValue;
+
+    pub enum ActionError {
+        NotBound,
+    }
+
+    pub trait Definition {
+        fn runtime_validate(&self) -> Result<(), ActionError>;
+        fn runtime_set(&self, value: NetValue);
+    }
+
+    pub struct Int8 {
+        handler: Option<fn(value: i8)>,
+    }
+
+    impl Int8 {
+        pub fn bind(&mut self, handler: fn(value: i8)) {
+            self.handler = Some(handler);
+        }
+    }
+
+    impl Definition for Int8 {
+        fn runtime_validate(&self) -> Result<(), ActionError> {
+            if let None = self.handler {
+                Err(ActionError::NotBound)
+            } else {
+                Ok(())
+            }
+        }
+
+        fn runtime_set(&self, value: NetValue) {
+            if let NetValue::Int8(typed_value) = value {
+                let handler = self.handler.as_ref().unwrap();
+                handler(typed_value);
+            }
+        }
     }
 }
