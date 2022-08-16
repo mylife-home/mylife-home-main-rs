@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use crate::Plugin;
-
 #[derive(Debug)]
 pub enum PluginUsage {
     Sensor,
