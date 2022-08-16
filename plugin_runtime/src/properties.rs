@@ -41,7 +41,7 @@ impl<T> State<T> {
 }
 
 impl<T> StateDef for State<T> {
-    fn runtime_register(&mut self, handler: fn(value: NetValue)) {
+    fn runtime_register(&mut self, handler: fn(value: &NetValue)) {
         self.handler = Some(handler);
     }
 
@@ -75,6 +75,8 @@ impl<T> ConfigDef for Config<T> {
     fn runtime_init(&mut self, value: ConfigValue) -> Result<(), ConfigError> {
         // TODO: check type
         self.value = value;
+
+        Ok(())
     }
 }
 
