@@ -1,4 +1,4 @@
-use properties::{StateDef, ConfigDef, ActionDef};
+use properties::{state, config, action};
 
 pub mod metadata;
 pub mod properties;
@@ -24,7 +24,7 @@ pub enum ConfigValue {
 }
 
 pub trait Plugin {
-    fn runtime_data(&self) -> (&[&dyn StateDef], &[&dyn ActionDef], &[&dyn ConfigDef]);
+    fn runtime_data(&self) -> (&[&dyn state::Definition], &[&dyn action::Definition], &[&dyn config::Definition]);
     fn init(&mut self) {}
     fn terminate(&mut self) {}
 }
