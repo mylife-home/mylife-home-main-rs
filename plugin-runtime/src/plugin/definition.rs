@@ -1,4 +1,4 @@
-pub trait MyLifePluginRuntime {}
+use crate::MyLifePluginRuntime;
 
 pub trait MylifePluginHooks {
     // called after config
@@ -11,6 +11,10 @@ pub trait MylifePluginHooks {
 pub trait MylifePlugin: Default + MylifePluginHooks {
     // used to export
     fn runtime() -> Box<dyn MyLifePluginRuntime>;
+
+    // mark the plugin instance like it has failed
+    // usually, only drop should be called after that
+    fn fail(error: Box<dyn std::error::Error>);
 }
 
 pub struct State<T: Default> {

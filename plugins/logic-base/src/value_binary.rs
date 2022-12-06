@@ -15,11 +15,14 @@ pub struct ValueBinary {
 impl MylifePluginHooks for ValueBinary {}
 
 impl ValueBinary {
+    // can return Result<(), Box<dyn std::error::Error>> or nothing
     #[mylife_action(description = "set value to on")] // type=, name=
-    fn on(&mut self, arg: bool) {
+    fn on(&mut self, arg: bool) -> Result<(), Box<dyn std::error::Error>> {
         if arg {
             self.state.set(true);
         }
+
+        Ok(())
     }
 
     #[mylife_action(description = "set value to off")]

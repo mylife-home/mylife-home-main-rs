@@ -8,7 +8,11 @@ pub fn derive_mylife_plugin(input: TokenStream) -> TokenStream {
 
     let gen = quote! {
         impl plugin_runtime::MylifePlugin for #name {
-            fn runtime() -> Box<dyn plugin_runtime::MyLifePluginRuntime>{
+            fn runtime() -> Box<dyn plugin_runtime::MyLifePluginRuntime> {
+                unimplemented!();
+            }
+
+            fn fail(error: Box<dyn std::error::Error>) {
                 unimplemented!();
             }
         }
