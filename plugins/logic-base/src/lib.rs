@@ -1,6 +1,6 @@
 mod value_binary;
 
-use plugin_runtime::{export_plugin, PluginRegistry};
+use plugin_runtime::{export_plugin, MylifePlugin, PluginRegistry};
 use value_binary::ValueBinary;
 
 export_plugin!(register);

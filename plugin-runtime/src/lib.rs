@@ -26,8 +26,16 @@ pub trait PluginRegistry {
 
 pub trait MyLifePluginRuntime {}
 
+pub trait MylifePluginHooks {
+    // called after config
+    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+}
+
 // Trait implemented by the plugin itself
-pub trait MylifePlugin {
+pub trait MylifePlugin: Default + MylifePluginHooks {
+    // used to export
     fn runtime() -> Box<dyn MyLifePluginRuntime>;
 }
 

@@ -1,7 +1,7 @@
 use plugin_macros::{mylife_action, MylifePlugin};
-use plugin_runtime::State;
+use plugin_runtime::{MylifePluginHooks, State};
 
-#[derive(MylifePlugin)]
+#[derive(MylifePlugin, Default)]
 #[mylife_plugin(description = "step relay")] // name=
 pub struct ValueBinary {
     #[mylife_config(description = "useless")] // type=, name=
@@ -10,6 +10,9 @@ pub struct ValueBinary {
     #[mylife_state(description = "actual value")] // type=, name=
     state: State<bool>,
 }
+
+// impl Drop si besoin de terminate
+impl MylifePluginHooks for ValueBinary {}
 
 impl ValueBinary {
     #[mylife_action(description = "set value to on")] // type=, name=
