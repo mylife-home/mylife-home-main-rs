@@ -1,7 +1,7 @@
 [workspace]
 members = [
-  "engine",
-  "plugin_runtime",
-  "plugin_macros",
-  "plugins/logic_base"
+  "mylife-home-core",
+  "plugin-runtime",
+  "plugin-macros",
+  "plugins/logic-base"
 ]
