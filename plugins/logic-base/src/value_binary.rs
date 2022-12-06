@@ -1,5 +1,5 @@
-#[derive(MylifeComponent)]
-#[mylife_component(description = "step relay")] // name=
+#[derive(MylifePlugin)]
+#[mylife_plugin(description = "step relay")] // name=
 pub struct ValueBinary {
   #[mylife_config(description="useless")] // type=, name=
   config: bool,

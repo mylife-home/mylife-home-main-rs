@@ -1,14 +1,10 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+mod value_binary;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+use plugin_runtime::{ export_plugin, PluginRegistry };
+use value_binary::ValueBinary;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+export_plugin!(register);
+
+extern "C" fn register(registry: &mut dyn PluginRegistry) {
+    registry.register_plugin(ValueBinary::runtime());
 }
