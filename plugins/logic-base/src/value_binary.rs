@@ -4,7 +4,7 @@ use plugin_runtime::{MylifePluginHooks, State};
 #[derive(MylifePlugin, Default)]
 #[mylife_plugin(description = "step relay")] // name=
 pub struct ValueBinary {
-    #[mylife_config(description = "useless")] // type=, name=
+    #[mylife_config(description = "initial value (useless only config example")] // type=, name=
     config: bool,
 
     #[mylife_state(description = "actual value")] // type=, name=
@@ -12,7 +12,13 @@ pub struct ValueBinary {
 }
 
 // impl Drop si besoin de terminate
-impl MylifePluginHooks for ValueBinary {}
+impl MylifePluginHooks for ValueBinary {
+    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.state.set(self.config);
+
+        Ok(())
+    }
+}
 
 impl ValueBinary {
     // can return Result<(), Box<dyn std::error::Error>> or nothing
