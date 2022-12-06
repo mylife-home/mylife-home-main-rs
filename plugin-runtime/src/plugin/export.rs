@@ -1,4 +1,4 @@
-use crate::MyLifePluginRuntime;
+use crate::runtime;
 
 pub static CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub static RUSTC_VERSION: &str = env!("RUSTC_VERSION");
@@ -25,5 +25,5 @@ macro_rules! export_plugin {
 }
 
 pub trait PluginRegistry {
-    fn register_plugin(&mut self, plugin: Box<dyn MyLifePluginRuntime>);
+    fn register_plugin(&mut self, plugin: Box<dyn runtime::MyLifePluginRuntime>);
 }

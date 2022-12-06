@@ -1,4 +1,4 @@
-use crate::MyLifePluginRuntime;
+use crate::runtime;
 
 pub trait MylifePluginHooks {
     // called after config
@@ -10,7 +10,7 @@ pub trait MylifePluginHooks {
 // Trait implemented by the plugin itself
 pub trait MylifePlugin: Default + MylifePluginHooks {
     // used to export
-    fn runtime() -> Box<dyn MyLifePluginRuntime>;
+    fn runtime() -> Box<dyn runtime::MyLifePluginRuntime>;
 
     // mark the plugin instance like it has failed
     // usually, only drop should be called after that
