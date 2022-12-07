@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use crate::metadata::{
     ConfigItem, ConfigType, Member, MemberType, PluginMetadata, PluginUsage, Type,
@@ -24,15 +24,14 @@ impl PluginMetadataBuilder {
         }
     }
 
-    pub fn build(self) -> PluginMetadata {
-        // Note: we must ensure that name/usage are set
-        PluginMetadata::new(
-            self.name.expect("Name not set in metadata"),
-            self.usage.expect("Usage not set in metadata"),
+    pub fn build(self) -> Result<PluginMetadata, PluginMetadataBuilderError> {
+        Ok(PluginMetadata::new(
+            self.name.ok_or(PluginMetadataBuilderError::NameNotSet)?,
+            self.usage.ok_or(PluginMetadataBuilderError::UsageNotSet)?,
             self.description,
             self.members,
             self.config,
-        )
+        ))
     }
 
     pub fn set_name(&mut self, name: String) {
@@ -66,5 +65,20 @@ impl PluginMetadataBuilder {
     ) {
         let config_item = ConfigItem::new(description, value_type);
         self.config.insert(name, config_item);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PluginMetadataBuilderError {
+    NameNotSet,
+    UsageNotSet,
+}
+
+impl fmt::Display for PluginMetadataBuilderError {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PluginMetadataBuilderError::NameNotSet => write!(fmt, "Name not set in metadata"),
+            PluginMetadataBuilderError::UsageNotSet => write!(fmt, "Usage not set in metadata"),
+        }
     }
 }
