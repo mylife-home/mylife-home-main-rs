@@ -90,8 +90,8 @@ impl Module {
 
 pub struct Plugin {
     id: String,
-    module: Arc<Module>,
     runtime: Box<dyn plugin_runtime::runtime::MyLifePluginRuntime>,
+    module: Arc<Module>, // Note: keep it last so it is dropped last
 }
 
 impl Plugin {
