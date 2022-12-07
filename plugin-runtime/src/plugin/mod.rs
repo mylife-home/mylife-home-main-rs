@@ -1,7 +1,7 @@
 mod definition;
-mod export;
+mod module;
 pub mod metadata;
 pub mod runtime;
 
 pub use definition::*;
-pub use export::*;
+pub use module::*;
