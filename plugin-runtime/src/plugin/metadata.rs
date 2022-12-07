@@ -38,23 +38,23 @@ impl PluginMetadata {
         }
     }
 
-    pub fn get_name(&self) -> &str {
+    pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn get_description(&self) -> Option<&str> {
+    pub fn description(&self) -> Option<&str> {
         self.description.as_deref()
     }
 
-    pub fn get_usage(&self) -> PluginUsage {
+    pub fn usage(&self) -> PluginUsage {
         self.usage
     }
 
-    pub fn get_members(&self) -> &HashMap<String, Member> {
+    pub fn members(&self) -> &HashMap<String, Member> {
         &self.members
     }
 
-    pub fn get_config(&self) -> &HashMap<String, ConfigItem> {
+    pub fn config(&self) -> &HashMap<String, ConfigItem> {
         &self.config
     }
 }
@@ -95,15 +95,15 @@ impl Member {
         }
     }
 
-    pub fn get_description(&self) -> Option<&str> {
+    pub fn description(&self) -> Option<&str> {
         self.description.as_deref()
     }
 
-    pub fn get_member_type(&self) -> &MemberType {
+    pub fn member_type(&self) -> &MemberType {
         &self.member_type
     }
 
-    pub fn get_value_type(&self) -> &Type {
+    pub fn value_type(&self) -> &Type {
         &self.value_type
     }
 }
@@ -130,11 +130,11 @@ impl ConfigItem {
         }
     }
 
-    pub fn get_description(&self) -> Option<&str> {
+    pub fn description(&self) -> Option<&str> {
         self.description.as_deref()
     }
 
-    pub fn get_value_type(&self) -> &ConfigType {
+    pub fn value_type(&self) -> &ConfigType {
         &self.value_type
     }
 }
