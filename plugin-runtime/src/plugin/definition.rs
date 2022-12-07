@@ -17,7 +17,7 @@ pub trait MylifePlugin: Default + MylifePluginHooks {
     fn fail(error: Box<dyn std::error::Error>);
 }
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct State<T: Default> {
     value: T,
     on_change: Option<fn(value: &T)>,

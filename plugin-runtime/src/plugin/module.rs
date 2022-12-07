@@ -4,7 +4,6 @@ pub static CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub static RUSTC_VERSION: &str = env!("RUSTC_VERSION");
 pub static MYLIFE_RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Debug)]
 pub struct ModuleDeclaration {
     pub rustc_version: &'static str,
     pub core_version: &'static str,
