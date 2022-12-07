@@ -24,7 +24,7 @@ pub fn derive_mylife_plugin(input: TokenStream) -> TokenStream {
                     }
 
                     fn configure(&mut self, config: &plugin_runtime::runtime::Config) {
-                        
+
                     }
 
                     fn execute_action(&mut self, action: &plugin_runtime::runtime::Value) {
@@ -33,7 +33,7 @@ pub fn derive_mylife_plugin(input: TokenStream) -> TokenStream {
                 }
 
                 impl Default for ComponentImpl {
-                    fn default() -> Self { 
+                    fn default() -> Self {
                         ComponentImpl{}
                     }
                 }
@@ -62,7 +62,7 @@ pub fn mylife_actions(_attr: TokenStream, input: TokenStream) -> TokenStream {
     input
 }
 
-// TODO: should it be an attribute like proc_macro_derive 
+// TODO: should it be an attribute like proc_macro_derive
 #[proc_macro_attribute]
 pub fn mylife_action(_attr: TokenStream, input: TokenStream) -> TokenStream {
     input

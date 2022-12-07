@@ -1,4 +1,4 @@
-use plugin_macros::{mylife_actions, mylife_action, MylifePlugin};
+use plugin_macros::{mylife_action, mylife_actions, MylifePlugin};
 use plugin_runtime::{MylifePluginHooks, State};
 
 #[derive(MylifePlugin, Default)]
