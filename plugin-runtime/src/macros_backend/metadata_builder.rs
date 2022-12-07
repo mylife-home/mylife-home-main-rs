@@ -4,6 +4,7 @@ use crate::metadata::{
     ConfigItem, ConfigType, Member, MemberType, PluginMetadata, PluginUsage, Type,
 };
 
+#[derive(Debug)]
 pub struct PluginMetadataBuilder {
     name: Option<String>,
     usage: Option<PluginUsage>,

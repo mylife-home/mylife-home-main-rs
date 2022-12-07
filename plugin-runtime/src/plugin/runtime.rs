@@ -29,6 +29,7 @@ pub enum Value {
     Complex,      // unsupported for now
 }
 
+#[derive(Debug, Clone)]
 pub enum ConfigValue {
     String(String),
     Bool(bool),
