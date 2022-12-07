@@ -1,4 +1,4 @@
-use plugin_macros::{mylife_action, MylifePlugin};
+use plugin_macros::{mylife_actions, mylife_action, MylifePlugin};
 use plugin_runtime::{MylifePluginHooks, State};
 
 #[derive(MylifePlugin, Default)]
@@ -20,6 +20,7 @@ impl MylifePluginHooks for ValueBinary {
     }
 }
 
+#[mylife_actions]
 impl ValueBinary {
     // can return Result<(), Box<dyn std::error::Error>> or nothing
     #[mylife_action(description = "set value to on")] // type=, name=
