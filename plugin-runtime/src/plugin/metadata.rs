@@ -22,6 +22,22 @@ pub struct PluginMetadata {
 }
 
 impl PluginMetadata {
+    pub(crate) fn new(
+        name: String,
+        usage: PluginUsage,
+        description: Option<String>,
+        members: HashMap<String, Member>,
+        config: HashMap<String, ConfigItem>,
+    ) -> PluginMetadata {
+        PluginMetadata {
+            name,
+            usage,
+            description,
+            members,
+            config,
+        }
+    }
+
     pub fn get_name(&self) -> &str {
         &self.name
     }
@@ -67,6 +83,18 @@ pub struct Member {
 }
 
 impl Member {
+    pub(crate) fn new(
+        description: Option<String>,
+        member_type: MemberType,
+        value_type: Type,
+    ) -> Member {
+        Member {
+            description,
+            member_type,
+            value_type,
+        }
+    }
+
     pub fn get_description(&self) -> Option<&str> {
         self.description.as_deref()
     }
@@ -95,6 +123,13 @@ pub struct ConfigItem {
 }
 
 impl ConfigItem {
+    pub(crate) fn new(description: Option<String>, value_type: ConfigType) -> ConfigItem {
+        ConfigItem {
+            description,
+            value_type,
+        }
+    }
+
     pub fn get_description(&self) -> Option<&str> {
         self.description.as_deref()
     }

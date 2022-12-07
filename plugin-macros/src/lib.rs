@@ -9,7 +9,14 @@ pub fn derive_mylife_plugin(input: TokenStream) -> TokenStream {
     let gen = quote! {
         impl plugin_runtime::MylifePlugin for #name {
             fn runtime() -> Box<dyn plugin_runtime::runtime::MyLifePluginRuntime> {
-                unimplemented!();
+
+                pub struct Component {
+
+                }
+
+                let meta = plugin_runtime::macros_backend::PluginMetadataBuilder::new().build();
+
+                plugin_runtime::macros_backend::MyLifePluginRuntimeImpl<Component>::new(meta)
             }
 
             fn fail(error: Box<dyn std::error::Error>) {
