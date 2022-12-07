@@ -17,13 +17,14 @@ macro_rules! export_module {
     ($register:expr) => {
         #[doc(hidden)]
         #[no_mangle]
-        pub static mylife_home_core_module_declaration: $crate::ModuleDeclaration = $crate::ModuleDeclaration {
-            rustc_version: $crate::RUSTC_VERSION,
-            core_version: $crate::CORE_VERSION,
-            mylife_runtime_version: $crate::MYLIFE_RUNTIME_VERSION,
-            module_version: env!("CARGO_PKG_VERSION"),
-            register: $register,
-        };
+        pub static mylife_home_core_module_declaration: $crate::ModuleDeclaration =
+            $crate::ModuleDeclaration {
+                rustc_version: $crate::RUSTC_VERSION,
+                core_version: $crate::CORE_VERSION,
+                mylife_runtime_version: $crate::MYLIFE_RUNTIME_VERSION,
+                module_version: env!("CARGO_PKG_VERSION"),
+                register: $register,
+            };
     };
 }
 

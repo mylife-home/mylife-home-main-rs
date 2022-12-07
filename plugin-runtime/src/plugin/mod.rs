@@ -1,6 +1,6 @@
 mod definition;
-mod module;
 pub mod metadata;
+mod module;
 pub mod runtime;
 
 pub use definition::*;
