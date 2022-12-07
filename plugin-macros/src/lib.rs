@@ -42,7 +42,7 @@ pub fn derive_mylife_plugin(input: TokenStream) -> TokenStream {
                 meta_builder.set_name(String::from("tmp"));
                 meta_builder.set_usage(plugin_runtime::metadata::PluginUsage::Logic);
 
-                let meta = meta_builder.build();
+                let meta = meta_builder.build().expect("Failed to build meta"); // TODO
 
                 plugin_runtime::macros_backend::MyLifePluginRuntimeImpl::<ComponentImpl>::new(meta)
             }
