@@ -56,12 +56,6 @@ pub fn derive_mylife_plugin(input: TokenStream) -> TokenStream {
     gen.into()
 }
 
-#[proc_macro_attribute]
-pub fn mylife_actions(_attr: TokenStream, input: TokenStream) -> TokenStream {
-    // mylife_action
-    input
-}
-
 // TODO: should it be an attribute like proc_macro_derive
 #[proc_macro_attribute]
 pub fn mylife_action(_attr: TokenStream, input: TokenStream) -> TokenStream {
