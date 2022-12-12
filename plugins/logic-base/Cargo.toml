@@ -10,3 +10,4 @@ crate-type = ["cdylib"]
 [dependencies]
 plugin_runtime = { path = "../../plugin-runtime" }
 plugin_macros = { path = "../../plugin-macros" }
+inventory = "0.3.2"

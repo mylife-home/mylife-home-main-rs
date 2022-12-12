@@ -11,3 +11,4 @@ plugin_runtime = { path = "../plugin-runtime" }
 syn = "1.0"
 quote = "1.0"
 darling = "0.14.1"
+proc-macro2 = "1.0.47"

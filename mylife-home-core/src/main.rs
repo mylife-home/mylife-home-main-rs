@@ -14,6 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for plugin in plugins.iter() {
         println!("Plugin loaded: {} v{}", plugin.id(), plugin.version());
+        println!("{:?}", plugin.metadata());
     }
 
     Ok(())

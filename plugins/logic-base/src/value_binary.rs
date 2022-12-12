@@ -1,8 +1,8 @@
-use plugin_macros::{mylife_action, MylifePlugin};
+use plugin_macros::{mylife_actions, MylifePlugin};
 use plugin_runtime::{MylifePluginHooks, State};
 
 #[derive(MylifePlugin, Default)]
-#[mylife_plugin(description = "step relay")] // name=
+#[mylife_plugin(description = "step relay", usage = "ui")] // name=
 pub struct ValueBinary {
     #[mylife_config(description = "initial value (useless only config example")] // type=, name=
     config: bool,
@@ -20,9 +20,10 @@ impl MylifePluginHooks for ValueBinary {
     }
 }
 
+#[mylife_actions]
 impl ValueBinary {
     // can return Result<(), Box<dyn std::error::Error>> or nothing
-    #[mylife_action(description = "set value to on")] // type=, name=
+    // #[mylife_action(description = "set value to on")] // type=, name=
     fn on(&mut self, arg: bool) -> Result<(), Box<dyn std::error::Error>> {
         if arg {
             self.state.set(true);
@@ -31,17 +32,19 @@ impl ValueBinary {
         Ok(())
     }
 
-    #[mylife_action(description = "set value to off")]
+
+    // #[mylife_action(description = "set value to off")]
     fn off(&mut self, arg: bool) {
         if arg {
             self.state.set(false);
         }
     }
 
-    #[mylife_action(description = "toggle value")]
+    // #[mylife_action(description = "toggle value")]
     fn toggle(&mut self, arg: bool) {
         if arg {
             self.state.set(!self.state.get());
         }
     }
 }
+
