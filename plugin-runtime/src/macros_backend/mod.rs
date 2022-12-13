@@ -1,5 +1,5 @@
-mod metadata_builder;
+mod builder;
 mod runtime;
 
-pub use metadata_builder::*;
+pub use builder::*;
 pub use runtime::*;

@@ -2,7 +2,7 @@ use plugin_macros::{mylife_actions, MylifePlugin};
 use plugin_runtime::{MylifePluginHooks, State};
 
 #[derive(MylifePlugin, Default)]
-#[mylife_plugin(description = "step relay", usage = "ui")] // name=
+#[mylife_plugin(description = "step relay", usage = "logic")] // name=
 pub struct ValueBinary {
     #[mylife_config(description = "initial value (useless only config example")] // type=, name=
     config: bool,

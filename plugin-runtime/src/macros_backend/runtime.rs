@@ -31,6 +31,7 @@ impl<Component: MylifeComponent + Default> MyLifePluginRuntime
     }
 }
 
+/*
 //-----
 
 impl Definition {
@@ -97,3 +98,4 @@ pub struct ActionDefinition {
     description: Option<&'static str>,
     r#type: Type,
 }
+*/
