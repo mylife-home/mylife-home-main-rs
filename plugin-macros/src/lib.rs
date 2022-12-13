@@ -338,7 +338,7 @@ pub fn mylife_actions(
 }
 
 fn process_plugin(name: &syn::Ident, attr: &attributes::MylifePlugin) -> TokenStream {
-    let struct_name = name.to_string();
+    let struct_name = make_plugin_name(name);
     let name = attr.name.as_ref().unwrap_or(&struct_name);
     let description = attributes::option_string_to_tokens(&attr.description);
     let usage = &attr.usage;
@@ -349,11 +349,11 @@ fn process_plugin(name: &syn::Ident, attr: &attributes::MylifePlugin) -> TokenSt
 }
 
 fn process_config(attr: &attributes::MylifeConfig) -> TokenStream {
-    let var_name = attr
-        .ident
-        .as_ref()
-        .expect("Unexpected unnamed config member")
-        .to_string();
+    let var_name = make_member_name(
+        attr.ident
+            .as_ref()
+            .expect("Unexpected unnamed config member"),
+    );
 
     let name = attr.name.as_ref().unwrap_or(&var_name);
     let description = attributes::option_string_to_tokens(&attr.description);
@@ -387,4 +387,14 @@ fn process_action(name: &syn::Ident, attr: &attributes::MylifeAction) -> TokenSt
     // println!("action {} => {:?}", name.to_string(), attr);
 
     TokenStream::new()
+}
+
+fn make_plugin_name(name: &syn::Ident) -> String {
+    use convert_case::{Case, Casing};
+    name.to_string().to_case(Case::Kebab)
+}
+
+fn make_member_name(name: &syn::Ident) -> String {
+    use convert_case::{Case, Casing};
+    name.to_string().to_case(Case::Camel)
 }

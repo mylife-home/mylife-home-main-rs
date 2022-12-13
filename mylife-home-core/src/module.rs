@@ -68,7 +68,7 @@ impl Module {
 
         let module = Arc::new(Module {
             _library: library,
-            name: String::from(name),
+            name: make_module_name(name),
             version: String::from(module_declaration.module_version),
         });
 
@@ -86,6 +86,11 @@ impl Module {
     pub fn version(&self) -> &str {
         &self.version
     }
+}
+
+fn make_module_name(name: &str) -> String {
+    use convert_case::{Case, Casing};
+    name.to_case(Case::Kebab)
 }
 
 pub struct Plugin {
