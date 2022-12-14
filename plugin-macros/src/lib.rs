@@ -1,13 +1,16 @@
 use attributes::ConfigType;
 use darling::{FromDeriveInput, FromField};
 use proc_macro2::TokenStream;
+use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::{format_ident, quote};
 
 mod attributes;
 
 // TODO: add tests on attributes/whole input
+// TODO: path.get_ident() does not work if `plugin_runtime::Toto`
 
 #[proc_macro_derive(MylifePlugin, attributes(mylife_plugin, mylife_config, mylife_state))]
+#[proc_macro_error]
 pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input: syn::DeriveInput = syn::parse_macro_input!(input);
     let name = &input.ident;
@@ -19,7 +22,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
     let fields = if let syn::Data::Struct(data) = &input.data {
         &data.fields
     } else {
-        panic!("pan");
+        abort_call_site!("pan");
     };
 
     for field in fields.iter() {
@@ -111,6 +114,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
 }
 
 #[proc_macro_attribute]
+#[proc_macro_error]
 pub fn mylife_actions(
     _attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
@@ -120,7 +124,7 @@ pub fn mylife_actions(
     let name = if let syn::Type::Path(path) = input.self_ty.as_ref() {
         path.path.get_ident().unwrap()
     } else {
-        panic!("pan");
+        abort_call_site!("pan");
     };
 
     let inventory_name = format_ident!("__MylifeInternalsInventory{}__", name);
@@ -165,9 +169,10 @@ fn process_config(attr: &attributes::MylifeConfig) -> TokenStream {
 
     if let Some(provided_type) = &attr.r#type {
         if r#type != *provided_type {
-            panic!(
+            abort_call_site!(
                 "Wrong type provided for config '{}': should be '{:#?}'",
-                name, r#type
+                name,
+                r#type
             );
         }
     }
@@ -184,7 +189,41 @@ fn process_config(attr: &attributes::MylifeConfig) -> TokenStream {
 fn process_state(attr: &attributes::MylifeState) -> TokenStream {
     // println!("state {} => {:?}", name.to_string(), attr);
 
+    let var_name = make_member_name(
+        attr.ident
+            .as_ref()
+            .expect("Unexpected unnamed state member"),
+    );
+
+    let name = attr.name.as_ref().unwrap_or(&var_name);
+    let description = attributes::option_string_to_tokens(&attr.description);
+    let var_type = get_state_type(&attr.ty);
+
     TokenStream::new()
+}
+
+// State<bool> => get bool
+fn get_state_type(var_type: &syn::Type) -> &syn::Type {
+    if let syn::Type::Path(path) = var_type {
+        let seg = path.path.segments.last().unwrap();
+        if seg.ident.to_string() != "State" {
+            abort!(seg.ident.span(), "mylife_state variable must be of type State");
+        }
+
+        if let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+            args,
+            colon2_token: _,
+            lt_token: _,
+            gt_token: _,
+        }) = &seg.arguments
+        {
+            if let syn::GenericArgument::Type(arg_type) = args.first().unwrap() {
+                return arg_type;
+            }
+        }
+    }
+
+    todo!();
 }
 
 fn process_action(name: &syn::Ident, attr: &attributes::MylifeAction) -> TokenStream {
