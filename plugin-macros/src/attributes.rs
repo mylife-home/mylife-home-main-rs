@@ -4,8 +4,8 @@ use darling::{FromDeriveInput, FromField, FromMeta, FromVariant, ToTokens};
 use proc_macro2::TokenStream;
 use quote::{quote, TokenStreamExt};
 
-#[derive(PartialEq, Eq, Debug)]
-pub struct VecString(Vec<String>);
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct VecString(pub Vec<String>);
 
 /// Parsing literal array into string, i.e. `[a,b,b]`.
 impl FromMeta for VecString {
@@ -57,14 +57,14 @@ impl ToTokens for PluginUsage {
     }
 }
 
-#[derive(FromMeta, PartialEq, Eq, Debug)]
+#[derive(FromMeta, PartialEq, Eq, Debug, Clone)]
 pub struct RangeValue {
-    min: i64,
-    max: i64,
+    pub min: i64,
+    pub max: i64,
 }
 
 // c/c from metadata to add FromMeta
-#[derive(FromMeta, PartialEq, Eq, Debug)]
+#[derive(FromMeta, PartialEq, Eq, Debug, Clone)]
 pub enum Type {
     Range(RangeValue),
     Text,
@@ -72,6 +72,22 @@ pub enum Type {
     Bool,
     Enum(VecString),
     Complex,
+}
+
+
+impl ToTokens for Type {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let gen = match &*self {
+            Type::Range(RangeValue { min, max }) => quote! { plugin_runtime::metadata::Type::Range(#min, #max) },
+            Type::Text => quote! { plugin_runtime::metadata::Type::Text },
+            Type::Float => quote! { plugin_runtime::metadata::Type::Float },
+            Type::Bool => quote! { plugin_runtime::metadata::Type::Bool },
+            Type::Enum(VecString(vec)) => quote! { plugin_runtime::metadata::Type::Enum(#(#vec),*) },
+            Type::Complex => quote! { plugin_runtime::metadata::Type::Complex },
+        };
+
+        tokens.append_all(gen);
+    }
 }
 
 // c/c from metadata to add FromMeta

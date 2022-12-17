@@ -1,4 +1,4 @@
-use attributes::ConfigType;
+use attributes::{ConfigType, Type, RangeValue, VecString};
 use darling::{FromDeriveInput, FromField};
 use proc_macro2::TokenStream;
 use proc_macro_error::{abort, abort_call_site, proc_macro_error};
@@ -198,8 +198,15 @@ fn process_state(attr: &attributes::MylifeState) -> TokenStream {
     let name = attr.name.as_ref().unwrap_or(&var_name);
     let description = attributes::option_string_to_tokens(&attr.description);
     let var_type = get_state_type(&attr.ty);
+    let r#type = get_type(var_type, &attr.r#type);
 
-    TokenStream::new()
+    quote! {
+        builder.add_state(
+            #name,
+            #description,
+            #r#type
+        );
+    }
 }
 
 // State<bool> => get bool
@@ -224,6 +231,51 @@ fn get_state_type(var_type: &syn::Type) -> &syn::Type {
     }
 
     todo!();
+}
+
+fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
+    let native_type_name = get_native_type_name(native_type);
+
+    if let Some(provided_type) = provided_type {
+        match provided_type {
+            Type::Range(RangeValue {min, max}) => abort_call_site!("TODO"),
+            Type::Text => {
+                if native_type_name != "String" {
+                    abort_call_site!("Expected String, got '{}'", native_type_name);
+                }
+            },
+            Type::Float => {
+                if native_type_name != "f64" {
+                    abort_call_site!("Expected Float64, got '{}'", native_type_name);
+                }
+            },
+            Type::Bool =>  {
+                if native_type_name != "bool" {
+                    abort_call_site!("Expected Bool, got '{}'", native_type_name);
+                }
+            },
+            Type::Enum(VecString(vec)) => abort_call_site!("TODO"),
+            Type::Complex => abort_call_site!("TODO"),
+        }
+
+        return provided_type.clone();
+    } else {
+        return match native_type_name.as_str() {
+            "f64" => Type::Float,
+            "bool" => Type::Bool,
+            unsupported => abort_call_site!("Unable to deduce type with native type '{}'", unsupported)
+        }
+    }
+}
+
+fn get_native_type_name(native_type: &syn::Type) -> String {
+    if let syn::Type::Path(path) = native_type {
+        if let Some(ident) = path.path.get_ident() {
+            return ident.to_string();
+        }
+    }
+
+    abort_call_site!("Invalid type '{:?}'", native_type);
 }
 
 fn process_action(name: &syn::Ident, attr: &attributes::MylifeAction) -> TokenStream {
