@@ -1,5 +1,7 @@
+use std::slice;
+
 use attributes::{ConfigType, Type, RangeValue, VecString};
-use darling::{FromDeriveInput, FromField};
+use darling::{FromDeriveInput, FromField, FromAttributes};
 use proc_macro2::TokenStream;
 use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::{format_ident, quote};
@@ -132,6 +134,29 @@ pub fn mylife_actions(
 
     if false {
         streams.push(TokenStream::new());
+    }
+
+    let mut input = input.clone();
+
+    for item in input.items.iter_mut() {
+        if let syn::ImplItem::Method(method) = item {
+
+            method.attrs.retain(|attr| {
+                let attr_ident = attr.path.get_ident().unwrap();
+                match attr_ident.to_string().as_str() {
+                    "mylife_action" => {
+                        let attr_action = attributes::MylifeAction::from_attributes(slice::from_ref(attr)).unwrap();
+                        streams.push(process_action(&method.sig, &attr_action));
+                        return false;
+                    }
+    
+                    unknown => {
+                        println!("Ignored attribute : {}", unknown);
+                        return true;
+                    }
+                }
+            });
+        }
     }
 
     let gen = quote! {
@@ -278,8 +303,8 @@ fn get_native_type_name(native_type: &syn::Type) -> String {
     abort_call_site!("Invalid type '{:?}'", native_type);
 }
 
-fn process_action(name: &syn::Ident, attr: &attributes::MylifeAction) -> TokenStream {
-    // println!("action {} => {:?}", name.to_string(), attr);
+fn process_action(sig: &syn::Signature, attr: &attributes::MylifeAction) -> TokenStream {
+    println!("action {:?} => {:?}", sig, attr);
 
     TokenStream::new()
 }

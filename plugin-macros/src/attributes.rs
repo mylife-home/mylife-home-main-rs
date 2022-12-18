@@ -1,6 +1,6 @@
 use std::fmt;
 
-use darling::{FromDeriveInput, FromField, FromMeta, FromVariant, ToTokens};
+use darling::{FromDeriveInput, FromField, FromMeta, ToTokens, FromAttributes};
 use proc_macro2::TokenStream;
 use quote::{quote, TokenStreamExt};
 
@@ -195,12 +195,9 @@ pub struct MylifeState {
     pub r#type: Option<Type>,
 }
 
-#[derive(Debug, FromVariant)]
+#[derive(Debug, FromAttributes)]
 #[darling(attributes(mylife_action))]
 pub struct MylifeAction {
-    pub ident: syn::Ident,
-    pub ty: syn::Type,
-
     #[darling(default)]
     pub name: Option<String>,
 

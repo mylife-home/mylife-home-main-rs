@@ -23,7 +23,7 @@ impl MylifePluginHooks for ValueBinary {
 #[mylife_actions]
 impl ValueBinary {
     // can return Result<(), Box<dyn std::error::Error>> or nothing
-    // #[mylife_action(description = "set value to on")] // type=, name=
+    #[mylife_action(description = "set value to on")] // type=, name=
     fn on(&mut self, arg: bool) -> Result<(), Box<dyn std::error::Error>> {
         if arg {
             self.state.set(true);
