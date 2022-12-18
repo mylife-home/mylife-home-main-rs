@@ -1,8 +1,8 @@
-use std::marker::PhantomData;
+use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
 use crate::{
     metadata::{ConfigType, PluginMetadata, Type},
-    runtime::{MyLifePluginRuntime, MylifeComponent, Value},
+    runtime::{Config, MyLifePluginRuntime, MylifeComponent, Value},
 };
 
 pub struct MyLifePluginRuntimeImpl<Component: MylifeComponent + Default + 'static> {
@@ -31,7 +31,108 @@ impl<Component: MylifeComponent + Default> MyLifePluginRuntime
     }
 }
 
+pub type ConfigRuntimeSetter<PluginType> = fn(target: &mut PluginType, config: &Value) -> ();
+pub type StateRuntimeRegister<PluginType> =
+    fn(target: &mut PluginType, listener: fn(state: &Value)) -> ();
+pub type ActionRuntimeExecutor<PluginType> =
+    fn(target: &mut PluginType, action: &Value) -> Result<(), Box<dyn std::error::Error>>;
+
+pub struct PluginRuntimeAccess<PluginType> {
+    configs: HashMap<String, ConfigRuntimeSetter<PluginType>>,
+    states: HashMap<String, StateRuntimeRegister<PluginType>>,
+    actions: HashMap<String, ActionRuntimeExecutor<PluginType>>,
+}
+
+impl<PluginType> PluginRuntimeAccess<PluginType> {
+    pub fn new(
+        configs: HashMap<String, ConfigRuntimeSetter<PluginType>>,
+        states: HashMap<String, StateRuntimeRegister<PluginType>>,
+        actions: HashMap<String, ActionRuntimeExecutor<PluginType>>,
+    ) -> Self {
+        PluginRuntimeAccess {
+            configs,
+            states,
+            actions,
+        }
+    }
+}
+
+impl<PluginType> PluginRuntimeAccess<PluginType> {
+    pub fn add_config(&mut self, name: &str, setter: ConfigRuntimeSetter<PluginType>) {
+        self.configs.insert(String::from(name), setter);
+    }
+
+    pub fn add_state(&mut self, name: &str, register: StateRuntimeRegister<PluginType>) {
+        self.states.insert(String::from(name), register);
+    }
+
+    pub fn add_action(&mut self, name: &str, executor: ActionRuntimeExecutor<PluginType>) {
+        self.actions.insert(String::from(name), executor);
+    }
+}
+
+struct ComponentImpl<PluginType> {
+    access: Arc<PluginRuntimeAccess<PluginType>>,
+    component: PluginType,
+}
+
+impl<PluginType> MylifeComponent for ComponentImpl<PluginType> {
+    fn set_on_fail(&mut self, handler: fn(error: Box<dyn std::error::Error>)) {}
+
+    fn set_on_state(&mut self, handler: fn(name: &str, state: &Value)) {}
+
+    fn configure(&mut self, config: &Config) {}
+
+    fn execute_action(&mut self, name: &str, action: &Value) {}
+}
+
 /*
+//-----
+
+trait ActionHandler {
+    fn execute_action(&self, action: &Value) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+struct ActionHandlerWithoutResult<PluginT, ArgType> {
+    owner: Arc<PluginT>,
+    target: fn(_self: &mut PluginT, arg: ArgType) -> (),
+}
+
+impl<PluginT, ArgType> ActionHandlerWithoutResult<PluginT, ArgType> {
+    pub fn new(owner: Arc<PluginT>, target: fn(_self: &mut PluginT, arg: ArgType) -> ()) -> Self {
+        ActionHandlerWithoutResult { owner, target }
+    }
+}
+
+impl<PluginT, ArgType> ActionHandler for ActionHandlerWithoutResult<PluginT, ArgType> {
+    fn execute_action(&self, action: &Value) -> Result<(), Box<dyn std::error::Error>> {
+        let arg: ArgType = action.try_into()?;
+        (self.target)(&mut self.owner, arg);
+
+        Ok(())
+    }
+}
+
+struct ActionHandlerWithResult<PluginT, ArgType> {
+    owner: Arc<PluginT>,
+    target: fn(_self: &mut PluginT, arg: ArgType) -> Result<(), Box<dyn std::error::Error>>,
+}
+
+impl<PluginT, ArgType> ActionHandlerWithResult<PluginT, ArgType> {
+    pub fn new(owner: Arc<PluginT>, target: fn(_self: &mut PluginT, arg: ArgType) -> Result<(), Box<dyn std::error::Error>>) -> Self {
+        ActionHandlerWithResult { owner, target }
+    }
+}
+
+impl<PluginT, ArgType> ActionHandler for ActionHandlerWithResult<PluginT, ArgType> {
+    fn execute_action(&self, action: &Value) -> Result<(), Box<dyn std::error::Error>> {
+        let arg: ArgType = action.try_into()?;
+        (self.target)(&mut self.owner, arg)?;
+
+        Ok(())
+    }
+}
+
 //-----
 
 impl Definition {

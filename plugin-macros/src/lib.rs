@@ -33,12 +33,12 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
             match attr_ident.to_string().as_str() {
                 "mylife_config" => {
                     let attr_config = attributes::MylifeConfig::from_field(&field).unwrap();
-                    streams.push(process_config(&attr_config));
+                    streams.push(process_config(name, &attr_config));
                 }
 
                 "mylife_state" => {
                     let attr_state = attributes::MylifeState::from_field(&field).unwrap();
-                    streams.push(process_state(&attr_state));
+                    streams.push(process_state(name, &attr_state));
                 }
 
                 unknown => {
@@ -103,7 +103,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
             }
         }
 
-        pub struct #inventory_name(plugin_runtime::macros_backend::BuilderPartCallback);
+        pub struct #inventory_name(plugin_runtime::macros_backend::BuilderPartCallback<#name>);
         inventory::collect!(#inventory_name);
 
         inventory::submit!(#inventory_name(|builder| {
@@ -146,7 +146,7 @@ pub fn mylife_actions(
                 match attr_ident.to_string().as_str() {
                     "mylife_action" => {
                         let attr_action = attributes::MylifeAction::from_attributes(slice::from_ref(attr)).unwrap();
-                        streams.push(process_action(&method.sig, &attr_action));
+                        streams.push(process_action(name, &method.sig, &attr_action));
                         return false;
                     }
     
@@ -181,7 +181,7 @@ fn process_plugin(name: &syn::Ident, attr: &attributes::MylifePlugin) -> TokenSt
     }
 }
 
-fn process_config(attr: &attributes::MylifeConfig) -> TokenStream {
+fn process_config(plugin_name: &syn::Ident, attr: &attributes::MylifeConfig) -> TokenStream {
     let var_name = make_member_name(
         attr.ident
             .as_ref()
@@ -191,6 +191,13 @@ fn process_config(attr: &attributes::MylifeConfig) -> TokenStream {
     let name = attr.name.as_ref().unwrap_or(&var_name);
     let description = attributes::option_string_to_tokens(&attr.description);
     let r#type = ConfigType::try_from(&attr.ty).unwrap();
+    let target_ident = &attr.ident;
+
+    let setter = quote! {
+        |target: &mut #plugin_name, arg: &plugin_runtime::runtime::Value| {
+            target.#target_ident = arg.into();
+        }
+    };
 
     if let Some(provided_type) = &attr.r#type {
         if r#type != *provided_type {
@@ -206,12 +213,13 @@ fn process_config(attr: &attributes::MylifeConfig) -> TokenStream {
         builder.add_config(
             #name,
             #description,
-            #r#type
+            #r#type,
+            #setter
         );
     }
 }
 
-fn process_state(attr: &attributes::MylifeState) -> TokenStream {
+fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> TokenStream {
     // println!("state {} => {:?}", name.to_string(), attr);
 
     let var_name = make_member_name(
@@ -224,12 +232,20 @@ fn process_state(attr: &attributes::MylifeState) -> TokenStream {
     let description = attributes::option_string_to_tokens(&attr.description);
     let var_type = get_state_type(&attr.ty);
     let r#type = get_type(var_type, &attr.r#type);
+    let target_ident = &attr.ident;
+
+    let register = quote! {
+        |target: &mut #plugin_name, listener: fn(state: &Value)| {
+            target.#target_ident.runtime_register(listener);
+        }
+    };
 
     quote! {
         builder.add_state(
             #name,
             #description,
-            #r#type
+            #r#type,
+            #register
         );
     }
 }
@@ -303,13 +319,14 @@ fn get_native_type_name(native_type: &syn::Type) -> String {
     abort_call_site!("Invalid type '{:?}'", native_type);
 }
 
-fn process_action(sig: &syn::Signature, attr: &attributes::MylifeAction) -> TokenStream {
+fn process_action(plugin_name: &syn::Ident, sig: &syn::Signature, attr: &attributes::MylifeAction) -> TokenStream {
     let var_name = make_member_name(&sig.ident);
 
     let name = attr.name.as_ref().unwrap_or(&var_name);
     let description = attributes::option_string_to_tokens(&attr.description);
     let var_type = &get_action_type(sig);
     let r#type = get_type(var_type, &attr.r#type);
+    let target_ident = &sig.ident;
 
     let has_output = match &sig.output {
         syn::ReturnType::Default => false,
@@ -319,11 +336,22 @@ fn process_action(sig: &syn::Signature, attr: &attributes::MylifeAction) -> Toke
         }
     };
 
+    // TODO: handle has_output
+    let executor = quote! {
+        |target: &mut #plugin_name, arg: &plugin_runtime::runtime::Value| -> std::result::Result<(), Box<dyn std::error::Error>> {
+            let value: #var_type = arg.into();
+            target.#target_ident(value)?;
+
+            std::result::Result::Ok(())
+        }
+    };
+
     quote! {
         builder.add_action(
             #name,
             #description,
-            #r#type
+            #r#type,
+            #executor
         );
     }
 }

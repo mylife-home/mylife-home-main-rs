@@ -1,4 +1,4 @@
-use crate::runtime;
+use crate::runtime::{self, Value};
 
 pub trait MylifePluginHooks {
     // called after config
@@ -20,7 +20,7 @@ pub trait MylifePlugin: Default + MylifePluginHooks {
 // #[derive(Debug)]
 pub struct State<T: Default> {
     value: T,
-    on_change: Option<fn(value: &T)>,
+    on_change: Option<fn(value: &Value)>,
 }
 
 impl<T: Default> Default for State<T> {
@@ -32,15 +32,19 @@ impl<T: Default> Default for State<T> {
     }
 }
 
-impl<T: Default> State<T> {
+impl<T: Default + Clone + Into<Value>> State<T> {
     pub fn set(&mut self, value: T) {
         let handler = self.on_change.as_ref().expect("Unbound state changed!");
 
         self.value = value;
-        handler(&self.value);
+        handler(&self.value.clone().into());
     }
 
     pub fn get(&self) -> &T {
         &self.value
+    }
+
+    pub fn runtime_register(&mut self, listener: fn(value: &Value)) {
+        self.on_change = Some(listener);
     }
 }
