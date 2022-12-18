@@ -304,9 +304,39 @@ fn get_native_type_name(native_type: &syn::Type) -> String {
 }
 
 fn process_action(sig: &syn::Signature, attr: &attributes::MylifeAction) -> TokenStream {
-    println!("action {:?} => {:?}", sig, attr);
+    let var_name = make_member_name(&sig.ident);
 
-    TokenStream::new()
+    let name = attr.name.as_ref().unwrap_or(&var_name);
+    let description = attributes::option_string_to_tokens(&attr.description);
+    let var_type = &get_action_type(sig);
+    let r#type = get_type(var_type, &attr.r#type);
+    let has_output = true; // TODO: sig.output
+
+    quote! {
+        builder.add_action(
+            #name,
+            #description,
+            #r#type
+        );
+    }
+}
+
+// fn toto(&mut self, arg: bool) => get bool
+fn get_action_type(sig: &syn::Signature) -> syn::Type {
+    if sig.inputs.len() != 2 {
+        abort!(sig.ident.span(), "Invalid method args");
+    }
+
+    if let syn::FnArg::Receiver(_) = &sig.inputs[0] {
+    } else {
+        abort!(sig.ident.span(), "Invalid method args");
+    }
+
+    if let syn::FnArg::Typed(syn::PatType { ty, .. }) = &sig.inputs[1] {
+        ty.as_ref().clone()
+    } else {
+        abort!(sig.ident.span(), "Invalid method args");
+    }
 }
 
 fn make_plugin_name(name: &syn::Ident) -> String {
