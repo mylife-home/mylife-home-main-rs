@@ -310,7 +310,14 @@ fn process_action(sig: &syn::Signature, attr: &attributes::MylifeAction) -> Toke
     let description = attributes::option_string_to_tokens(&attr.description);
     let var_type = &get_action_type(sig);
     let r#type = get_type(var_type, &attr.r#type);
-    let has_output = true; // TODO: sig.output
+
+    let has_output = match &sig.output {
+        syn::ReturnType::Default => false,
+        syn::ReturnType::Type(_, ret_type) => {
+            // TODO: check that ret_type is Result<(), Box<dyn std::error::Error>>
+            true
+        }
+    };
 
     quote! {
         builder.add_action(

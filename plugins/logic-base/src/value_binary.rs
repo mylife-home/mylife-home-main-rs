@@ -33,14 +33,14 @@ impl ValueBinary {
     }
 
 
-    // #[mylife_action(description = "set value to off")]
+    #[mylife_action(description = "set value to off")]
     fn off(&mut self, arg: bool) {
         if arg {
             self.state.set(false);
         }
     }
 
-    // #[mylife_action(description = "toggle value")]
+    #[mylife_action(description = "toggle value")]
     fn toggle(&mut self, arg: bool) {
         if arg {
             self.state.set(!self.state.get());
