@@ -20,7 +20,7 @@ impl PluginRegistryImpl {
 }
 
 impl PluginRegistry for PluginRegistryImpl {
-    fn register_plugin(&mut self, plugin: Box<dyn plugin_runtime::runtime::MyLifePluginRuntime>) {
+    fn register_plugin(&mut self, plugin: Box<dyn plugin_runtime::runtime::MylifePluginRuntime>) {
         self.plugins
             .push(Arc::new(Plugin::new(self.module.clone(), plugin)));
     }
@@ -95,14 +95,14 @@ fn make_module_name(name: &str) -> String {
 
 pub struct Plugin {
     id: String,
-    runtime: Box<dyn plugin_runtime::runtime::MyLifePluginRuntime>,
+    runtime: Box<dyn plugin_runtime::runtime::MylifePluginRuntime>,
     module: Arc<Module>, // Note: keep it last so it is dropped last
 }
 
 impl Plugin {
     fn new(
         module: Arc<Module>,
-        runtime: Box<dyn plugin_runtime::runtime::MyLifePluginRuntime>,
+        runtime: Box<dyn plugin_runtime::runtime::MylifePluginRuntime>,
     ) -> Plugin {
         let id = format!("{}.{}", module.name(), runtime.metadata().name());
 

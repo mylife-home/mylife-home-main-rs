@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::metadata;
 
-pub trait MyLifePluginRuntime {
+pub trait MylifePluginRuntime {
     fn metadata(&self) -> &metadata::PluginMetadata;
     fn create(&self) -> Box<dyn MylifeComponent>;
 }

@@ -29,5 +29,5 @@ macro_rules! export_module {
 }
 
 pub trait PluginRegistry {
-    fn register_plugin(&mut self, plugin: Box<dyn runtime::MyLifePluginRuntime>);
+    fn register_plugin(&mut self, plugin: Box<dyn runtime::MylifePluginRuntime>);
 }

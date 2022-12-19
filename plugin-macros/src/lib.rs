@@ -56,7 +56,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
 
     let gen = quote! {
         impl plugin_runtime::MylifePlugin for #name {
-            fn runtime() -> Box<dyn plugin_runtime::runtime::MyLifePluginRuntime> {
+            fn runtime() -> Box<dyn plugin_runtime::runtime::MylifePluginRuntime> {
 
                 pub struct ComponentImpl {
 
@@ -95,7 +95,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
 
                 let (meta, access) = builder.build().expect("Failed to build meta"); // TODO
 
-                plugin_runtime::macros_backend::MyLifePluginRuntimeImpl::<ComponentImpl>::new(meta)
+                plugin_runtime::macros_backend::MylifePluginRuntimeImpl::<ComponentImpl>::new(meta)
             }
 
             fn fail(error: Box<dyn std::error::Error>) {

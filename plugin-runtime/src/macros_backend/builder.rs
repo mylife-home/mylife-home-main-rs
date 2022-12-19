@@ -2,14 +2,16 @@ use std::{collections::HashMap, fmt};
 
 use crate::{
     metadata::{ConfigItem, ConfigType, Member, MemberType, PluginMetadata, PluginUsage, Type},
-    runtime::Value,
+    runtime::MylifePluginRuntime,
+    MylifePlugin,
 };
 
 use super::{
-    ActionRuntimeExecutor, ConfigRuntimeSetter, PluginRuntimeAccess, StateRuntimeRegister,
+    ActionRuntimeExecutor, ConfigRuntimeSetter, PluginRuntimeAccess, PluginRuntimeImpl,
+    StateRuntimeRegister,
 };
 
-pub struct PluginRuntimeBuilder<PluginType> {
+pub struct PluginRuntimeBuilder<PluginType: MylifePlugin + 'static> {
     name: Option<String>,
     usage: Option<PluginUsage>,
     description: Option<String>,
@@ -20,7 +22,7 @@ pub struct PluginRuntimeBuilder<PluginType> {
     action_runtime: HashMap<String, ActionRuntimeExecutor<PluginType>>,
 }
 
-impl<PluginType> PluginRuntimeBuilder<PluginType> {
+impl<PluginType: MylifePlugin + 'static> PluginRuntimeBuilder<PluginType> {
     pub fn new() -> Self {
         PluginRuntimeBuilder {
             name: None,
@@ -34,10 +36,8 @@ impl<PluginType> PluginRuntimeBuilder<PluginType> {
         }
     }
 
-    pub fn build(
-        self,
-    ) -> Result<(PluginMetadata, PluginRuntimeAccess<PluginType>), PluginRuntimeBuilderError> {
-        Ok((
+    pub fn build(self) -> Result<Box<dyn MylifePluginRuntime>, PluginRuntimeBuilderError> {
+        Ok(PluginRuntimeImpl::<PluginType>::new(
             PluginMetadata::new(
                 self.name.ok_or(PluginRuntimeBuilderError::NameNotSet)?,
                 self.usage.ok_or(PluginRuntimeBuilderError::UsageNotSet)?,

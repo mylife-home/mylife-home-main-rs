@@ -1,63 +1,63 @@
-use std::{collections::HashMap, marker::PhantomData, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     metadata::{ConfigType, PluginMetadata, Type},
-    runtime::{Config, MyLifePluginRuntime, MylifeComponent, Value},
+    runtime::{Config, MylifePluginRuntime, MylifeComponent, Value},
+    MylifePlugin,
 };
 
-pub struct MyLifePluginRuntimeImpl<Component: MylifeComponent + Default + 'static> {
+pub struct PluginRuntimeImpl<PluginType: MylifePlugin + 'static> {
     metadata: PluginMetadata,
-    _marker: PhantomData<Component>, // only to keep Component type info
+    access: Arc<PluginRuntimeAccess<PluginType>>,
 }
 
-impl<Component: MylifeComponent + Default> MyLifePluginRuntimeImpl<Component> {
-    pub fn new(metadata: PluginMetadata) -> Box<Self> {
-        Box::new(MyLifePluginRuntimeImpl {
-            metadata,
-            _marker: PhantomData,
-        })
+impl<PluginType: MylifePlugin + 'static> PluginRuntimeImpl<PluginType> {
+    pub fn new(
+        metadata: PluginMetadata,
+        access: Arc<PluginRuntimeAccess<PluginType>>,
+    ) -> Box<Self> {
+        Box::new(PluginRuntimeImpl { metadata, access })
     }
 }
 
-impl<Component: MylifeComponent + Default> MyLifePluginRuntime
-    for MyLifePluginRuntimeImpl<Component>
-{
+impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginType> {
     fn metadata(&self) -> &PluginMetadata {
         &self.metadata
     }
 
     fn create(&self) -> Box<dyn MylifeComponent> {
-        Box::new(Component::default())
+        ComponentImpl::<PluginType>::new(&self.access)
     }
 }
 
-pub type ConfigRuntimeSetter<PluginType> = fn(target: &mut PluginType, config: &Value) -> ();
+pub type ConfigRuntimeSetter<PluginType> =
+    fn(target: &mut PluginType, config: &Value) -> ();
 pub type StateRuntimeRegister<PluginType> =
     fn(target: &mut PluginType, listener: fn(state: &Value)) -> ();
 pub type ActionRuntimeExecutor<PluginType> =
     fn(target: &mut PluginType, action: &Value) -> Result<(), Box<dyn std::error::Error>>;
 
-pub struct PluginRuntimeAccess<PluginType> {
+pub struct PluginRuntimeAccess<PluginType: MylifePlugin> {
     configs: HashMap<String, ConfigRuntimeSetter<PluginType>>,
     states: HashMap<String, StateRuntimeRegister<PluginType>>,
     actions: HashMap<String, ActionRuntimeExecutor<PluginType>>,
 }
 
-impl<PluginType> PluginRuntimeAccess<PluginType> {
+impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
     pub fn new(
         configs: HashMap<String, ConfigRuntimeSetter<PluginType>>,
         states: HashMap<String, StateRuntimeRegister<PluginType>>,
         actions: HashMap<String, ActionRuntimeExecutor<PluginType>>,
-    ) -> Self {
-        PluginRuntimeAccess {
+    ) -> Arc<Self> {
+        Arc::new(PluginRuntimeAccess {
             configs,
             states,
             actions,
-        }
+        })
     }
 }
 
-impl<PluginType> PluginRuntimeAccess<PluginType> {
+impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
     pub fn add_config(&mut self, name: &str, setter: ConfigRuntimeSetter<PluginType>) {
         self.configs.insert(String::from(name), setter);
     }
@@ -71,12 +71,21 @@ impl<PluginType> PluginRuntimeAccess<PluginType> {
     }
 }
 
-struct ComponentImpl<PluginType> {
+struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
 }
 
-impl<PluginType> MylifeComponent for ComponentImpl<PluginType> {
+impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
+    pub fn new(access: &Arc<PluginRuntimeAccess<PluginType>>) -> Box<Self> {
+        Box::new(ComponentImpl {
+            access: access.clone(),
+            component: PluginType::default(),
+        })
+    }
+}
+
+impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
     fn set_on_fail(&mut self, handler: fn(error: Box<dyn std::error::Error>)) {}
 
     fn set_on_state(&mut self, handler: fn(name: &str, state: &Value)) {}
