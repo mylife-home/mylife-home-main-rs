@@ -48,44 +48,15 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
         }
     }
 
-    for stream in streams.iter() {
-        println!("{}", stream);
-    }
+    // for stream in streams.iter() {
+    //     println!("{}", stream);
+    // }
 
     let inventory_name = format_ident!("__MylifeInternalsInventory{}__", name);
 
     let gen = quote! {
         impl plugin_runtime::MylifePlugin for #name {
             fn runtime() -> Box<dyn plugin_runtime::runtime::MylifePluginRuntime> {
-
-                pub struct ComponentImpl {
-
-                }
-
-                impl plugin_runtime::runtime::MylifeComponent for ComponentImpl {
-                    fn set_on_fail(&mut self, handler: fn(error: Box<dyn std::error::Error>)) {
-
-                    }
-
-                    fn set_on_state(&mut self, handler: fn(name: &str, state: &plugin_runtime::runtime::Value)) {
-
-                    }
-
-                    fn configure(&mut self, config: &plugin_runtime::runtime::Config) {
-
-                    }
-
-                    fn execute_action(&mut self, name: &str, action: &plugin_runtime::runtime::Value) {
-
-                    }
-                }
-
-                impl Default for ComponentImpl {
-                    fn default() -> Self {
-                        ComponentImpl{}
-                    }
-                }
-
                 let mut builder = plugin_runtime::macros_backend::PluginRuntimeBuilder::new();
 
                 for item in inventory::iter::<#inventory_name> {
@@ -93,13 +64,11 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
                     callback(&mut builder);
                 }
 
-                let (meta, access) = builder.build().expect("Failed to build meta"); // TODO
-
-                plugin_runtime::macros_backend::MylifePluginRuntimeImpl::<ComponentImpl>::new(meta)
+                builder.build().expect("Failed to build meta") // TODO
             }
 
             fn fail(error: Box<dyn std::error::Error>) {
-                unimplemented!();
+                todo!();
             }
         }
 
@@ -159,6 +128,10 @@ pub fn mylife_actions(
             });
         }
     }
+
+    // for stream in streams.iter() {
+    //     println!("{}", stream);
+    // }
 
     let gen = quote! {
         #input
@@ -221,8 +194,6 @@ fn process_config(plugin_name: &syn::Ident, attr: &attributes::MylifeConfig) -> 
 }
 
 fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> TokenStream {
-    // println!("state {} => {:?}", name.to_string(), attr);
-
     let var_name = make_member_name(
         attr.ident
             .as_ref()
@@ -236,7 +207,7 @@ fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> To
     let target_ident = &attr.ident;
 
     let register = quote! {
-        |target: &mut #plugin_name, listener: fn(state: &Value)| {
+        |target: &mut #plugin_name, listener: fn(state: &plugin_runtime::runtime::Value)| {
             target.#target_ident.runtime_register(listener);
         }
     };
