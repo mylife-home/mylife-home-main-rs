@@ -56,20 +56,6 @@ impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
     }
 }
 
-impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
-    pub fn add_config(&mut self, name: &str, setter: ConfigRuntimeSetter<PluginType>) {
-        self.configs.insert(String::from(name), setter);
-    }
-
-    pub fn add_state(&mut self, name: &str, register: StateRuntimeRegister<PluginType>) {
-        self.states.insert(String::from(name), register);
-    }
-
-    pub fn add_action(&mut self, name: &str, executor: ActionRuntimeExecutor<PluginType>) {
-        self.actions.insert(String::from(name), executor);
-    }
-}
-
 struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
