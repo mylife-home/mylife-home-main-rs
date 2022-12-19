@@ -21,7 +21,7 @@ pub trait MylifePlugin: Default + MylifePluginHooks {
 }
 
 struct StateRuntimeData {
-    listener: fn(value: Value),
+    listener: Box<dyn Fn(/*value:*/ Value)>,
     ty: metadata::Type,
 }
 
@@ -52,7 +52,7 @@ impl<T: Default + Clone + TypedInto<Value>> State<T> {
         &self.value
     }
 
-    pub fn runtime_register(&mut self, listener: fn(value: Value), ty: metadata::Type) {
+    pub fn runtime_register(&mut self, listener: Box<dyn Fn(/*value:*/ Value)>, ty: metadata::Type) {
         self.runtime = Some(StateRuntimeData { listener, ty });
     }
 }

@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     metadata::PluginMetadata,
-    runtime::{Config, MylifeComponent, MylifePluginRuntime, Value, ConfigValue},
+    runtime::{Config, ConfigValue, MylifeComponent, MylifePluginRuntime, Value},
     MylifePlugin,
 };
 
@@ -30,9 +30,10 @@ impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginT
     }
 }
 
-pub type ConfigRuntimeSetter<PluginType> = fn(target: &mut PluginType, config: ConfigValue) -> Result<(), Box<dyn std::error::Error>>;
+pub type ConfigRuntimeSetter<PluginType> =
+    fn(target: &mut PluginType, config: ConfigValue) -> Result<(), Box<dyn std::error::Error>>;
 pub type StateRuntimeRegister<PluginType> =
-    fn(target: &mut PluginType, listener: fn(state: Value)) -> ();
+    fn(target: &mut PluginType, listener: Box<dyn Fn(/*state:*/ Value)>) -> ();
 pub type ActionRuntimeExecutor<PluginType> =
     fn(target: &mut PluginType, action: Value) -> Result<(), Box<dyn std::error::Error>>;
 
@@ -59,21 +60,35 @@ impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
 struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
+    fail_handler: Option<fn(error: Box<dyn std::error::Error>)>,
+    state_handler: Option<fn(name: &str, state: Value)>,
 }
 
 impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
     pub fn new(access: &Arc<PluginRuntimeAccess<PluginType>>) -> Box<Self> {
-        Box::new(ComponentImpl {
+        let mut component = Box::new(ComponentImpl {
             access: access.clone(),
             component: PluginType::default(),
-        })
+            fail_handler: None,
+            state_handler: None,
+        });
+
+        for (name, register) in access.states.iter() {
+            register(&mut component.component, Box::new(|value: Value| {
+                if let Some(handler) = &component.state_handler {
+                    handler(name, value);
+                }
+            }));
+        }
+
+        component
     }
 }
 
 impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
-    fn set_on_fail(&mut self, handler: fn(error: Box<dyn std::error::Error>)) {}
+    fn set_on_fail(&mut self, handler: Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>) {}
 
-    fn set_on_state(&mut self, handler: fn(name: &str, state: &Value)) {}
+    fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str, /*state:*/ Value)>) {}
 
     fn configure(&mut self, config: &Config) {}
 

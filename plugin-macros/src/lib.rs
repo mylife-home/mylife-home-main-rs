@@ -209,7 +209,7 @@ fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> To
     let target_ident = &attr.ident;
 
     let register = quote! {
-        |target: &mut #plugin_name, listener: fn(state: plugin_runtime::runtime::Value)| {
+        |target: &mut #plugin_name, listener: Box<dyn Fn(plugin_runtime::runtime::Value)>| {
             let runtime_type = #r#type;
             target.#target_ident.runtime_register(listener, runtime_type);
         }
