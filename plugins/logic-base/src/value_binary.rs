@@ -42,6 +42,9 @@ impl ValueBinary {
 
     #[mylife_action(description = "toggle value")]
     fn toggle(&mut self, arg: bool) {
+        self.fail("fail test");
+        return;
+
         if arg {
             self.state.set(!self.state.get());
         }

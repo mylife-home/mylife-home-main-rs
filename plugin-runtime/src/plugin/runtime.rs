@@ -11,7 +11,8 @@ pub trait MylifeComponent {
     fn set_on_fail(&mut self, handler: Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>);
     fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str, /*state:*/ Value)>);
     fn configure(&mut self, config: &Config);
-    fn execute_action(&mut self, name: &str, action: &Value);
+    fn init(&mut self);
+    fn execute_action(&mut self, name: &str, action: Value);
 }
 
 pub type Config = HashMap<String, ConfigValue>;

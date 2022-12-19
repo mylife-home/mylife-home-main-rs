@@ -15,9 +15,9 @@ pub trait MylifePlugin: Default + MylifePluginHooks {
     // used to export
     fn runtime() -> Box<dyn runtime::MylifePluginRuntime>;
 
-    // mark the plugin instance like it has failed
+    // mark the plugin instance  (component) like it has failed
     // usually, only drop should be called after that
-    fn fail(error: Box<dyn std::error::Error>);
+    fn fail(&mut self, error: Box<dyn std::error::Error>);
 }
 
 struct StateRuntimeData {
