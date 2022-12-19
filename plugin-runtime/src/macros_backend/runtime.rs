@@ -30,7 +30,7 @@ impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginT
     }
 }
 
-pub type ConfigRuntimeSetter<PluginType> = fn(target: &mut PluginType, config: ConfigValue) -> ();
+pub type ConfigRuntimeSetter<PluginType> = fn(target: &mut PluginType, config: ConfigValue) -> Result<(), Box<dyn std::error::Error>>;
 pub type StateRuntimeRegister<PluginType> =
     fn(target: &mut PluginType, listener: fn(state: Value)) -> ();
 pub type ActionRuntimeExecutor<PluginType> =
