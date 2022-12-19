@@ -113,7 +113,7 @@ impl TypedFrom<bool> for Value {
 }
 
 impl TypedTryFrom<Value> for u8 {
-    type Error = (); // TODO
+    type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
         todo!()
@@ -121,7 +121,7 @@ impl TypedTryFrom<Value> for u8 {
 }
 
 impl TypedTryFrom<Value> for i8 {
-    type Error = (); // TODO
+    type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
         todo!()
@@ -129,7 +129,7 @@ impl TypedTryFrom<Value> for i8 {
 }
 
 impl TypedTryFrom<Value> for u32 {
-    type Error = (); // TODO
+    type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
         todo!()
@@ -137,7 +137,7 @@ impl TypedTryFrom<Value> for u32 {
 }
 
 impl TypedTryFrom<Value> for i32 {
-    type Error = (); // TODO
+    type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
         todo!()
@@ -145,7 +145,7 @@ impl TypedTryFrom<Value> for i32 {
 }
 
 impl TypedTryFrom<Value> for String {
-    type Error = (); // TODO
+    type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
         todo!()
@@ -153,7 +153,7 @@ impl TypedTryFrom<Value> for String {
 }
 
 impl TypedTryFrom<Value> for f32 {
-    type Error = (); // TODO
+    type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
         todo!()
@@ -161,11 +161,24 @@ impl TypedTryFrom<Value> for f32 {
 }
 
 impl TypedTryFrom<Value> for bool {
-    type Error = (); // TODO
+    type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
         todo!()
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct ValueConversionError();
+
+impl fmt::Display for ValueConversionError {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
+
+impl std::error::Error for ValueConversionError {
+
 }
 
 #[derive(Debug, Clone)]
@@ -290,17 +303,6 @@ impl fmt::Display for ConfigValueConversionError {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum PluginRuntimeBuilderError {
-    NameNotSet,
-    UsageNotSet,
-}
-
-impl fmt::Display for PluginRuntimeBuilderError {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            PluginRuntimeBuilderError::NameNotSet => write!(fmt, "Name not set in metadata"),
-            PluginRuntimeBuilderError::UsageNotSet => write!(fmt, "Usage not set in metadata"),
-        }
-    }
+impl std::error::Error for ConfigValueConversionError {
+    
 }

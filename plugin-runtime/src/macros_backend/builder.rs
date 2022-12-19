@@ -110,5 +110,8 @@ impl fmt::Display for PluginRuntimeBuilderError {
         }
     }
 }
+impl std::error::Error for PluginRuntimeBuilderError {
+    
+}
 
 pub type BuilderPartCallback<PluginType> = fn(builder: &mut PluginRuntimeBuilder<PluginType>);

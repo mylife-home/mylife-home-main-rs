@@ -168,8 +168,10 @@ fn process_config(plugin_name: &syn::Ident, attr: &attributes::MylifeConfig) -> 
     let target_ident = &attr.ident;
 
     let setter = quote! {
-        |target: &mut #plugin_name, arg: plugin_runtime::runtime::ConfigValue| {
-            target.#target_ident = arg.into();
+        |target: &mut #plugin_name, arg: plugin_runtime::runtime::ConfigValue| -> std::result::Result<(), Box<dyn std::error::Error>> {
+            target.#target_ident = arg.try_into()?;
+
+            std::result::Result::Ok(())
         }
     };
 
