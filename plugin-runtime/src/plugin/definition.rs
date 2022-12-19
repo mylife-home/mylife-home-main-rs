@@ -21,7 +21,7 @@ pub trait MylifePlugin: Default + MylifePluginHooks {
 }
 
 struct StateRuntimeData {
-    listener: fn(value: &Value),
+    listener: fn(value: Value),
     ty: metadata::Type,
 }
 
@@ -45,14 +45,14 @@ impl<T: Default + Clone + TypedInto<Value>> State<T> {
             self.runtime.as_ref().expect("Unbound state changed!");
 
         self.value = value;
-        listener(&self.value.clone().typed_into(ty));
+        listener(self.value.clone().typed_into(ty));
     }
 
     pub fn get(&self) -> &T {
         &self.value
     }
 
-    pub fn runtime_register(&mut self, listener: fn(value: &Value), ty: metadata::Type) {
+    pub fn runtime_register(&mut self, listener: fn(value: Value), ty: metadata::Type) {
         self.runtime = Some(StateRuntimeData { listener, ty });
     }
 }

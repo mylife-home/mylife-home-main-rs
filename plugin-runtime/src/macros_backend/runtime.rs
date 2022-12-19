@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     metadata::PluginMetadata,
-    runtime::{Config, MylifeComponent, MylifePluginRuntime, Value},
+    runtime::{Config, MylifeComponent, MylifePluginRuntime, Value, ConfigValue},
     MylifePlugin,
 };
 
@@ -30,11 +30,11 @@ impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginT
     }
 }
 
-pub type ConfigRuntimeSetter<PluginType> = fn(target: &mut PluginType, config: &Value) -> ();
+pub type ConfigRuntimeSetter<PluginType> = fn(target: &mut PluginType, config: ConfigValue) -> ();
 pub type StateRuntimeRegister<PluginType> =
-    fn(target: &mut PluginType, listener: fn(state: &Value)) -> ();
+    fn(target: &mut PluginType, listener: fn(state: Value)) -> ();
 pub type ActionRuntimeExecutor<PluginType> =
-    fn(target: &mut PluginType, action: &Value) -> Result<(), Box<dyn std::error::Error>>;
+    fn(target: &mut PluginType, action: Value) -> Result<(), Box<dyn std::error::Error>>;
 
 pub struct PluginRuntimeAccess<PluginType: MylifePlugin> {
     configs: HashMap<String, ConfigRuntimeSetter<PluginType>>,

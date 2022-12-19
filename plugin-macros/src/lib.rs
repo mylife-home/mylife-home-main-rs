@@ -168,7 +168,7 @@ fn process_config(plugin_name: &syn::Ident, attr: &attributes::MylifeConfig) -> 
     let target_ident = &attr.ident;
 
     let setter = quote! {
-        |target: &mut #plugin_name, arg: &plugin_runtime::runtime::Value| {
+        |target: &mut #plugin_name, arg: plugin_runtime::runtime::ConfigValue| {
             target.#target_ident = arg.into();
         }
     };
@@ -207,7 +207,7 @@ fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> To
     let target_ident = &attr.ident;
 
     let register = quote! {
-        |target: &mut #plugin_name, listener: fn(state: &plugin_runtime::runtime::Value)| {
+        |target: &mut #plugin_name, listener: fn(state: plugin_runtime::runtime::Value)| {
             let runtime_type = #r#type;
             target.#target_ident.runtime_register(listener, runtime_type);
         }
@@ -326,10 +326,10 @@ fn process_action(
 
     // TODO: handle has_output
     let executor = quote! {
-        |target: &mut #plugin_name, arg: &plugin_runtime::runtime::Value| -> std::result::Result<(), Box<dyn std::error::Error>> {
+        |target: &mut #plugin_name, arg: plugin_runtime::runtime::Value| -> std::result::Result<(), Box<dyn std::error::Error>> {
             use plugin_runtime::runtime::TypedTryInto;
             static runtime_type: plugin_runtime::metadata::Type = #r#type;
-            let value: #var_type = arg.typed_try_into(&runtime_type)?;
+            let value: #var_type = arg.clone().typed_try_into(&runtime_type)?;
             target.#target_ident(value)#end_ident;
 
             std::result::Result::Ok(())
