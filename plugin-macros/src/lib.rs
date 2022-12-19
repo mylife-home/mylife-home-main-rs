@@ -48,9 +48,9 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
         }
     }
 
-    // for stream in streams.iter() {
-    //     println!("{}", stream);
-    // }
+    for stream in streams.iter() {
+        println!("{}", stream);
+    }
 
     let inventory_name = format_ident!("__MylifeInternalsInventory{}__", name);
 
@@ -129,9 +129,9 @@ pub fn mylife_actions(
         }
     }
 
-    // for stream in streams.iter() {
-    //     println!("{}", stream);
-    // }
+    for stream in streams.iter() {
+        println!("{}", stream);
+    }
 
     let gen = quote! {
         #input
@@ -208,7 +208,8 @@ fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> To
 
     let register = quote! {
         |target: &mut #plugin_name, listener: fn(state: &plugin_runtime::runtime::Value)| {
-            target.#target_ident.runtime_register(listener);
+            let runtime_type = #r#type;
+            target.#target_ident.runtime_register(listener, runtime_type);
         }
     };
 
@@ -326,7 +327,9 @@ fn process_action(
     // TODO: handle has_output
     let executor = quote! {
         |target: &mut #plugin_name, arg: &plugin_runtime::runtime::Value| -> std::result::Result<(), Box<dyn std::error::Error>> {
-            let value: #var_type = arg.into();
+            use plugin_runtime::runtime::TypedTryInto;
+            static runtime_type: plugin_runtime::metadata::Type = #r#type;
+            let value: #var_type = arg.typed_try_into(&runtime_type)?;
             target.#target_ident(value)#end_ident;
 
             std::result::Result::Ok(())

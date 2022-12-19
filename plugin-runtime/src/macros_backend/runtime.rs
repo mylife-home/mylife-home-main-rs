@@ -1,8 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    metadata::{ConfigType, PluginMetadata, Type},
-    runtime::{Config, MylifePluginRuntime, MylifeComponent, Value},
+    metadata::PluginMetadata,
+    runtime::{Config, MylifeComponent, MylifePluginRuntime, Value},
     MylifePlugin,
 };
 
@@ -30,8 +30,7 @@ impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginT
     }
 }
 
-pub type ConfigRuntimeSetter<PluginType> =
-    fn(target: &mut PluginType, config: &Value) -> ();
+pub type ConfigRuntimeSetter<PluginType> = fn(target: &mut PluginType, config: &Value) -> ();
 pub type StateRuntimeRegister<PluginType> =
     fn(target: &mut PluginType, listener: fn(state: &Value)) -> ();
 pub type ActionRuntimeExecutor<PluginType> =
@@ -94,118 +93,3 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
 
     fn execute_action(&mut self, name: &str, action: &Value) {}
 }
-
-/*
-//-----
-
-trait ActionHandler {
-    fn execute_action(&self, action: &Value) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-struct ActionHandlerWithoutResult<PluginT, ArgType> {
-    owner: Arc<PluginT>,
-    target: fn(_self: &mut PluginT, arg: ArgType) -> (),
-}
-
-impl<PluginT, ArgType> ActionHandlerWithoutResult<PluginT, ArgType> {
-    pub fn new(owner: Arc<PluginT>, target: fn(_self: &mut PluginT, arg: ArgType) -> ()) -> Self {
-        ActionHandlerWithoutResult { owner, target }
-    }
-}
-
-impl<PluginT, ArgType> ActionHandler for ActionHandlerWithoutResult<PluginT, ArgType> {
-    fn execute_action(&self, action: &Value) -> Result<(), Box<dyn std::error::Error>> {
-        let arg: ArgType = action.try_into()?;
-        (self.target)(&mut self.owner, arg);
-
-        Ok(())
-    }
-}
-
-struct ActionHandlerWithResult<PluginT, ArgType> {
-    owner: Arc<PluginT>,
-    target: fn(_self: &mut PluginT, arg: ArgType) -> Result<(), Box<dyn std::error::Error>>,
-}
-
-impl<PluginT, ArgType> ActionHandlerWithResult<PluginT, ArgType> {
-    pub fn new(owner: Arc<PluginT>, target: fn(_self: &mut PluginT, arg: ArgType) -> Result<(), Box<dyn std::error::Error>>) -> Self {
-        ActionHandlerWithResult { owner, target }
-    }
-}
-
-impl<PluginT, ArgType> ActionHandler for ActionHandlerWithResult<PluginT, ArgType> {
-    fn execute_action(&self, action: &Value) -> Result<(), Box<dyn std::error::Error>> {
-        let arg: ArgType = action.try_into()?;
-        (self.target)(&mut self.owner, arg)?;
-
-        Ok(())
-    }
-}
-
-//-----
-
-impl Definition {
-    pub const fn new_config(
-        name: &'static str,
-        description: Option<&'static str>,
-        r#type: ConfigType,
-        setter: fn(arg: &Value),
-    ) -> Self {
-        Definition::Config(ConfigDefinition {
-            name,
-            description,
-            r#type,
-            setter,
-        })
-    }
-
-    pub const fn new_state(
-        name: &'static str,
-        description: Option<&'static str>,
-        r#type: Type,
-    ) -> Self {
-        Definition::State(StateDefinition {
-            name,
-            description,
-            r#type,
-        })
-    }
-
-    pub const fn new_action(
-        name: &'static str,
-        description: Option<&'static str>,
-        r#type: Type,
-    ) -> Self {
-        Definition::Action(ActionDefinition {
-            name,
-            description,
-            r#type,
-        })
-    }
-}
-
-pub enum Definition {
-    Config(ConfigDefinition),
-    State(StateDefinition),
-    Action(ActionDefinition),
-}
-
-pub struct ConfigDefinition {
-    name: &'static str,
-    description: Option<&'static str>,
-    r#type: ConfigType,
-    setter: fn(arg: &Value),
-}
-
-pub struct StateDefinition {
-    name: &'static str,
-    description: Option<&'static str>,
-    r#type: Type,
-}
-
-pub struct ActionDefinition {
-    name: &'static str,
-    description: Option<&'static str>,
-    r#type: Type,
-}
-*/
