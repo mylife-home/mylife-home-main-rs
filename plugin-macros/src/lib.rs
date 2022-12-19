@@ -1,7 +1,7 @@
 use std::slice;
 
-use attributes::{ConfigType, Type, RangeValue, VecString};
-use darling::{FromDeriveInput, FromField, FromAttributes};
+use attributes::{ConfigType, RangeValue, Type, VecString};
+use darling::{FromAttributes, FromDeriveInput, FromField};
 use proc_macro2::TokenStream;
 use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::{format_ident, quote};
@@ -67,7 +67,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
 
                     }
 
-                    fn set_on_state(&mut self, handler: fn(state: &plugin_runtime::runtime::Value)) {
+                    fn set_on_state(&mut self, handler: fn(name: &str, state: &plugin_runtime::runtime::Value)) {
 
                     }
 
@@ -75,7 +75,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
 
                     }
 
-                    fn execute_action(&mut self, action: &plugin_runtime::runtime::Value) {
+                    fn execute_action(&mut self, name: &str, action: &plugin_runtime::runtime::Value) {
 
                     }
                 }
@@ -93,7 +93,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
                     callback(&mut builder);
                 }
 
-                let meta = builder.build().expect("Failed to build meta"); // TODO
+                let (meta, access) = builder.build().expect("Failed to build meta"); // TODO
 
                 plugin_runtime::macros_backend::MyLifePluginRuntimeImpl::<ComponentImpl>::new(meta)
             }
@@ -140,16 +140,17 @@ pub fn mylife_actions(
 
     for item in input.items.iter_mut() {
         if let syn::ImplItem::Method(method) = item {
-
             method.attrs.retain(|attr| {
                 let attr_ident = attr.path.get_ident().unwrap();
                 match attr_ident.to_string().as_str() {
                     "mylife_action" => {
-                        let attr_action = attributes::MylifeAction::from_attributes(slice::from_ref(attr)).unwrap();
+                        let attr_action =
+                            attributes::MylifeAction::from_attributes(slice::from_ref(attr))
+                                .unwrap();
                         streams.push(process_action(name, &method.sig, &attr_action));
                         return false;
                     }
-    
+
                     unknown => {
                         println!("Ignored attribute : {}", unknown);
                         return true;
@@ -255,7 +256,10 @@ fn get_state_type(var_type: &syn::Type) -> &syn::Type {
     if let syn::Type::Path(path) = var_type {
         let seg = path.path.segments.last().unwrap();
         if seg.ident.to_string() != "State" {
-            abort!(seg.ident.span(), "mylife_state variable must be of type State");
+            abort!(
+                seg.ident.span(),
+                "mylife_state variable must be of type State"
+            );
         }
 
         if let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
@@ -279,22 +283,22 @@ fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
 
     if let Some(provided_type) = provided_type {
         match provided_type {
-            Type::Range(RangeValue {min, max}) => abort_call_site!("TODO"),
+            Type::Range(RangeValue { min, max }) => abort_call_site!("TODO"),
             Type::Text => {
                 if native_type_name != "String" {
                     abort_call_site!("Expected String, got '{}'", native_type_name);
                 }
-            },
+            }
             Type::Float => {
                 if native_type_name != "f64" {
                     abort_call_site!("Expected Float64, got '{}'", native_type_name);
                 }
-            },
-            Type::Bool =>  {
+            }
+            Type::Bool => {
                 if native_type_name != "bool" {
                     abort_call_site!("Expected Bool, got '{}'", native_type_name);
                 }
-            },
+            }
             Type::Enum(VecString(vec)) => abort_call_site!("TODO"),
             Type::Complex => abort_call_site!("TODO"),
         }
@@ -304,8 +308,10 @@ fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
         return match native_type_name.as_str() {
             "f64" => Type::Float,
             "bool" => Type::Bool,
-            unsupported => abort_call_site!("Unable to deduce type with native type '{}'", unsupported)
-        }
+            unsupported => {
+                abort_call_site!("Unable to deduce type with native type '{}'", unsupported)
+            }
+        };
     }
 }
 
@@ -319,7 +325,11 @@ fn get_native_type_name(native_type: &syn::Type) -> String {
     abort_call_site!("Invalid type '{:?}'", native_type);
 }
 
-fn process_action(plugin_name: &syn::Ident, sig: &syn::Signature, attr: &attributes::MylifeAction) -> TokenStream {
+fn process_action(
+    plugin_name: &syn::Ident,
+    sig: &syn::Signature,
+    attr: &attributes::MylifeAction,
+) -> TokenStream {
     let var_name = make_member_name(&sig.ident);
 
     let name = attr.name.as_ref().unwrap_or(&var_name);
@@ -336,11 +346,17 @@ fn process_action(plugin_name: &syn::Ident, sig: &syn::Signature, attr: &attribu
         }
     };
 
+    let end_ident = if has_output {
+        quote! { ? }
+    } else {
+        quote! {}
+    };
+
     // TODO: handle has_output
     let executor = quote! {
         |target: &mut #plugin_name, arg: &plugin_runtime::runtime::Value| -> std::result::Result<(), Box<dyn std::error::Error>> {
             let value: #var_type = arg.into();
-            target.#target_ident(value)?;
+            target.#target_ident(value)#end_ident;
 
             std::result::Result::Ok(())
         }
