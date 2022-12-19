@@ -8,6 +8,7 @@ mod module;
 static ALLOCATOR: System = System;
 
 // TODO: logs
+// TODO: anyhow::Error ?
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let plugins = Module::load("target/debug", "logic_base")?;
