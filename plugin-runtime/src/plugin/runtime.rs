@@ -71,6 +71,7 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RangePrimitive {
     U8,
     I8,
@@ -148,7 +149,13 @@ impl TypedFrom<String> for Value {
         match ty {
             metadata::Type::Text => Value::Text(value),
             metadata::Type::Enum(list) => {
-                check_enum_member(list, &value);
+                if !is_enum_member(list, &value) {
+                    panic!(
+                        "Unexpected enum value '{}'. (possibles values: [{}])",
+                        value,
+                        list.join(", ")
+                    );
+                }
                 Value::Enum(value)
             }
             _ => panic!("Cannot convert from String to Value of type {:?}", ty),
@@ -156,14 +163,8 @@ impl TypedFrom<String> for Value {
     }
 }
 
-fn check_enum_member(list: &Vec<String>, value: &String) {
-    for candidate in list.iter() {
-        if candidate == value {
-            return;
-        }
-    }
-
-    panic!("Unexpected enum value '{}'. (possibles values: [{}])", value, list.join(", "));
+fn is_enum_member(list: &Vec<String>, value: &String) -> bool {
+    list.iter().any(|candidate| candidate == value)
 }
 
 impl TypedFrom<f32> for Value {
@@ -190,7 +191,22 @@ impl TypedTryFrom<Value> for u8 {
     type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
-        todo!()
+        if !is_range_primitive(ty, RangePrimitive::U8) {
+            return Err(ValueConversionError::TypeMismatch(TypeMismatchData {
+                native_type: "u8",
+                ty: ty.clone(),
+            }));
+        }
+
+        if let Value::RangeU8(value) = value {
+            Ok(value)
+        } else {
+            Err(ValueConversionError::ValueMismatch(ValueMismatchData {
+                native_type: "u8",
+                ty: ty.clone(),
+                value,
+            }))
+        }
     }
 }
 
@@ -198,7 +214,22 @@ impl TypedTryFrom<Value> for i8 {
     type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
-        todo!()
+        if !is_range_primitive(ty, RangePrimitive::I8) {
+            return Err(ValueConversionError::TypeMismatch(TypeMismatchData {
+                native_type: "i8",
+                ty: ty.clone(),
+            }));
+        }
+
+        if let Value::RangeI8(value) = value {
+            Ok(value)
+        } else {
+            Err(ValueConversionError::ValueMismatch(ValueMismatchData {
+                native_type: "i8",
+                ty: ty.clone(),
+                value,
+            }))
+        }
     }
 }
 
@@ -206,7 +237,22 @@ impl TypedTryFrom<Value> for u32 {
     type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
-        todo!()
+        if !is_range_primitive(ty, RangePrimitive::U32) {
+            return Err(ValueConversionError::TypeMismatch(TypeMismatchData {
+                native_type: "u32",
+                ty: ty.clone(),
+            }));
+        }
+
+        if let Value::RangeU32(value) = value {
+            Ok(value)
+        } else {
+            Err(ValueConversionError::ValueMismatch(ValueMismatchData {
+                native_type: "u32",
+                ty: ty.clone(),
+                value,
+            }))
+        }
     }
 }
 
@@ -214,7 +260,22 @@ impl TypedTryFrom<Value> for i32 {
     type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
-        todo!()
+        if !is_range_primitive(ty, RangePrimitive::I32) {
+            return Err(ValueConversionError::TypeMismatch(TypeMismatchData {
+                native_type: "i32",
+                ty: ty.clone(),
+            }));
+        }
+
+        if let Value::RangeI32(value) = value {
+            Ok(value)
+        } else {
+            Err(ValueConversionError::ValueMismatch(ValueMismatchData {
+                native_type: "i32",
+                ty: ty.clone(),
+                value,
+            }))
+        }
     }
 }
 
@@ -222,7 +283,37 @@ impl TypedTryFrom<Value> for String {
     type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
-        todo!()
+        match ty {
+            metadata::Type::Enum(list) => {
+                if let Value::Enum(value) = &value {
+                    if is_enum_member(list, &value) {
+                        return Ok(value.clone());
+                    }
+                }
+
+                Err(ValueConversionError::ValueMismatch(ValueMismatchData {
+                    native_type: "String",
+                    ty: ty.clone(),
+                    value,
+                }))
+            }
+            metadata::Type::Text => {
+                if let Value::Text(value) = value {
+                    return Ok(value);
+                }
+
+                Err(ValueConversionError::ValueMismatch(ValueMismatchData {
+                    native_type: "String",
+                    ty: ty.clone(),
+                    value,
+                }))
+            }
+
+            _ => Err(ValueConversionError::TypeMismatch(TypeMismatchData {
+                native_type: "String",
+                ty: ty.clone(),
+            })),
+        }
     }
 }
 
@@ -230,7 +321,23 @@ impl TypedTryFrom<Value> for f32 {
     type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
-        todo!()
+        if let metadata::Type::Float = ty {
+        } else {
+            return Err(ValueConversionError::TypeMismatch(TypeMismatchData {
+                native_type: "f32",
+                ty: ty.clone(),
+            }));
+        }
+
+        if let Value::Float(value) = value {
+            Ok(value)
+        } else {
+            Err(ValueConversionError::ValueMismatch(ValueMismatchData {
+                native_type: "f32",
+                ty: ty.clone(),
+                value,
+            }))
+        }
     }
 }
 
@@ -238,16 +345,63 @@ impl TypedTryFrom<Value> for bool {
     type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
-        todo!()
+        if let metadata::Type::Bool = ty {
+        } else {
+            return Err(ValueConversionError::TypeMismatch(TypeMismatchData {
+                native_type: "bool",
+                ty: ty.clone(),
+            }));
+        }
+
+        if let Value::Bool(value) = value {
+            Ok(value)
+        } else {
+            Err(ValueConversionError::ValueMismatch(ValueMismatchData {
+                native_type: "bool",
+                ty: ty.clone(),
+                value,
+            }))
+        }
+    }
+}
+
+fn is_range_primitive(ty: &metadata::Type, primitive: RangePrimitive) -> bool {
+    if let metadata::Type::Range(min, max) = ty {
+        compute_range_primitive(*min, *max) == primitive
+    } else {
+        false
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ValueConversionError();
+pub enum ValueConversionError {
+    TypeMismatch(TypeMismatchData),
+    ValueMismatch(ValueMismatchData),
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeMismatchData {
+    native_type: &'static str,
+    ty: metadata::Type,
+}
+
+#[derive(Debug, Clone)]
+pub struct ValueMismatchData {
+    native_type: &'static str,
+    ty: metadata::Type,
+    value: Value,
+}
 
 impl fmt::Display for ValueConversionError {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
+        match self {
+            ValueConversionError::TypeMismatch(data) => {
+                write!(fmt, "Type mismatch: cannot convert {:?} into {}", data.ty, data.native_type)
+            },
+            ValueConversionError::ValueMismatch(data) => {
+                write!(fmt, "Value mismatch: cannot convert value {:?} of type {:?} into {}", data.value, data.ty, data.native_type)
+            },
+        }
     }
 }
 
