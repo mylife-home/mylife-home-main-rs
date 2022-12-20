@@ -1,9 +1,9 @@
-use std::{collections::HashMap, fmt, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, fmt, sync::Arc};
 
 use crate::{
     metadata::PluginMetadata,
     runtime::{Config, ConfigValue, MylifeComponent, MylifePluginRuntime, Value},
-    MylifePlugin,
+    MylifePlugin, StateRuntimeListener,
 };
 
 pub struct PluginRuntimeImpl<PluginType: MylifePlugin + 'static> {
@@ -30,23 +30,29 @@ impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginT
     }
 }
 
+pub struct StateRuntime<PluginType> {
+    pub(crate) register: StateRuntimeRegister<PluginType>,
+    pub(crate) getter: StateRuntimeGetter<PluginType>,
+}
+
 pub type ConfigRuntimeSetter<PluginType> =
     fn(target: &mut PluginType, config: ConfigValue) -> Result<(), Box<dyn std::error::Error>>;
 pub type StateRuntimeRegister<PluginType> =
-    fn(target: &mut PluginType, listener: Box<dyn Fn(/*state:*/ Value)>) -> ();
+    fn(target: &mut PluginType, listener: Box<dyn StateRuntimeListener>) -> ();
+pub type StateRuntimeGetter<PluginType> = fn(target: &PluginType) -> Value;
 pub type ActionRuntimeExecutor<PluginType> =
     fn(target: &mut PluginType, action: Value) -> Result<(), Box<dyn std::error::Error>>;
 
 pub struct PluginRuntimeAccess<PluginType: MylifePlugin> {
     configs: HashMap<String, ConfigRuntimeSetter<PluginType>>,
-    states: HashMap<String, StateRuntimeRegister<PluginType>>,
+    states: HashMap<String, StateRuntime<PluginType>>,
     actions: HashMap<String, ActionRuntimeExecutor<PluginType>>,
 }
 
 impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
     pub fn new(
         configs: HashMap<String, ConfigRuntimeSetter<PluginType>>,
-        states: HashMap<String, StateRuntimeRegister<PluginType>>,
+        states: HashMap<String, StateRuntime<PluginType>>,
         actions: HashMap<String, ActionRuntimeExecutor<PluginType>>,
     ) -> Arc<Self> {
         Arc::new(PluginRuntimeAccess {
@@ -61,7 +67,20 @@ struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
     fail_handler: Option<Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>>,
-    state_handler: Option<Box<dyn Fn(/*name:*/ &str, /*state:*/ Value)>>,
+    state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str)>>>>,
+}
+
+struct StateRuntimeListenerImpl {
+    name: String,
+    state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str)>>>>,
+}
+
+impl StateRuntimeListener for StateRuntimeListenerImpl {
+    fn change(&self) {
+        if let Some(handler) = self.state_handler.borrow().as_ref() {
+            handler(&self.name);
+        }
+    }
 }
 
 impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
@@ -70,21 +89,24 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
             access: access.clone(),
             component: PluginType::default(),
             fail_handler: None,
-            state_handler: None,
+            state_handler: Arc::new(RefCell::new(None)),
         });
 
-        for (name, register) in access.states.iter() {
-            register(
-                &mut component.component,
-                Box::new(|value: Value| {
-                    if let Some(handler) = &component.state_handler {
-                        handler(name, value);
-                    }
+        component.register_state_handlers();
+
+        component
+    }
+
+    fn register_state_handlers(&mut self) {
+        for (name, state) in self.access.states.iter() {
+            (state.register)(
+                &mut self.component,
+                Box::new(StateRuntimeListenerImpl {
+                    name: String::from(name),
+                    state_handler: self.state_handler.clone(),
                 }),
             );
         }
-
-        component
     }
 
     fn configure_with_res(&mut self, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
@@ -139,8 +161,18 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
         self.fail_handler = Some(handler);
     }
 
-    fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str, /*state:*/ Value)>) {
-        self.state_handler = Some(handler);
+    fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str)>) {
+        *self.state_handler.borrow_mut() = Some(handler);
+    }
+
+    fn get_state(&self, name: &str) -> Result<Value, Box<dyn std::error::Error>> {
+        let state = self.access.states.get(name).ok_or_else(|| {
+            Box::new(NoSuchStateError {
+                name: String::from(name),
+            })
+        })?;
+
+        Ok((state.getter)(&self.component))
     }
 
     fn configure(&mut self, config: &Config) {
@@ -148,13 +180,13 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
         self.res_to_fail(result);
     }
 
-    fn execute_action(&mut self, name: &str, action: Value) {
-        let result = self.execute_action_with_res(name, action);
+    fn init(&mut self) {
+        let result = self.component.init();
         self.res_to_fail(result);
     }
 
-    fn init(&mut self) {
-        let result = self.component.init();
+    fn execute_action(&mut self, name: &str, action: Value) {
+        let result = self.execute_action_with_res(name, action);
         self.res_to_fail(result);
     }
 }
@@ -182,5 +214,18 @@ impl std::error::Error for NoSuchActionError {}
 impl fmt::Display for NoSuchActionError {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "No such action: '{}'", self.name)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NoSuchStateError {
+    name: String,
+}
+
+impl std::error::Error for NoSuchStateError {}
+
+impl fmt::Display for NoSuchStateError {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "No such state: '{}'", self.name)
     }
 }

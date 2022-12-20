@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     ActionRuntimeExecutor, ConfigRuntimeSetter, PluginRuntimeAccess, PluginRuntimeImpl,
-    StateRuntimeRegister,
+    StateRuntime, StateRuntimeRegister, StateRuntimeGetter,
 };
 
 pub struct PluginRuntimeBuilder<PluginType: MylifePlugin + 'static> {
@@ -18,7 +18,7 @@ pub struct PluginRuntimeBuilder<PluginType: MylifePlugin + 'static> {
     members: HashMap<String, Member>,
     config: HashMap<String, ConfigItem>,
     config_runtime: HashMap<String, ConfigRuntimeSetter<PluginType>>,
-    state_runtime: HashMap<String, StateRuntimeRegister<PluginType>>,
+    state_runtime: HashMap<String, StateRuntime<PluginType>>,
     action_runtime: HashMap<String, ActionRuntimeExecutor<PluginType>>,
 }
 
@@ -73,10 +73,11 @@ impl<PluginType: MylifePlugin + 'static> PluginRuntimeBuilder<PluginType> {
         description: Option<&str>,
         value_type: Type,
         register: StateRuntimeRegister<PluginType>,
+        getter: StateRuntimeGetter<PluginType>,
     ) {
         let member = Member::new(description.map(String::from), MemberType::State, value_type);
         self.members.insert(String::from(name), member);
-        self.state_runtime.insert(String::from(name), register);
+        self.state_runtime.insert(String::from(name), StateRuntime { register, getter });
     }
 
     pub fn add_action(
@@ -110,8 +111,6 @@ impl fmt::Display for PluginRuntimeBuilderError {
         }
     }
 }
-impl std::error::Error for PluginRuntimeBuilderError {
-    
-}
+impl std::error::Error for PluginRuntimeBuilderError {}
 
 pub type BuilderPartCallback<PluginType> = fn(builder: &mut PluginRuntimeBuilder<PluginType>);

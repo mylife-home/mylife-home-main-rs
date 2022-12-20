@@ -1,6 +1,6 @@
 use crate::{
     metadata,
-    runtime::{self, Value, TypedInto},
+    runtime::{self, TypedInto, Value},
 };
 
 pub trait MylifePluginHooks {
@@ -20,39 +20,40 @@ pub trait MylifePlugin: Default + MylifePluginHooks {
     fn fail(&mut self, error: Box<dyn std::error::Error>);
 }
 
-struct StateRuntimeData {
-    listener: Box<dyn Fn(/*value:*/ Value)>,
-    ty: metadata::Type,
+pub trait StateRuntimeListener {
+    fn change(&self);
 }
 
 pub struct State<T: Default> {
     value: T,
-    runtime: Option<StateRuntimeData>,
+    runtime_listener: Option<Box<dyn StateRuntimeListener>>,
 }
 
 impl<T: Default> Default for State<T> {
     fn default() -> Self {
         State {
             value: T::default(),
-            runtime: None,
+            runtime_listener: None,
         }
     }
 }
 
 impl<T: Default + Clone + TypedInto<Value>> State<T> {
     pub fn set(&mut self, value: T) {
-        let StateRuntimeData { listener, ty } =
-            self.runtime.as_ref().expect("Unbound state changed!");
+        let listener = self
+            .runtime_listener
+            .as_ref()
+            .expect("Unbound state changed!");
 
         self.value = value;
-        listener(self.value.clone().typed_into(ty));
+        listener.change();
     }
 
     pub fn get(&self) -> &T {
         &self.value
     }
 
-    pub fn runtime_register(&mut self, listener: Box<dyn Fn(/*value:*/ Value)>, ty: metadata::Type) {
-        self.runtime = Some(StateRuntimeData { listener, ty });
+    pub fn runtime_register(&mut self, listener: Box<dyn StateRuntimeListener>) {
+        self.runtime_listener = Some(listener);
     }
 }

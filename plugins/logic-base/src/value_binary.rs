@@ -1,5 +1,7 @@
+use std::fmt;
+
 use plugin_macros::{mylife_actions, MylifePlugin};
-use plugin_runtime::{MylifePluginHooks, State};
+use plugin_runtime::{MylifePlugin, MylifePluginHooks, State};
 
 #[derive(MylifePlugin, Default)]
 #[mylife_plugin(description = "step relay", usage = "logic")] // name=
@@ -32,7 +34,6 @@ impl ValueBinary {
         Ok(())
     }
 
-
     #[mylife_action(description = "set value to off")]
     fn off(&mut self, arg: bool) {
         if arg {
@@ -42,7 +43,7 @@ impl ValueBinary {
 
     #[mylife_action(description = "toggle value")]
     fn toggle(&mut self, arg: bool) {
-        self.fail("fail test");
+        self.fail(Box::new(TestError()));
         return;
 
         if arg {
@@ -51,3 +52,13 @@ impl ValueBinary {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct TestError();
+
+impl std::error::Error for TestError {}
+
+impl fmt::Display for TestError {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "Boom!",)
+    }
+}
