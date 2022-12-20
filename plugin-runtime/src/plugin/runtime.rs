@@ -71,46 +71,118 @@ where
     }
 }
 
+enum RangePrimitive {
+    U8,
+    I8,
+    U32,
+    I32,
+}
+
+fn compute_range_primitive(min: i64, max: i64) -> RangePrimitive {
+    if min >= u8::MIN.into() && max <= u8::MAX.into() {
+        RangePrimitive::U8
+    } else if min >= i8::MIN.into() && max <= i8::MAX.into() {
+        RangePrimitive::I8
+    } else if min >= u32::MIN.into() && max <= u32::MAX.into() {
+        RangePrimitive::U32
+    } else if min >= i32::MIN.into() && max <= i32::MAX.into() {
+        RangePrimitive::I32
+    } else {
+        panic!(
+            "Cannot represent range type with min={} and max={} because bounds are too big",
+            min, max
+        );
+    }
+}
+
 impl TypedFrom<u8> for Value {
     fn typed_from(value: u8, ty: &metadata::Type) -> Self {
-        todo!()
+        if let metadata::Type::Range(min, max) = ty {
+            if let RangePrimitive::U8 = compute_range_primitive(*min, *max) {
+                return Value::RangeU8(value);
+            }
+        }
+
+        panic!("Cannot convert from u8 to Value of type {:?}", ty);
     }
 }
 
 impl TypedFrom<i8> for Value {
     fn typed_from(value: i8, ty: &metadata::Type) -> Self {
-        todo!()
+        if let metadata::Type::Range(min, max) = ty {
+            if let RangePrimitive::I8 = compute_range_primitive(*min, *max) {
+                return Value::RangeI8(value);
+            }
+        }
+
+        panic!("Cannot convert from i8 to Value of type {:?}", ty);
     }
 }
 
 impl TypedFrom<u32> for Value {
     fn typed_from(value: u32, ty: &metadata::Type) -> Self {
-        todo!()
+        if let metadata::Type::Range(min, max) = ty {
+            if let RangePrimitive::U32 = compute_range_primitive(*min, *max) {
+                return Value::RangeU32(value);
+            }
+        }
+
+        panic!("Cannot convert from u32 to Value of type {:?}", ty);
     }
 }
 
 impl TypedFrom<i32> for Value {
     fn typed_from(value: i32, ty: &metadata::Type) -> Self {
-        todo!()
+        if let metadata::Type::Range(min, max) = ty {
+            if let RangePrimitive::I32 = compute_range_primitive(*min, *max) {
+                return Value::RangeI32(value);
+            }
+        }
+
+        panic!("Cannot convert from i32 to Value of type {:?}", ty);
     }
 }
 
 impl TypedFrom<String> for Value {
     fn typed_from(value: String, ty: &metadata::Type) -> Self {
-        // Text + Enum
-        todo!()
+        match ty {
+            metadata::Type::Text => Value::Text(value),
+            metadata::Type::Enum(list) => {
+                check_enum_member(list, &value);
+                Value::Enum(value)
+            }
+            _ => panic!("Cannot convert from String to Value of type {:?}", ty),
+        }
     }
+}
+
+fn check_enum_member(list: &Vec<String>, value: &String) {
+    for candidate in list.iter() {
+        if candidate == value {
+            return;
+        }
+    }
+
+    panic!("Unexpected enum value '{}'. (possibles values: [{}])", value, list.join(", "));
 }
 
 impl TypedFrom<f32> for Value {
     fn typed_from(value: f32, ty: &metadata::Type) -> Self {
-        todo!()
+        if let metadata::Type::Float = ty {
+            return Value::Float(value);
+        }
+
+        panic!("Cannot convert from f32 to Value of type {:?}", ty);
     }
 }
 
 impl TypedFrom<bool> for Value {
     fn typed_from(value: bool, ty: &metadata::Type) -> Self {
-        todo!()
+        if let metadata::Type::Bool = ty {
+            return Value::Bool(value);
+        }
+
+        panic!("Cannot convert from bool to Value of type {:?}", ty);
     }
 }
 
@@ -179,9 +251,7 @@ impl fmt::Display for ValueConversionError {
     }
 }
 
-impl std::error::Error for ValueConversionError {
-
-}
+impl std::error::Error for ValueConversionError {}
 
 #[derive(Debug, Clone)]
 pub enum ConfigValue {
@@ -305,6 +375,4 @@ impl fmt::Display for ConfigValueConversionError {
     }
 }
 
-impl std::error::Error for ConfigValueConversionError {
-    
-}
+impl std::error::Error for ConfigValueConversionError {}
