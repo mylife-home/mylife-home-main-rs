@@ -9,7 +9,7 @@ pub trait MylifePluginRuntime {
 
 pub trait MylifeComponent {
     fn set_on_fail(&mut self, handler: Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>);
-    fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str)>);
+    fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>);
     fn get_state(&self, name: &str) -> Result<Value, Box<dyn std::error::Error>>;
     fn configure(&mut self, config: &Config);
     fn init(&mut self);

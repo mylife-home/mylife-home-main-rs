@@ -67,18 +67,18 @@ struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
     fail_handler: Option<Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>>,
-    state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str)>>>>,
+    state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>>>>,
 }
 
 struct StateRuntimeListenerImpl {
     name: String,
-    state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str)>>>>,
+    state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>>>>,
 }
 
 impl StateRuntimeListener for StateRuntimeListenerImpl {
-    fn change(&self) {
+    fn change(&self, value: Value) {
         if let Some(handler) = self.state_handler.borrow().as_ref() {
-            handler(&self.name);
+            handler(&self.name, value);
         }
     }
 }
@@ -161,7 +161,7 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
         self.fail_handler = Some(handler);
     }
 
-    fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str)>) {
+    fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>) {
         *self.state_handler.borrow_mut() = Some(handler);
     }
 

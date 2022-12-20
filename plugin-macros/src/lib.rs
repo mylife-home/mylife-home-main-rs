@@ -211,7 +211,8 @@ fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> To
 
     let register = quote! {
         |target: &mut #plugin_name, listener: Box<dyn plugin_runtime::StateRuntimeListener>| {
-            target.#target_ident.runtime_register(listener);
+            let runtime_type: plugin_runtime::metadata::Type = #r#type;
+            target.#target_ident.runtime_register(listener, runtime_type);
         }
     };
 

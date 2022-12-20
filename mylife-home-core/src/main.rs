@@ -25,10 +25,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("FAIL: {}", error);
     }));
 
-    component.set_on_state(Box::new(|name: &str| {
-        // let value = component.borrow().get_state(name).expect("could not get state");
-        //println!("STATE: {} = {:?}", name, value);
-        println!("STATE CHANGE: {}", name);
+    component.set_on_state(Box::new(|name: &str, value: Value| {
+        println!("STATE: {} = {:?}", name, value);
     }));
 
     let mut config = Config::new();
@@ -39,18 +37,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("init");
     component.init();
-
-    println!("STATE: state = {:?}", component.get_state("state").expect("could not get state"));
+   println!("after init: state = {:?}", component.get_state("state").expect("could not get state"));
 
     println!("execute_action on");
     component.execute_action("on", Value::Bool(true));
 
-    println!("STATE: state = {:?}", component.get_state("state").expect("could not get state"));
-
     println!("execute_action off");
     component.execute_action("off", Value::Bool(true));
-
-    println!("STATE: state = {:?}", component.get_state("state").expect("could not get state"));
 
     component.execute_action("toggle", Value::Bool(true));
 
