@@ -52,5 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("STATE: state = {:?}", component.get_state("state").expect("could not get state"));
 
+    component.execute_action("toggle", Value::Bool(true));
+
     Ok(())
 }
