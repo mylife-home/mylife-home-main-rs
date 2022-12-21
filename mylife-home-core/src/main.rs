@@ -1,4 +1,4 @@
-use std::{alloc::System, cell::RefCell};
+use std::alloc::System;
 
 use module::Module;
 use plugin_runtime::runtime::{Config, ConfigValue, Value};
@@ -37,7 +37,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("init");
     component.init();
-   println!("after init: state = {:?}", component.get_state("state").expect("could not get state"));
+    println!(
+        "after init: state = {:?}",
+        component.get_state("state").expect("could not get state")
+    );
 
     println!("execute_action on");
     component.execute_action("on", Value::Bool(true));

@@ -1,7 +1,7 @@
 use std::slice;
 
 use attributes::{ConfigType, RangeValue, Type, VecString};
-use darling::{FromAttributes, FromDeriveInput, FromField};
+use darling::{FromAttributes, FromDeriveInput, FromField, ToTokens};
 use proc_macro2::TokenStream;
 use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::{format_ident, quote};
@@ -260,8 +260,8 @@ fn get_state_type(var_type: &syn::Type) -> &syn::Type {
             }
         }
     }
-
-    todo!();
+    
+    abort_call_site!("Wrong value type '{}', expected 'State<type>'", var_type.to_token_stream());
 }
 
 fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
@@ -338,7 +338,6 @@ fn process_action(
         quote! {}
     };
 
-    // TODO: handle has_output
     let executor = quote! {
         |target: &mut #plugin_name, arg: plugin_runtime::runtime::Value| -> std::result::Result<(), Box<dyn std::error::Error>> {
             use plugin_runtime::runtime::TypedTryInto;
