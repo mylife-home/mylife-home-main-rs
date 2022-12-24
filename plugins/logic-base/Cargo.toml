@@ -11,3 +11,4 @@ crate-type = ["cdylib"]
 plugin_runtime = { path = "../../plugin-runtime" }
 plugin_macros = { path = "../../plugin-macros" }
 inventory = "0.3.2"
+log = { version = "0.4.17", features = ["kv_unstable"] }

@@ -2,7 +2,8 @@ use std::{fmt, path::Path, sync::Arc};
 
 use libloading::Library;
 use plugin_runtime::{
-    metadata::PluginMetadata, runtime::MylifeComponent, ModuleDeclaration, PluginRegistry,
+    metadata::PluginMetadata, runtime::MylifeComponent, InitParams, ModuleDeclaration,
+    PluginRegistry,
 };
 
 struct PluginRegistryImpl {
@@ -72,8 +73,15 @@ impl Module {
             version: String::from(module_declaration.module_version),
         });
 
+        let ModuleDeclaration { init, register, .. } = module_declaration;
+        unsafe {
+            init(&InitParams {
+                logger: log::logger(),
+                logger_max_level: log::max_level(),
+            })?
+        };
+
         let mut registry = PluginRegistryImpl::new(module.clone());
-        let register = module_declaration.register;
         unsafe { register(&mut registry) };
 
         Ok(registry.plugins)

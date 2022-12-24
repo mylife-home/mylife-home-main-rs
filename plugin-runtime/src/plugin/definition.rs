@@ -18,6 +18,8 @@ pub trait MylifePlugin: Default + MylifePluginHooks {
     // mark the plugin instance  (component) like it has failed
     // usually, only drop should be called after that
     fn fail(&mut self, error: Box<dyn std::error::Error>);
+
+    fn name(&self) -> &str;
 }
 
 pub trait StateRuntimeListener {

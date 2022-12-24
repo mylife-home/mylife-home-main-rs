@@ -12,6 +12,8 @@ static ALLOCATOR: System = System;
 // TODO: anyhow::Error ?
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    pretty_env_logger::init();
+    
     let plugins = Module::load("target/debug", "logic_base")?;
 
     for plugin in plugins.iter() {

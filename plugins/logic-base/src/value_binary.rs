@@ -1,4 +1,5 @@
 use std::fmt;
+use log::{debug};
 
 use plugin_macros::{mylife_actions, MylifePlugin};
 use plugin_runtime::{MylifePlugin, MylifePluginHooks, State};
@@ -17,6 +18,8 @@ pub struct ValueBinary {
 impl MylifePluginHooks for ValueBinary {
     fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.state.set(self.config);
+
+        debug!(target: "mylife:home:core:plugins:logic-base:value-binary", component = self.name(); "initial state = {}", self.state.get());
 
         Ok(())
     }
