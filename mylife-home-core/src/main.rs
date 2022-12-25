@@ -9,7 +9,8 @@ mod module;
 static ALLOCATOR: System = System;
 
 // TODO: logs
-// TODO: anyhow::Error ?
+// TODO: Error: anyhow pour plugins, thiserror pour core ?
+// TODO: init tokio runtime pour plugins
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
