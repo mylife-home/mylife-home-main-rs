@@ -11,6 +11,8 @@ static ALLOCATOR: System = System;
 // TODO: logs
 // TODO: Error: anyhow pour plugins, thiserror pour core ?
 // TODO: init tokio runtime pour plugins
+// TODO: proc macro cleanup
+// TODO: fail() + name() implementation using component repository
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
