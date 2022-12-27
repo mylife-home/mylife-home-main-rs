@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{:?}", plugin.metadata());
     }
 
-    let mut component = plugins[0].create_component();
+    let mut component = plugins[0].create_component("comp-id");
 
     component.set_on_fail(Box::new(|error: Box<dyn std::error::Error>| {
         println!("FAIL: {}", error);

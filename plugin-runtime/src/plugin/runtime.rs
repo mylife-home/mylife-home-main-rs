@@ -4,10 +4,11 @@ use crate::metadata;
 
 pub trait MylifePluginRuntime {
     fn metadata(&self) -> &metadata::PluginMetadata;
-    fn create(&self) -> Box<dyn MylifeComponent>;
+    fn create(&self, id: &str) -> Box<dyn MylifeComponent>;
 }
 
 pub trait MylifeComponent {
+    fn id(&self) -> &str;
     fn set_on_fail(&mut self, handler: Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>);
     fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>);
     fn get_state(&self, name: &str) -> Result<Value, Box<dyn std::error::Error>>;

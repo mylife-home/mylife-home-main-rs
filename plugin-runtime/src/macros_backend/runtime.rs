@@ -25,8 +25,8 @@ impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginT
         &self.metadata
     }
 
-    fn create(&self) -> Box<dyn MylifeComponent> {
-        ComponentImpl::<PluginType>::new(&self.access)
+    fn create(&self, id: &str) -> Box<dyn MylifeComponent> {
+        ComponentImpl::<PluginType>::new(&self.access, id)
     }
 }
 
@@ -66,6 +66,8 @@ impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
 struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
+    id: String,
+    failure: Option<Box<dyn std::error::Error>>,
     fail_handler: Option<Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>>,
     state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>>>>,
 }
@@ -84,10 +86,19 @@ impl StateRuntimeListener for StateRuntimeListenerImpl {
 }
 
 impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
-    pub fn new(access: &Arc<PluginRuntimeAccess<PluginType>>) -> Box<Self> {
+    pub fn new(access: &Arc<PluginRuntimeAccess<PluginType>>, id: &str) -> Box<Self> {
+        let fail_handler = |error: Box<dyn std::error::Error>| {
+            // TODO
+            todo!();
+        };
+
+        let component =  PluginType::new(id, Box::new(fail_handler));
+
         let mut component = Box::new(ComponentImpl {
             access: access.clone(),
-            component: PluginType::default(),
+            component,
+            id: String::from(id),
+            failure: None,
             fail_handler: None,
             state_handler: Arc::new(RefCell::new(None)),
         });
@@ -157,6 +168,10 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
 }
 
 impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
     fn set_on_fail(&mut self, handler: Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>) {
         self.fail_handler = Some(handler);
     }

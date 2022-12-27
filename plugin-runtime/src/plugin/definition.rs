@@ -3,7 +3,9 @@ use crate::{
     runtime::{self, TypedInto, Value},
 };
 
-pub trait MylifePluginHooks {
+pub trait MylifePluginHooks: Sized {
+    fn new(id: &str, on_fail: Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>) -> Self;
+
     // called after config
     fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
@@ -11,15 +13,9 @@ pub trait MylifePluginHooks {
 }
 
 // Trait implemented by the plugin itself
-pub trait MylifePlugin: Default + MylifePluginHooks {
+pub trait MylifePlugin: MylifePluginHooks {
     // used to export
     fn runtime() -> Box<dyn runtime::MylifePluginRuntime>;
-
-    // mark the plugin instance  (component) like it has failed
-    // usually, only drop should be called after that
-    fn fail(&mut self, error: Box<dyn std::error::Error>);
-
-    fn name(&self) -> &str;
 }
 
 pub trait StateRuntimeListener {

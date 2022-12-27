@@ -137,8 +137,8 @@ impl Plugin {
         self.runtime.metadata()
     }
 
-    pub fn create_component(&self) -> Box<dyn MylifeComponent> {
-        self.runtime.create()
+    pub fn create_component(&self, id: &str) -> Box<dyn MylifeComponent> {
+        self.runtime.create(id)
     }
 }
 

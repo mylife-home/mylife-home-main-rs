@@ -66,15 +66,6 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
 
                 builder.build().expect("Failed to build meta") // TODO
             }
-
-            fn fail(&mut self, error: Box<dyn std::error::Error>) {
-                // TODO: add callback field to map it to ComponentImpl::fail_handler?
-                panic!("TODO: implement fail()");
-            }
-
-            fn name(&self) -> &str {
-                "TODO name"
-            }
         }
 
         pub struct #inventory_name(plugin_runtime::macros_backend::BuilderPartCallback<#name>);
