@@ -12,7 +12,6 @@ static ALLOCATOR: System = System;
 // TODO: Error: anyhow pour plugins, thiserror pour core ?
 // TODO: init tokio runtime pour plugins
 // TODO: proc macro cleanup
-// TODO: fail() implementation
 // TODO: try -C prefer-dynamic
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut component = plugins[0].create_component("comp-id");
 
-    component.set_on_fail(Box::new(|error: Box<dyn std::error::Error>| {
+    component.set_on_fail(Box::new(|error: &Box<dyn std::error::Error>| {
         println!("FAIL: {}", error);
     }));
 
@@ -54,7 +53,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("execute_action off");
     component.execute_action("off", Value::Bool(true));
 
+    println!("failure: {:?}", component.failure());
     component.execute_action("toggle", Value::Bool(true));
+    println!("failure: {:?}", component.failure());
 
     Ok(())
 }

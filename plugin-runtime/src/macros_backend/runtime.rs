@@ -1,4 +1,10 @@
-use std::{cell::RefCell, collections::HashMap, fmt, sync::Arc};
+use log::warn;
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    fmt,
+    sync::Arc,
+};
 
 use crate::{
     metadata::PluginMetadata,
@@ -63,32 +69,100 @@ impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
     }
 }
 
+/// Component runtime failure manager
+struct FailureHandler {
+    failure: Cell<Option<Box<dyn std::error::Error>>>,
+    fail_handler: RefCell<Option<Box<dyn Fn(/*error:*/ &Box<dyn std::error::Error>)>>>,
+}
+
+impl FailureHandler {
+    fn new() -> Self {
+        FailureHandler {
+            failure: Cell::new(None),
+            fail_handler: RefCell::new(None),
+        }
+    }
+
+    fn fail(&self, error: Box<dyn std::error::Error>) {
+        if unsafe { self.failure.as_ptr().as_ref().unwrap().is_some() } {
+            // do not overwrite failure because we deref it aggressively
+            warn!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "Cannot overwrite previous failure, ignoring {error}");
+        } else {
+            self.failure.set(Some(error));
+        }
+
+        let handler_ref = self.fail_handler.borrow();
+
+        let handler = handler_ref
+            .as_ref()
+            .expect("Cannot report error without registered fail handler");
+
+        handler(self.failure().as_ref().unwrap());
+    }
+
+    fn set_handler(&self, handler: Box<dyn Fn(/*error:*/ &Box<dyn std::error::Error>)>) {
+        self.fail_handler.borrow_mut().replace(handler);
+    }
+
+    fn failure(&self) -> Option<&Box<dyn std::error::Error>> {
+        let failure_ref = unsafe { self.failure.as_ptr().as_ref().unwrap() };
+        failure_ref.as_ref()
+    }
+}
+
+/// The glue to be able to have a failure handler before the actual component runtime is built
+struct FailureLinker {
+    handler: Option<Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>>,
+}
+
+impl FailureLinker {
+    fn new() -> Arc<RefCell<Self>> {
+        Arc::new(RefCell::new(FailureLinker { handler: None }))
+    }
+
+    fn fail(&mut self, error: Box<dyn std::error::Error>) {
+        let handler = self
+            .handler
+            .as_ref()
+            .expect("Cannot report error without registered fail handler");
+
+        handler(error);
+    }
+
+    fn make_handler(linker: &Arc<RefCell<Self>>) -> Box<dyn Fn(Box<dyn std::error::Error>)> {
+        let linker = linker.clone();
+        Box::new(move |error: Box<dyn std::error::Error>| {
+            linker.borrow_mut().fail(error);
+        })
+    }
+}
+
 struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
     id: String,
-    failure: Option<Box<dyn std::error::Error>>,
-    fail_handler: Option<Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>>,
+    failure_handler: Arc<FailureHandler>,
     state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>>>>,
 }
 
 impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
     pub fn new(access: &Arc<PluginRuntimeAccess<PluginType>>, id: &str) -> Box<Self> {
-        let fail_handler = |error: Box<dyn std::error::Error>| {
-            // TODO
-            todo!();
-        };
-
-        let component = PluginType::new(id, Box::new(fail_handler));
+        let failure_linker = FailureLinker::new();
 
         let mut component = Box::new(ComponentImpl {
             access: access.clone(),
-            component,
+            component: PluginType::new(id, FailureLinker::make_handler(&failure_linker)),
             id: String::from(id),
-            failure: None,
-            fail_handler: None,
+            failure_handler: Arc::new(FailureHandler::new()),
             state_handler: Arc::new(RefCell::new(None)),
         });
+
+        {
+            let failure_handler = component.failure_handler.clone();
+            failure_linker.borrow_mut().handler = Some(Box::new(move |error| {
+                failure_handler.fail(error);
+            }));
+        }
 
         component.register_state_handlers();
 
@@ -141,16 +215,11 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
         handler(&mut self.component, action)
     }
 
-    fn res_to_fail<T>(&self, result: Result<T, Box<dyn std::error::Error>>) -> Option<T> {
-        let fail_handler = self
-            .fail_handler
-            .as_ref()
-            .expect("Cannot report error without registered fail handler");
-
+    fn res_to_fail<T>(&mut self, result: Result<T, Box<dyn std::error::Error>>) -> Option<T> {
         match result {
             Ok(value) => Some(value),
             Err(error) => {
-                fail_handler(error);
+                self.failure_handler.fail(error);
                 None
             }
         }
@@ -162,8 +231,12 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
         &self.id
     }
 
-    fn set_on_fail(&mut self, handler: Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>) {
-        self.fail_handler = Some(handler);
+    fn set_on_fail(&mut self, handler: Box<dyn Fn(/*error:*/ &Box<dyn std::error::Error>)>) {
+        self.failure_handler.set_handler(handler);
+    }
+
+    fn failure(&self) -> Option<&Box<dyn std::error::Error>> {
+        self.failure_handler.failure()
     }
 
     fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>) {
