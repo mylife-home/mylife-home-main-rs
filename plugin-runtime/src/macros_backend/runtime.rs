@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, fmt, sync::Arc};
 use crate::{
     metadata::PluginMetadata,
     runtime::{Config, ConfigValue, MylifeComponent, MylifePluginRuntime, Value},
-    MylifePlugin, StateRuntimeListener,
+    MylifePlugin,
 };
 
 pub struct PluginRuntimeImpl<PluginType: MylifePlugin + 'static> {
@@ -38,7 +38,7 @@ pub struct StateRuntime<PluginType> {
 pub type ConfigRuntimeSetter<PluginType> =
     fn(target: &mut PluginType, config: ConfigValue) -> Result<(), Box<dyn std::error::Error>>;
 pub type StateRuntimeRegister<PluginType> =
-    fn(target: &mut PluginType, listener: Box<dyn StateRuntimeListener>) -> ();
+    fn(target: &mut PluginType, listener: Box<dyn Fn(Value)>) -> ();
 pub type StateRuntimeGetter<PluginType> = fn(target: &PluginType) -> Value;
 pub type ActionRuntimeExecutor<PluginType> =
     fn(target: &mut PluginType, action: Value) -> Result<(), Box<dyn std::error::Error>>;
@@ -72,19 +72,6 @@ struct ComponentImpl<PluginType: MylifePlugin> {
     state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>>>>,
 }
 
-struct StateRuntimeListenerImpl {
-    name: String,
-    state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>>>>,
-}
-
-impl StateRuntimeListener for StateRuntimeListenerImpl {
-    fn change(&self, value: Value) {
-        if let Some(handler) = self.state_handler.borrow().as_ref() {
-            handler(&self.name, value);
-        }
-    }
-}
-
 impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
     pub fn new(access: &Arc<PluginRuntimeAccess<PluginType>>, id: &str) -> Box<Self> {
         let fail_handler = |error: Box<dyn std::error::Error>| {
@@ -92,7 +79,7 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
             todo!();
         };
 
-        let component =  PluginType::new(id, Box::new(fail_handler));
+        let component = PluginType::new(id, Box::new(fail_handler));
 
         let mut component = Box::new(ComponentImpl {
             access: access.clone(),
@@ -110,11 +97,14 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
 
     fn register_state_handlers(&mut self) {
         for (name, state) in self.access.states.iter() {
+            let name = name.clone();
+            let state_handler = self.state_handler.clone();
             (state.register)(
                 &mut self.component,
-                Box::new(StateRuntimeListenerImpl {
-                    name: String::from(name),
-                    state_handler: self.state_handler.clone(),
+                Box::new(move |value: Value| {
+                    if let Some(handler) = state_handler.borrow().as_ref() {
+                        handler(&name, value);
+                    }
                 }),
             );
         }
