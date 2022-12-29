@@ -2,7 +2,9 @@ use log::debug;
 use std::fmt;
 
 use plugin_macros::{mylife_actions, MylifePlugin};
-use plugin_runtime::{MylifePlugin, MylifePluginHooks, State};
+use plugin_runtime::{MylifePluginHooks, State};
+
+const LOG_TARGET: &str = "mylife:home:core:plugins:logic-base:value-binary";
 
 #[derive(MylifePlugin)]
 #[mylife_plugin(description = "step relay", usage = "logic")] // name=
@@ -31,7 +33,7 @@ impl MylifePluginHooks for ValueBinary {
     fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.state.set(self.config);
 
-        debug!(target: "mylife:home:core:plugins:logic-base:value-binary", component = self.id.as_str(); "initial state = {}", self.state.get());
+        debug!(target: LOG_TARGET, "[{}] initial state = {}", self.id.as_str(), self.state.get());
 
         Ok(())
     }
