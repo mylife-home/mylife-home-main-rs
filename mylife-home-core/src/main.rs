@@ -18,11 +18,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let plugins = Module::load("target/debug", "logic_base")?;
 
-    for plugin in plugins.iter() {
-        println!("Plugin loaded: {} v{}", plugin.id(), plugin.version());
-        println!("{:?}", plugin.metadata());
-    }
-
     let mut component = plugins[0].create_component("comp-id");
 
     component.set_on_fail(Box::new(|error: &Box<dyn std::error::Error>| {

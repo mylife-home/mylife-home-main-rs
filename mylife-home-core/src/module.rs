@@ -1,9 +1,12 @@
 use std::{fmt, path::Path, sync::Arc};
 
 use libloading::Library;
+use log::{debug, trace};
 use plugin_runtime::{
     metadata::PluginMetadata, runtime::MylifeComponent, ModuleDeclaration, PluginRegistry,
 };
+
+const LOG_TARGET: &str = "mylife:home:core:module";
 
 struct PluginRegistryImpl {
     module: Arc<Module>,
@@ -21,8 +24,22 @@ impl PluginRegistryImpl {
 
 impl PluginRegistry for PluginRegistryImpl {
     fn register_plugin(&mut self, plugin: Box<dyn plugin_runtime::runtime::MylifePluginRuntime>) {
-        self.plugins
-            .push(Arc::new(Plugin::new(self.module.clone(), plugin)));
+        let plugin = Arc::new(Plugin::new(self.module.clone(), plugin));
+
+        debug!(
+            target: LOG_TARGET,
+            "Plugin loaded: {} v{}",
+            plugin.id(),
+            plugin.version()
+        );
+
+        trace!(
+            target: LOG_TARGET,
+            "Plugin metadata: {:?}",
+            plugin.metadata()
+        );
+
+        self.plugins.push(plugin);
     }
 }
 
@@ -38,6 +55,12 @@ impl Module {
         name: &str,
     ) -> Result<Vec<Arc<Plugin>>, Box<dyn std::error::Error>> {
         let path = Path::new(module_path).join(format!("lib{}.so", name));
+        debug!(
+            target: LOG_TARGET,
+            "Loading module '{}' (path='{}'",
+            name,
+            path.display()
+        );
 
         let library = unsafe { Library::new(path)? };
 
