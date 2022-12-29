@@ -321,10 +321,7 @@ fn process_action(
 
     let has_output = match &sig.output {
         syn::ReturnType::Default => false,
-        syn::ReturnType::Type(_, ret_type) => {
-            // TODO: check that ret_type is Result<(), Box<dyn std::error::Error>>
-            true
-        }
+        syn::ReturnType::Type(_, _) => true // Note: if type does not implement Result<(), Error> it will fail to compile (TODO: test)
     };
 
     let end_ident = if has_output {

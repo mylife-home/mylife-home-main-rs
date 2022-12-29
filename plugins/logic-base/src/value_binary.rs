@@ -67,7 +67,9 @@ impl ValueBinary {
 
     #[mylife_action(description = "make component fail")]
     fn fail(&mut self, arg: bool) {
-        (self.fail)(Box::new(TestError()));
+        if arg {
+            (self.fail)(Box::new(TestError()));
+        }
     }
 }
 

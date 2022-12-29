@@ -9,7 +9,7 @@ pub struct ModuleDeclaration {
     pub core_version: &'static str,
     pub mylife_runtime_version: &'static str,
     pub module_version: &'static str,
-    pub register: unsafe extern "C" fn(registry: &mut dyn PluginRegistry),
+    pub register: unsafe extern "Rust" fn(registry: &mut dyn PluginRegistry),
 }
 
 #[macro_export]

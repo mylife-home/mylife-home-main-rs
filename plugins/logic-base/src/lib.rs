@@ -5,6 +5,6 @@ use value_binary::ValueBinary;
 
 export_module!(register);
 
-extern "C" fn register(registry: &mut dyn PluginRegistry) {
+extern "Rust" fn register(registry: &mut dyn PluginRegistry) {
     registry.register_plugin(ValueBinary::runtime());
 }
