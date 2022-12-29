@@ -72,14 +72,16 @@ impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
 /// Component runtime failure manager
 struct FailureHandler {
     failure: Cell<Option<Box<dyn std::error::Error>>>,
-    fail_handler: RefCell<Option<Box<dyn Fn(/*error:*/ &Box<dyn std::error::Error>)>>>,
+    fail_handler: RefCell<Box<dyn Fn(/*error:*/ &Box<dyn std::error::Error>)>>,
 }
 
 impl FailureHandler {
     fn new() -> Self {
         FailureHandler {
             failure: Cell::new(None),
-            fail_handler: RefCell::new(None),
+            fail_handler: RefCell::new(Box::new(|_error| {
+                panic!("Cannot report error without registered fail handler");
+            })),
         }
     }
 
@@ -91,17 +93,11 @@ impl FailureHandler {
             self.failure.set(Some(error));
         }
 
-        let handler_ref = self.fail_handler.borrow();
-
-        let handler = handler_ref
-            .as_ref()
-            .expect("Cannot report error without registered fail handler");
-
-        handler(self.failure().as_ref().unwrap());
+        self.fail_handler.borrow()(self.failure().as_ref().unwrap());
     }
 
     fn set_handler(&self, handler: Box<dyn Fn(/*error:*/ &Box<dyn std::error::Error>)>) {
-        self.fail_handler.borrow_mut().replace(handler);
+        *self.fail_handler.borrow_mut() = handler;
     }
 
     fn failure(&self) -> Option<&Box<dyn std::error::Error>> {
