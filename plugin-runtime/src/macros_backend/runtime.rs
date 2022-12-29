@@ -76,13 +76,13 @@ struct FailureHandler {
 }
 
 impl FailureHandler {
-    fn new() -> Self {
-        FailureHandler {
+    fn new() -> Arc<Self> {
+        Arc::new(FailureHandler {
             failure: Cell::new(None),
             fail_handler: RefCell::new(Box::new(|_error| {
                 panic!("Cannot report error without registered fail handler");
             })),
-        }
+        })
     }
 
     fn fail(&self, error: Box<dyn std::error::Error>) {
@@ -96,6 +96,7 @@ impl FailureHandler {
         self.fail_handler.borrow()(self.failure().as_ref().unwrap());
     }
 
+    /// Set the target handler that will be called on failure
     fn set_handler(&self, handler: Box<dyn Fn(/*error:*/ &Box<dyn std::error::Error>)>) {
         *self.fail_handler.borrow_mut() = handler;
     }
@@ -104,31 +105,12 @@ impl FailureHandler {
         let failure_ref = unsafe { self.failure.as_ptr().as_ref().unwrap() };
         failure_ref.as_ref()
     }
-}
 
-/// The glue to be able to have a failure handler before the actual component runtime is built
-struct FailureLinker {
-    handler: Option<Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>>,
-}
-
-impl FailureLinker {
-    fn new() -> Arc<RefCell<Self>> {
-        Arc::new(RefCell::new(FailureLinker { handler: None }))
-    }
-
-    fn fail(&mut self, error: Box<dyn std::error::Error>) {
-        let handler = self
-            .handler
-            .as_ref()
-            .expect("Cannot report error without registered fail handler");
-
-        handler(error);
-    }
-
-    fn make_handler(linker: &Arc<RefCell<Self>>) -> Box<dyn Fn(Box<dyn std::error::Error>)> {
-        let linker = linker.clone();
+    /// Build a closure that will call self.fail
+    fn make_handler(self: &Arc<Self>) -> Box<dyn Fn(Box<dyn std::error::Error>)> {
+        let handler = self.clone();
         Box::new(move |error: Box<dyn std::error::Error>| {
-            linker.borrow_mut().fail(error);
+            handler.fail(error);
         })
     }
 }
@@ -143,22 +125,15 @@ struct ComponentImpl<PluginType: MylifePlugin> {
 
 impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
     pub fn new(access: &Arc<PluginRuntimeAccess<PluginType>>, id: &str) -> Box<Self> {
-        let failure_linker = FailureLinker::new();
+        let failure_handler = FailureHandler::new();
 
         let mut component = Box::new(ComponentImpl {
             access: access.clone(),
-            component: PluginType::new(id, FailureLinker::make_handler(&failure_linker)),
+            component: PluginType::new(id, failure_handler.make_handler()),
             id: String::from(id),
-            failure_handler: Arc::new(FailureHandler::new()),
+            failure_handler,
             state_handler: Arc::new(RefCell::new(None)),
         });
-
-        {
-            let failure_handler = component.failure_handler.clone();
-            failure_linker.borrow_mut().handler = Some(Box::new(move |error| {
-                failure_handler.fail(error);
-            }));
-        }
 
         component.register_state_handlers();
 
