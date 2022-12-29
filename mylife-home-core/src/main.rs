@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     component.execute_action("off", Value::Bool(true));
 
     println!("failure: {:?}", component.failure());
-    component.execute_action("toggle", Value::Bool(true));
+    component.execute_action("fail", Value::Bool(true));
     println!("failure: {:?}", component.failure());
 
     Ok(())
