@@ -86,7 +86,7 @@ impl FailureHandler {
     }
 
     fn fail(&self, error: Box<dyn std::error::Error>) {
-        if unsafe { self.failure.as_ptr().as_ref().unwrap().is_some() } {
+        if self.failure().is_some() {
             // do not overwrite failure because we deref it aggressively
             warn!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "Cannot overwrite previous failure, ignoring {error}");
         } else {
@@ -101,8 +101,10 @@ impl FailureHandler {
         *self.fail_handler.borrow_mut() = handler;
     }
 
-    fn failure(&self) -> Option<&Box<dyn std::error::Error>> {
-        let failure_ref = unsafe { self.failure.as_ptr().as_ref().unwrap() };
+    fn failure<'a>(&'a self) -> Option<&'a Box<dyn std::error::Error>> {
+        // Failure may only be set once, not overwritten afterward.
+        // So if there is a failure, it is safe to get its ref as long as the FailureHandler lives
+        let failure_ref = unsafe { &*self.failure.as_ptr() };
         failure_ref.as_ref()
     }
 
