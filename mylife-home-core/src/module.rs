@@ -73,13 +73,7 @@ impl Module {
             version: String::from(module_declaration.module_version),
         });
 
-        let ModuleDeclaration { init, register, .. } = module_declaration;
-        unsafe {
-            init(&InitParams {
-                logger: log::logger(),
-                logger_max_level: log::max_level(),
-            })?
-        };
+        let ModuleDeclaration { register, .. } = module_declaration;
 
         let mut registry = PluginRegistryImpl::new(module.clone());
         unsafe { register(&mut registry) };
