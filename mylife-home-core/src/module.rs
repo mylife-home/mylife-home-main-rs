@@ -2,8 +2,7 @@ use std::{fmt, path::Path, sync::Arc};
 
 use libloading::Library;
 use plugin_runtime::{
-    metadata::PluginMetadata, runtime::MylifeComponent, InitParams, ModuleDeclaration,
-    PluginRegistry,
+    metadata::PluginMetadata, runtime::MylifeComponent, ModuleDeclaration, PluginRegistry,
 };
 
 struct PluginRegistryImpl {

@@ -12,11 +12,6 @@ pub struct ModuleDeclaration {
     pub register: unsafe extern "C" fn(registry: &mut dyn PluginRegistry),
 }
 
-pub struct InitParams {
-    pub logger: &'static dyn log::Log,
-    pub logger_max_level: log::LevelFilter
-}
-
 #[macro_export]
 macro_rules! export_module {
     ($register:expr) => {
