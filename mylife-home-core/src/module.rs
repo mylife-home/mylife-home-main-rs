@@ -75,7 +75,7 @@ impl Module {
         let ModuleDeclaration { register, .. } = module_declaration;
 
         let mut registry = PluginRegistryImpl::new(module.clone());
-        unsafe { register(&mut registry) };
+        register(&mut registry);
 
         Ok(registry.plugins)
     }
