@@ -102,7 +102,7 @@ impl FailureHandler {
     }
 
     fn failure<'a>(&'a self) -> Option<&'a Box<dyn std::error::Error>> {
-        // Failure may only be set once, not overwritten afterward.
+        // failure may only be set once, not overwritten afterward.
         // So if there is a failure, it is safe to get its ref as long as the FailureHandler lives
         let failure_ref = unsafe { &*self.failure.as_ptr() };
         failure_ref.as_ref()
