@@ -8,7 +8,6 @@ mod module;
 #[global_allocator]
 static ALLOCATOR: System = System;
 
-// TODO: logs
 // TODO: Error: anyhow pour plugins, thiserror pour core ?
 // TODO: try tokio with plugins
 // TODO: proc macro cleanup
