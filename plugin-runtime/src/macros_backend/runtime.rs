@@ -1,4 +1,4 @@
-use log::warn;
+use log::{warn, trace};
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
@@ -90,6 +90,7 @@ impl FailureHandler {
             // do not overwrite failure because we deref it aggressively
             warn!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "Cannot overwrite previous failure, ignoring {error}");
         } else {
+            warn!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "Fail {error}");
             self.failure.set(Some(error));
         }
 
@@ -144,11 +145,14 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
 
     fn register_state_handlers(&mut self) {
         for (name, state) in self.access.states.iter() {
+            let id = self.id.clone();
             let name = name.clone();
             let state_handler = self.state_handler.clone();
             (state.register)(
                 &mut self.component,
                 Box::new(move |value: Value| {
+                    trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{id}] state '{name}' changed to {value:?}");
+
                     if let Some(handler) = state_handler.borrow().as_ref() {
                         handler(&name, value);
                     }
@@ -157,7 +161,10 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
         }
     }
 
+    // TODO: better error type
     fn configure_with_res(&mut self, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+        trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{}] configure with {config:?}", self.id);
+
         for (name, setter) in self.access.configs.iter() {
             let value = config
                 .get(name)
@@ -174,6 +181,7 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
         Ok(())
     }
 
+    // TODO: better error type
     fn execute_action_with_res(
         &mut self,
         name: &str,
@@ -185,6 +193,7 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
             })
         })?;
 
+        trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{}] execute action '{name}' with {action:?}", self.id);
         handler(&mut self.component, action)
     }
 
