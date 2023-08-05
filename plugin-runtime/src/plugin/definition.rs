@@ -4,7 +4,7 @@ use crate::{
 };
 
 pub trait MylifePluginHooks: Sized {
-    fn new(id: &str, on_fail: Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>) -> Self;
+    fn new(id: &str) -> Self;
 
     // called after config
     fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {

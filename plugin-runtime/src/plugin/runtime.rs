@@ -9,13 +9,11 @@ pub trait MylifePluginRuntime {
 
 pub trait MylifeComponent {
     fn id(&self) -> &str;
-    fn set_on_fail(&mut self, handler: Box<dyn Fn(/*error:*/ &Box<dyn std::error::Error>)>);
-    fn failure(&self) -> Option<&Box<dyn std::error::Error>>;
     fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>);
     fn get_state(&self, name: &str) -> Result<Value, Box<dyn std::error::Error>>;
-    fn configure(&mut self, config: &Config);
-    fn init(&mut self);
-    fn execute_action(&mut self, name: &str, action: Value);
+    fn configure(&mut self, config: &Config) -> Result<(), Box<dyn std::error::Error>>;
+    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    fn execute_action(&mut self, name: &str, action: Value) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 pub type Config = HashMap<String, ConfigValue>;

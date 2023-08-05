@@ -69,72 +69,19 @@ impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
     }
 }
 
-/// Component runtime failure manager
-struct FailureHandler {
-    failure: Cell<Option<Box<dyn std::error::Error>>>,
-    fail_handler: RefCell<Box<dyn Fn(/*error:*/ &Box<dyn std::error::Error>)>>,
-}
-
-impl FailureHandler {
-    fn new() -> Arc<Self> {
-        Arc::new(FailureHandler {
-            failure: Cell::new(None),
-            fail_handler: RefCell::new(Box::new(|_error| {
-                panic!("Cannot report error without registered fail handler");
-            })),
-        })
-    }
-
-    fn fail(&self, error: Box<dyn std::error::Error>) {
-        if self.failure().is_some() {
-            // do not overwrite failure because we deref it aggressively
-            warn!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "Cannot overwrite previous failure, ignoring {error}");
-        } else {
-            warn!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "Fail {error}");
-            self.failure.set(Some(error));
-        }
-
-        self.fail_handler.borrow()(self.failure().as_ref().unwrap());
-    }
-
-    /// Set the target handler that will be called on failure
-    fn set_handler(&self, handler: Box<dyn Fn(/*error:*/ &Box<dyn std::error::Error>)>) {
-        *self.fail_handler.borrow_mut() = handler;
-    }
-
-    fn failure<'a>(&'a self) -> Option<&'a Box<dyn std::error::Error>> {
-        // failure may only be set once, not overwritten afterward.
-        // So if there is a failure, it is safe to get its ref as long as the FailureHandler lives
-        let failure_ref = unsafe { &*self.failure.as_ptr() };
-        failure_ref.as_ref()
-    }
-
-    /// Build a closure that will call self.fail
-    fn make_handler(self: &Arc<Self>) -> Box<dyn Fn(Box<dyn std::error::Error>)> {
-        let handler = self.clone();
-        Box::new(move |error: Box<dyn std::error::Error>| {
-            handler.fail(error);
-        })
-    }
-}
-
 struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
     id: String,
-    failure_handler: Arc<FailureHandler>,
     state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>>>>,
 }
 
 impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
     pub fn new(access: &Arc<PluginRuntimeAccess<PluginType>>, id: &str) -> Box<Self> {
-        let failure_handler = FailureHandler::new();
-
         let mut component = Box::new(ComponentImpl {
             access: access.clone(),
-            component: PluginType::new(id, failure_handler.make_handler()),
+            component: PluginType::new(id),
             id: String::from(id),
-            failure_handler,
             state_handler: Arc::new(RefCell::new(None)),
         });
 
@@ -160,9 +107,29 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
             );
         }
     }
+}
+
+impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>) {
+        *self.state_handler.borrow_mut() = Some(handler);
+    }
+
+    fn get_state(&self, name: &str) -> Result<Value, Box<dyn std::error::Error>> {
+        let state = self.access.states.get(name).ok_or_else(|| {
+            Box::new(NoSuchStateError {
+                name: String::from(name),
+            })
+        })?;
+
+        Ok((state.getter)(&self.component))
+    }
 
     // TODO: better error type
-    fn configure_with_res(&mut self, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    fn configure(&mut self, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
         trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{}] configure with {config:?}", self.id);
 
         for (name, setter) in self.access.configs.iter() {
@@ -181,12 +148,12 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
         Ok(())
     }
 
+    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.component.init()
+    }
+
     // TODO: better error type
-    fn execute_action_with_res(
-        &mut self,
-        name: &str,
-        action: Value,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn execute_action(&mut self, name: &str, action: Value) -> Result<(), Box<dyn std::error::Error>> {
         let handler = self.access.actions.get(name).ok_or_else(|| {
             Box::new(NoSuchActionError {
                 name: String::from(name),
@@ -195,59 +162,6 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
 
         trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{}] execute action '{name}' with {action:?}", self.id);
         handler(&mut self.component, action)
-    }
-
-    fn res_to_fail<T>(&mut self, result: Result<T, Box<dyn std::error::Error>>) -> Option<T> {
-        match result {
-            Ok(value) => Some(value),
-            Err(error) => {
-                self.failure_handler.fail(error);
-                None
-            }
-        }
-    }
-}
-
-impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
-    fn id(&self) -> &str {
-        &self.id
-    }
-
-    fn set_on_fail(&mut self, handler: Box<dyn Fn(/*error:*/ &Box<dyn std::error::Error>)>) {
-        self.failure_handler.set_handler(handler);
-    }
-
-    fn failure(&self) -> Option<&Box<dyn std::error::Error>> {
-        self.failure_handler.failure()
-    }
-
-    fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>) {
-        *self.state_handler.borrow_mut() = Some(handler);
-    }
-
-    fn get_state(&self, name: &str) -> Result<Value, Box<dyn std::error::Error>> {
-        let state = self.access.states.get(name).ok_or_else(|| {
-            Box::new(NoSuchStateError {
-                name: String::from(name),
-            })
-        })?;
-
-        Ok((state.getter)(&self.component))
-    }
-
-    fn configure(&mut self, config: &Config) {
-        let result = self.configure_with_res(config);
-        self.res_to_fail(result);
-    }
-
-    fn init(&mut self) {
-        let result = self.component.init();
-        self.res_to_fail(result);
-    }
-
-    fn execute_action(&mut self, name: &str, action: Value) {
-        let result = self.execute_action_with_res(name, action);
-        self.res_to_fail(result);
     }
 }
 

@@ -10,7 +10,6 @@ const LOG_TARGET: &str = "mylife:home:core:plugins:logic-base:value-binary";
 #[mylife_plugin(description = "step relay", usage = "logic")] // name=
 pub struct ValueBinary {
     id: String,
-    fail: Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>,
 
     #[mylife_config(description = "initial value (useless only config example")] // type=, name=
     config: bool,
@@ -21,10 +20,9 @@ pub struct ValueBinary {
 
 // impl Drop si besoin de terminate
 impl MylifePluginHooks for ValueBinary {
-    fn new(id: &str, on_fail: Box<dyn Fn(/*error:*/ Box<dyn std::error::Error>)>) -> Self {
+    fn new(id: &str) -> Self {
         ValueBinary {
             id: String::from(id),
-            fail: on_fail,
             config: Default::default(),
             state: Default::default(),
         }
@@ -62,13 +60,6 @@ impl ValueBinary {
     fn toggle(&mut self, arg: bool) {
         if arg {
             self.state.set(!self.state.get());
-        }
-    }
-
-    #[mylife_action(description = "make component fail")]
-    fn fail(&mut self, arg: bool) {
-        if arg {
-            (self.fail)(Box::new(TestError()));
         }
     }
 }
