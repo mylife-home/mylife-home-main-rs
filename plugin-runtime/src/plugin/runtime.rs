@@ -13,7 +13,11 @@ pub trait MylifeComponent {
     fn get_state(&self, name: &str) -> Result<Value, Box<dyn std::error::Error>>;
     fn configure(&mut self, config: &Config) -> Result<(), Box<dyn std::error::Error>>;
     fn init(&mut self) -> Result<(), Box<dyn std::error::Error>>;
-    fn execute_action(&mut self, name: &str, action: Value) -> Result<(), Box<dyn std::error::Error>>;
+    fn execute_action(
+        &mut self,
+        name: &str,
+        action: Value,
+    ) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 pub type Config = HashMap<String, ConfigValue>;
@@ -24,8 +28,8 @@ pub enum Value {
     Text(String),
     Float(f64),
     Bool(bool),
-    Enum(String), // TODO: native enum binding?
-    Complex,      // unsupported for now
+    Enum(String),
+    Complex, // unsupported for now
 }
 
 pub trait TypedFrom<T>: Sized {
@@ -248,11 +252,19 @@ impl fmt::Display for ValueConversionError {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ValueConversionError::TypeMismatch(data) => {
-                write!(fmt, "Type mismatch: cannot convert {:?} into {}", data.ty, data.native_type)
-            },
+                write!(
+                    fmt,
+                    "Type mismatch: cannot convert {:?} into {}",
+                    data.ty, data.native_type
+                )
+            }
             ValueConversionError::ValueMismatch(data) => {
-                write!(fmt, "Value mismatch: cannot convert value {:?} of type {:?} into {}", data.value, data.ty, data.native_type)
-            },
+                write!(
+                    fmt,
+                    "Value mismatch: cannot convert value {:?} of type {:?} into {}",
+                    data.value, data.ty, data.native_type
+                )
+            }
         }
     }
 }
