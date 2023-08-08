@@ -63,14 +63,3 @@ impl ValueBinary {
         }
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct TestError();
-
-impl std::error::Error for TestError {}
-
-impl fmt::Display for TestError {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmt, "Boom!",)
-    }
-}
