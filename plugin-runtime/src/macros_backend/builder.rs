@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     ActionRuntimeExecutor, ConfigRuntimeSetter, PluginRuntimeAccess, PluginRuntimeImpl,
-    StateRuntime, StateRuntimeRegister, StateRuntimeGetter,
+    StateRuntime, StateRuntimeGetter, StateRuntimeRegister,
 };
 
 pub struct PluginRuntimeBuilder<PluginType: MylifePlugin + 'static> {
@@ -36,17 +36,19 @@ impl<PluginType: MylifePlugin + 'static> PluginRuntimeBuilder<PluginType> {
         }
     }
 
-    pub fn build(self) -> Result<Box<dyn MylifePluginRuntime>, PluginRuntimeBuilderError> {
-        Ok(PluginRuntimeImpl::<PluginType>::new(
+    pub fn build(self) -> Box<dyn MylifePluginRuntime> {
+        let generator_panic = "Plugin macros error: name has not been set, this indicates an incorrect behavior in the macro code generator";
+
+        PluginRuntimeImpl::<PluginType>::new(
             PluginMetadata::new(
-                self.name.ok_or(PluginRuntimeBuilderError::NameNotSet)?,
-                self.usage.ok_or(PluginRuntimeBuilderError::UsageNotSet)?,
+                self.name.expect(generator_panic),
+                self.usage.expect(generator_panic),
                 self.description,
                 self.members,
                 self.config,
             ),
             PluginRuntimeAccess::new(self.config_runtime, self.state_runtime, self.action_runtime),
-        ))
+        )
     }
 
     pub fn set_plugin(&mut self, name: &str, description: Option<&str>, usage: PluginUsage) {
@@ -77,7 +79,8 @@ impl<PluginType: MylifePlugin + 'static> PluginRuntimeBuilder<PluginType> {
     ) {
         let member = Member::new(description.map(String::from), MemberType::State, value_type);
         self.members.insert(String::from(name), member);
-        self.state_runtime.insert(String::from(name), StateRuntime { register, getter });
+        self.state_runtime
+            .insert(String::from(name), StateRuntime { register, getter });
     }
 
     pub fn add_action(

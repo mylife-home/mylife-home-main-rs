@@ -64,7 +64,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
                     callback(&mut builder);
                 }
 
-                builder.build().expect("Failed to build meta") // TODO
+                builder.build()
             }
         }
 
