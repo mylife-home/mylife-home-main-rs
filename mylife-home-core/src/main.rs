@@ -27,20 +27,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     config.insert("config".to_string(), ConfigValue::Bool(false));
 
     println!("configure");
-    component.configure(&config);
+    component.configure(&config)?;
 
     println!("init");
-    component.init();
+    component.init()?;
     println!(
         "after init: state = {:?}",
         component.get_state("state").expect("could not get state")
     );
 
     println!("execute_action on");
-    component.execute_action("on", Value::Bool(true));
+    component.execute_action("on", Value::Bool(true))?;
 
     println!("execute_action off");
-    component.execute_action("off", Value::Bool(true));
+    component.execute_action("off", Value::Bool(true))?;
 
     Ok(())
 }
