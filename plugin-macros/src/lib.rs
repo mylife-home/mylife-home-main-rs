@@ -1,12 +1,13 @@
 use std::slice;
 
-use attributes::{ConfigType, RangeValue, Type, VecString};
+use attributes::ConfigType;
 use darling::{FromAttributes, FromDeriveInput, FromField, ToTokens};
 use proc_macro2::TokenStream;
 use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::{format_ident, quote};
 
 mod attributes;
+mod helpers;
 
 // TODO: add tests on attributes/whole input
 // TODO: path.get_ident() does not work if `plugin_runtime::Toto`
@@ -141,7 +142,7 @@ pub fn mylife_actions(
 }
 
 fn process_plugin(name: &syn::Ident, attr: &attributes::MylifePlugin) -> TokenStream {
-    let struct_name = make_plugin_name(name);
+    let struct_name = helpers::make_plugin_name(name);
     let name = attr.name.as_ref().unwrap_or(&struct_name);
     let description = attributes::option_string_to_tokens(&attr.description);
     let usage = &attr.usage;
@@ -152,7 +153,7 @@ fn process_plugin(name: &syn::Ident, attr: &attributes::MylifePlugin) -> TokenSt
 }
 
 fn process_config(plugin_name: &syn::Ident, attr: &attributes::MylifeConfig) -> TokenStream {
-    let var_name = make_member_name(
+    let var_name = helpers::make_member_name(
         attr.ident
             .as_ref()
             .expect("Unexpected unnamed config member"),
@@ -192,7 +193,7 @@ fn process_config(plugin_name: &syn::Ident, attr: &attributes::MylifeConfig) -> 
 }
 
 fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> TokenStream {
-    let var_name = make_member_name(
+    let var_name = helpers::make_member_name(
         attr.ident
             .as_ref()
             .expect("Unexpected unnamed state member"),
@@ -201,7 +202,7 @@ fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> To
     let name = attr.name.as_ref().unwrap_or(&var_name);
     let description = attributes::option_string_to_tokens(&attr.description);
     let var_type = get_state_type(&attr.ty);
-    let r#type = get_type(var_type, &attr.r#type);
+    let r#type = helpers::get_type(var_type, &attr.r#type);
     let target_ident = &attr.ident;
 
     let register = quote! {
@@ -232,110 +233,17 @@ fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> To
     }
 }
 
-// State<bool> => get bool
-fn get_state_type(var_type: &syn::Type) -> &syn::Type {
-    if let syn::Type::Path(path) = var_type {
-        let seg = path.path.segments.last().unwrap();
-        if seg.ident.to_string() != "State" {
-            abort!(
-                seg.ident.span(),
-                "mylife_state variable must be of type State"
-            );
-        }
-
-        if let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
-            args,
-            colon2_token: _,
-            lt_token: _,
-            gt_token: _,
-        }) = &seg.arguments
-        {
-            if let syn::GenericArgument::Type(arg_type) = args.first().unwrap() {
-                return arg_type;
-            }
-        }
-    }
-
-    abort_call_site!(
-        "Wrong value type '{}', expected 'State<type>'",
-        var_type.to_token_stream()
-    );
-}
-
-fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
-    let native_type_name = get_native_type_name(native_type);
-
-    if let Some(provided_type) = provided_type {
-        match provided_type {
-            Type::Range(RangeValue { min, max }) => {
-                if native_type_name != "i64" {
-                    abort_call_site!("Expected i64, got '{}'", native_type_name);
-                }
-
-                if min >= max {
-                    abort_call_site!("Expected min ({}) < max ({})", min, max);
-                }
-            }
-            Type::Text => {
-                if native_type_name != "String" {
-                    abort_call_site!("Expected String, got '{}'", native_type_name);
-                }
-            }
-            Type::Float => {
-                if native_type_name != "f64" {
-                    abort_call_site!("Expected Float64, got '{}'", native_type_name);
-                }
-            }
-            Type::Bool => {
-                if native_type_name != "bool" {
-                    abort_call_site!("Expected Bool, got '{}'", native_type_name);
-                }
-            }
-            Type::Enum(VecString(vec)) => {
-                if native_type_name != "String" {
-                    abort_call_site!("Expected String, got '{}'", native_type_name);
-                }
-
-                if vec.len() < 2 {
-                    abort_call_site!("Expected at least 2 values in enum, got '{:?}'", vec);
-                }
-            }
-            Type::Complex => abort_call_site!("Complex value not supported for now"),
-        }
-
-        return provided_type.clone();
-    } else {
-        return match native_type_name.as_str() {
-            "f64" => Type::Float,
-            "bool" => Type::Bool,
-            unsupported => {
-                abort_call_site!("Unable to deduce type with native type '{}'", unsupported)
-            }
-        };
-    }
-}
-
-fn get_native_type_name(native_type: &syn::Type) -> String {
-    if let syn::Type::Path(path) = native_type {
-        if let Some(ident) = path.path.get_ident() {
-            return ident.to_string();
-        }
-    }
-
-    abort_call_site!("Invalid type '{:?}'", native_type);
-}
-
 fn process_action(
     plugin_name: &syn::Ident,
     sig: &syn::Signature,
     attr: &attributes::MylifeAction,
 ) -> TokenStream {
-    let var_name = make_member_name(&sig.ident);
+    let var_name = helpers::make_member_name(&sig.ident);
 
     let name = attr.name.as_ref().unwrap_or(&var_name);
     let description = attributes::option_string_to_tokens(&attr.description);
     let var_type = &get_action_type(sig);
-    let r#type = get_type(var_type, &attr.r#type);
+    let r#type = helpers::get_type(var_type, &attr.r#type);
     let target_ident = &sig.ident;
 
     let has_output = match &sig.output {
@@ -371,6 +279,36 @@ fn process_action(
     }
 }
 
+// State<bool> => get bool
+fn get_state_type(var_type: &syn::Type) -> &syn::Type {
+    if let syn::Type::Path(path) = var_type {
+        let seg = path.path.segments.last().unwrap();
+        if seg.ident.to_string() != "State" {
+            abort!(
+                seg.ident.span(),
+                "mylife_state variable must be of type State"
+            );
+        }
+
+        if let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+            args,
+            colon2_token: _,
+            lt_token: _,
+            gt_token: _,
+        }) = &seg.arguments
+        {
+            if let syn::GenericArgument::Type(arg_type) = args.first().unwrap() {
+                return arg_type;
+            }
+        }
+    }
+
+    abort_call_site!(
+        "Wrong value type '{}', expected 'State<type>'",
+        var_type.to_token_stream()
+    );
+}
+
 // fn toto(&mut self, arg: bool) => get bool
 fn get_action_type(sig: &syn::Signature) -> syn::Type {
     if sig.inputs.len() != 2 {
@@ -387,14 +325,4 @@ fn get_action_type(sig: &syn::Signature) -> syn::Type {
     } else {
         abort!(sig.ident.span(), "Invalid method args");
     }
-}
-
-fn make_plugin_name(name: &syn::Ident) -> String {
-    use convert_case::{Case, Casing};
-    name.to_string().to_case(Case::Kebab)
-}
-
-fn make_member_name(name: &syn::Ident) -> String {
-    use convert_case::{Case, Casing};
-    name.to_string().to_case(Case::Camel)
 }
