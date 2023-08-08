@@ -1,5 +1,4 @@
 use log::debug;
-use std::fmt;
 
 use plugin_macros::{mylife_actions, MylifePlugin};
 use plugin_runtime::{MylifePluginHooks, State};
