@@ -20,12 +20,9 @@ pub type Config = HashMap<String, ConfigValue>;
 
 #[derive(Debug, Clone)]
 pub enum Value {
-    RangeU8(u8),
-    RangeI8(i8),
-    RangeU32(u32),
-    RangeI32(i32),
+    Range(i64),
     Text(String),
-    Float(f32),
+    Float(f64),
     Bool(bool),
     Enum(String), // TODO: native enum binding?
     Complex,      // unsupported for now
@@ -71,76 +68,15 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RangePrimitive {
-    U8,
-    I8,
-    U32,
-    I32,
-}
-
-fn compute_range_primitive(min: i64, max: i64) -> RangePrimitive {
-    if min >= u8::MIN.into() && max <= u8::MAX.into() {
-        RangePrimitive::U8
-    } else if min >= i8::MIN.into() && max <= i8::MAX.into() {
-        RangePrimitive::I8
-    } else if min >= u32::MIN.into() && max <= u32::MAX.into() {
-        RangePrimitive::U32
-    } else if min >= i32::MIN.into() && max <= i32::MAX.into() {
-        RangePrimitive::I32
-    } else {
-        panic!(
-            "Cannot represent range type with min={} and max={} because bounds are too big",
-            min, max
-        );
-    }
-}
-
-impl TypedFrom<u8> for Value {
-    fn typed_from(value: u8, ty: &metadata::Type) -> Self {
+impl TypedFrom<i64> for Value {
+    fn typed_from(value: i64, ty: &metadata::Type) -> Self {
         if let metadata::Type::Range(min, max) = ty {
-            if let RangePrimitive::U8 = compute_range_primitive(*min, *max) {
-                return Value::RangeU8(value);
+            if *min <= value && value <= *max {
+                return Value::Range(value);
             }
         }
 
-        panic!("Cannot convert from u8 to Value of type {:?}", ty);
-    }
-}
-
-impl TypedFrom<i8> for Value {
-    fn typed_from(value: i8, ty: &metadata::Type) -> Self {
-        if let metadata::Type::Range(min, max) = ty {
-            if let RangePrimitive::I8 = compute_range_primitive(*min, *max) {
-                return Value::RangeI8(value);
-            }
-        }
-
-        panic!("Cannot convert from i8 to Value of type {:?}", ty);
-    }
-}
-
-impl TypedFrom<u32> for Value {
-    fn typed_from(value: u32, ty: &metadata::Type) -> Self {
-        if let metadata::Type::Range(min, max) = ty {
-            if let RangePrimitive::U32 = compute_range_primitive(*min, *max) {
-                return Value::RangeU32(value);
-            }
-        }
-
-        panic!("Cannot convert from u32 to Value of type {:?}", ty);
-    }
-}
-
-impl TypedFrom<i32> for Value {
-    fn typed_from(value: i32, ty: &metadata::Type) -> Self {
-        if let metadata::Type::Range(min, max) = ty {
-            if let RangePrimitive::I32 = compute_range_primitive(*min, *max) {
-                return Value::RangeI32(value);
-            }
-        }
-
-        panic!("Cannot convert from i32 to Value of type {:?}", ty);
+        panic!("Cannot convert from i64 to Value of type {:?}", ty);
     }
 }
 
@@ -167,13 +103,13 @@ fn is_enum_member(list: &Vec<String>, value: &String) -> bool {
     list.iter().any(|candidate| candidate == value)
 }
 
-impl TypedFrom<f32> for Value {
-    fn typed_from(value: f32, ty: &metadata::Type) -> Self {
+impl TypedFrom<f64> for Value {
+    fn typed_from(value: f64, ty: &metadata::Type) -> Self {
         if let metadata::Type::Float = ty {
             return Value::Float(value);
         }
 
-        panic!("Cannot convert from f32 to Value of type {:?}", ty);
+        panic!("Cannot convert from f64 to Value of type {:?}", ty);
     }
 }
 
@@ -187,91 +123,15 @@ impl TypedFrom<bool> for Value {
     }
 }
 
-impl TypedTryFrom<Value> for u8 {
+impl TypedTryFrom<Value> for i64 {
     type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
-        if !is_range_primitive(ty, RangePrimitive::U8) {
-            return Err(ValueConversionError::TypeMismatch(TypeMismatchData {
-                native_type: "u8",
-                ty: ty.clone(),
-            }));
-        }
-
-        if let Value::RangeU8(value) = value {
+        if let Value::Range(value) = value {
             Ok(value)
         } else {
             Err(ValueConversionError::ValueMismatch(ValueMismatchData {
-                native_type: "u8",
-                ty: ty.clone(),
-                value,
-            }))
-        }
-    }
-}
-
-impl TypedTryFrom<Value> for i8 {
-    type Error = ValueConversionError;
-
-    fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
-        if !is_range_primitive(ty, RangePrimitive::I8) {
-            return Err(ValueConversionError::TypeMismatch(TypeMismatchData {
-                native_type: "i8",
-                ty: ty.clone(),
-            }));
-        }
-
-        if let Value::RangeI8(value) = value {
-            Ok(value)
-        } else {
-            Err(ValueConversionError::ValueMismatch(ValueMismatchData {
-                native_type: "i8",
-                ty: ty.clone(),
-                value,
-            }))
-        }
-    }
-}
-
-impl TypedTryFrom<Value> for u32 {
-    type Error = ValueConversionError;
-
-    fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
-        if !is_range_primitive(ty, RangePrimitive::U32) {
-            return Err(ValueConversionError::TypeMismatch(TypeMismatchData {
-                native_type: "u32",
-                ty: ty.clone(),
-            }));
-        }
-
-        if let Value::RangeU32(value) = value {
-            Ok(value)
-        } else {
-            Err(ValueConversionError::ValueMismatch(ValueMismatchData {
-                native_type: "u32",
-                ty: ty.clone(),
-                value,
-            }))
-        }
-    }
-}
-
-impl TypedTryFrom<Value> for i32 {
-    type Error = ValueConversionError;
-
-    fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
-        if !is_range_primitive(ty, RangePrimitive::I32) {
-            return Err(ValueConversionError::TypeMismatch(TypeMismatchData {
-                native_type: "i32",
-                ty: ty.clone(),
-            }));
-        }
-
-        if let Value::RangeI32(value) = value {
-            Ok(value)
-        } else {
-            Err(ValueConversionError::ValueMismatch(ValueMismatchData {
-                native_type: "i32",
+                native_type: "i64",
                 ty: ty.clone(),
                 value,
             }))
@@ -317,14 +177,14 @@ impl TypedTryFrom<Value> for String {
     }
 }
 
-impl TypedTryFrom<Value> for f32 {
+impl TypedTryFrom<Value> for f64 {
     type Error = ValueConversionError;
 
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
         if let metadata::Type::Float = ty {
         } else {
             return Err(ValueConversionError::TypeMismatch(TypeMismatchData {
-                native_type: "f32",
+                native_type: "f64",
                 ty: ty.clone(),
             }));
         }
@@ -333,7 +193,7 @@ impl TypedTryFrom<Value> for f32 {
             Ok(value)
         } else {
             Err(ValueConversionError::ValueMismatch(ValueMismatchData {
-                native_type: "f32",
+                native_type: "f64",
                 ty: ty.clone(),
                 value,
             }))
@@ -362,14 +222,6 @@ impl TypedTryFrom<Value> for bool {
                 value,
             }))
         }
-    }
-}
-
-fn is_range_primitive(ty: &metadata::Type, primitive: RangePrimitive) -> bool {
-    if let metadata::Type::Range(min, max) = ty {
-        compute_range_primitive(*min, *max) == primitive
-    } else {
-        false
     }
 }
 
