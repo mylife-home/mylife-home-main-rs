@@ -100,20 +100,4 @@ impl<PluginType: MylifePlugin + 'static> PluginRuntimeBuilder<PluginType> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum PluginRuntimeBuilderError {
-    NameNotSet,
-    UsageNotSet,
-}
-
-impl fmt::Display for PluginRuntimeBuilderError {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            PluginRuntimeBuilderError::NameNotSet => write!(fmt, "Name not set in metadata"),
-            PluginRuntimeBuilderError::UsageNotSet => write!(fmt, "Usage not set in metadata"),
-        }
-    }
-}
-impl std::error::Error for PluginRuntimeBuilderError {}
-
 pub type BuilderPartCallback<PluginType> = fn(builder: &mut PluginRuntimeBuilder<PluginType>);
