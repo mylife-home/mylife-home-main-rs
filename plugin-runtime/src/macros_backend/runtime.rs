@@ -1,6 +1,6 @@
-use log::{warn, trace};
+use log::trace;
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     collections::HashMap,
     fmt,
     sync::Arc,

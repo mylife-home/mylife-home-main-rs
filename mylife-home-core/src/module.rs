@@ -57,7 +57,7 @@ impl Module {
         let path = Path::new(module_path).join(format!("lib{}.so", name));
         debug!(
             target: LOG_TARGET,
-            "Loading module '{}' (path='{}'",
+            "Loading module '{}' (path='{}')",
             name,
             path.display()
         );
@@ -141,9 +141,9 @@ impl Plugin {
         &self.id
     }
 
-    pub fn module(&self) -> &str {
-        self.module.name()
-    }
+    // pub fn module(&self) -> &str {
+    //     self.module.name()
+    // }
 
     pub fn version(&self) -> &str {
         self.module.version()

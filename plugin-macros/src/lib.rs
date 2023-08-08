@@ -255,8 +255,11 @@ fn get_state_type(var_type: &syn::Type) -> &syn::Type {
             }
         }
     }
-    
-    abort_call_site!("Wrong value type '{}', expected 'State<type>'", var_type.to_token_stream());
+
+    abort_call_site!(
+        "Wrong value type '{}', expected 'State<type>'",
+        var_type.to_token_stream()
+    );
 }
 
 fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
@@ -264,7 +267,15 @@ fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
 
     if let Some(provided_type) = provided_type {
         match provided_type {
-            Type::Range(RangeValue { min, max }) => abort_call_site!("TODO"),
+            Type::Range(RangeValue { min, max }) => {
+                if native_type_name != "i64" {
+                    abort_call_site!("Expected i64, got '{}'", native_type_name);
+                }
+
+                if min >= max {
+                    abort_call_site!("Expected min ({}) < max ({})", min, max);
+                }
+            }
             Type::Text => {
                 if native_type_name != "String" {
                     abort_call_site!("Expected String, got '{}'", native_type_name);
@@ -280,8 +291,16 @@ fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
                     abort_call_site!("Expected Bool, got '{}'", native_type_name);
                 }
             }
-            Type::Enum(VecString(vec)) => abort_call_site!("TODO"),
-            Type::Complex => abort_call_site!("TODO"),
+            Type::Enum(VecString(vec)) => {
+                if native_type_name != "String" {
+                    abort_call_site!("Expected String, got '{}'", native_type_name);
+                }
+
+                if vec.len() < 2 {
+                    abort_call_site!("Expected at least 2 values in enum, got '{:?}'", vec);
+                }
+            }
+            Type::Complex => abort_call_site!("Complex value not supported for now"),
         }
 
         return provided_type.clone();
@@ -321,7 +340,7 @@ fn process_action(
 
     let has_output = match &sig.output {
         syn::ReturnType::Default => false,
-        syn::ReturnType::Type(_, _) => true // Note: if type does not implement Result<(), Error> it will fail to compile (TODO: test)
+        syn::ReturnType::Type(_, _) => true, // Note: if type does not implement Result<(), Error> it will fail to compile (TODO: test)
     };
 
     let end_ident = if has_output {
@@ -334,7 +353,7 @@ fn process_action(
         |target: &mut #plugin_name, arg: plugin_runtime::runtime::Value| -> std::result::Result<(), Box<dyn std::error::Error>> {
             use plugin_runtime::runtime::TypedTryInto;
             static runtime_type: plugin_runtime::metadata::Type = #r#type;
-            
+
             let value: #var_type = arg.clone().typed_try_into(&runtime_type)?;
             target.#target_ident(value)#end_ident;
 
