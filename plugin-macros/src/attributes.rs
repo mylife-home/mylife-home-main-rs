@@ -1,6 +1,6 @@
 use std::fmt;
 
-use darling::{FromDeriveInput, FromField, FromMeta, ToTokens, FromAttributes};
+use darling::{FromAttributes, FromDeriveInput, FromField, FromMeta, ToTokens};
 use proc_macro2::TokenStream;
 use quote::{quote, TokenStreamExt};
 
@@ -18,8 +18,7 @@ impl FromMeta for VecString {
             .map(|expr| match expr {
                 syn::Expr::Lit(lit) => String::from_value(&lit.lit),
                 _ => Err(
-                    darling::Error::custom("Expected array of unsigned integers")
-                        .with_span(expr),
+                    darling::Error::custom("Expected array of unsigned integers").with_span(expr),
                 ),
             })
             .collect::<darling::Result<Vec<String>>>();
@@ -74,15 +73,18 @@ pub enum Type {
     Complex,
 }
 
-
 impl ToTokens for Type {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let gen = match &*self {
-            Type::Range(RangeValue { min, max }) => quote! { plugin_runtime::metadata::Type::Range(#min, #max) },
+            Type::Range(RangeValue { min, max }) => {
+                quote! { plugin_runtime::metadata::Type::Range(#min, #max) }
+            }
             Type::Text => quote! { plugin_runtime::metadata::Type::Text },
             Type::Float => quote! { plugin_runtime::metadata::Type::Float },
             Type::Bool => quote! { plugin_runtime::metadata::Type::Bool },
-            Type::Enum(VecString(vec)) => quote! { plugin_runtime::metadata::Type::Enum(#(#vec),*) },
+            Type::Enum(VecString(vec)) => {
+                quote! { plugin_runtime::metadata::Type::Enum(#(#vec),*) }
+            }
             Type::Complex => quote! { plugin_runtime::metadata::Type::Complex },
         };
 
