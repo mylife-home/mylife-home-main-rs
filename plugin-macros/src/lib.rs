@@ -3,7 +3,7 @@ use std::slice;
 use attributes::ConfigType;
 use darling::{FromAttributes, FromDeriveInput, FromField, ToTokens};
 use proc_macro2::TokenStream;
-use proc_macro_error::{abort, abort_call_site, proc_macro_error};
+use proc_macro_error::{abort, abort_call_site, proc_macro_error, emit_warning};
 use quote::{format_ident, quote};
 
 mod attributes;
@@ -43,15 +43,15 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
                 }
 
                 unknown => {
-                    println!("Ignored attribute : {}", unknown);
+                    emit_warning!(attr_ident, "Ignored attribute : {}", unknown);
                 }
             }
         }
     }
 
-    for stream in streams.iter() {
-        println!("{}", stream);
-    }
+    // for stream in streams.iter() {
+    //     println!("{}", stream);
+    // }
 
     let inventory_name = format_ident!("__MylifeInternalsInventory{}__", name);
 
@@ -118,7 +118,7 @@ pub fn mylife_actions(
                     }
 
                     unknown => {
-                        println!("Ignored attribute : {}", unknown);
+                        emit_warning!(attr_ident, "Ignored attribute : {}", unknown);
                         return true;
                     }
                 }
@@ -126,9 +126,9 @@ pub fn mylife_actions(
         }
     }
 
-    for stream in streams.iter() {
-        println!("{}", stream);
-    }
+    // for stream in streams.iter() {
+    //     println!("{}", stream);
+    // }
 
     let gen = quote! {
         #input
