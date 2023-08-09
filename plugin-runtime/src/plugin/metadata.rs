@@ -99,8 +99,8 @@ impl Member {
         self.description.as_deref()
     }
 
-    pub fn member_type(&self) -> &MemberType {
-        &self.member_type
+    pub fn member_type(&self) -> MemberType {
+        self.member_type
     }
 
     pub fn value_type(&self) -> &Type {
@@ -134,7 +134,7 @@ impl ConfigItem {
         self.description.as_deref()
     }
 
-    pub fn value_type(&self) -> &ConfigType {
-        &self.value_type
+    pub fn value_type(&self) -> ConfigType {
+        self.value_type
     }
 }
