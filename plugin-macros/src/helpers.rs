@@ -47,6 +47,7 @@ pub fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
         return match native_type_name.as_str() {
             "f64" => Type::Float,
             "bool" => Type::Bool,
+            "String" => Type::Text, // If only String default to Text (drop Enum)
             unsupported => {
                 abort_call_site!("Unable to deduce type with native type '{}'", unsupported)
             }
