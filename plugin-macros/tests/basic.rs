@@ -9,13 +9,18 @@ use crate::utils::TestMetadata;
 
 mod utils;
 
+// TODO: this one also act as example, but example should be put aside:
+// - no default (not recommanded since it offers a public ctor with no args)
+// - Drop impl
+// - action with and without result
+
 #[derive(MylifePlugin)]
 #[mylife_plugin(
     name = "plugin-name",
     description = "plugin description",
     usage = "logic"
 )]
-pub struct Basic {
+struct TestPlugin {
     #[mylife_config(
         name = "configName",
         description = "config description",
@@ -28,9 +33,9 @@ pub struct Basic {
 }
 
 // impl Drop si besoin de terminate
-impl MylifePluginHooks for Basic {
+impl MylifePluginHooks for TestPlugin {
     fn new(_id: &str) -> Self {
-        Basic {
+        TestPlugin {
             config_value: Default::default(),
             state_value: Default::default(),
         }
@@ -41,26 +46,24 @@ impl MylifePluginHooks for Basic {
     }
 }
 
-impl Drop for Basic {
+impl Drop for TestPlugin {
     fn drop(&mut self) {}
 }
 
 #[mylife_actions]
-impl Basic {
+impl TestPlugin {
     // can return Result<(), Box<dyn std::error::Error>> or nothing
     #[mylife_action(
         name = "actionName",
         description = "action description",
         r#type = "bool"
     )]
-    fn action_value(&mut self, _arg: bool) -> Result<(), Box<dyn std::error::Error>> {
-        Ok(())
-    }
+    fn action_value(&mut self, _arg: bool) {}
 }
 
 #[test]
 fn test_basic() {
-    let runtime: Box<dyn MylifePluginRuntime> = Basic::runtime();
+    let runtime: Box<dyn MylifePluginRuntime> = TestPlugin::runtime();
     let meta = runtime.metadata();
 
     let mut expected = TestMetadata::new(
@@ -75,8 +78,3 @@ fn test_basic() {
 
     assert_eq!(TestMetadata::from_metadata(meta), expected);
 }
-
-// TODO
-// test auto naming
-// test auto type
-// pas de description
