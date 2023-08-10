@@ -1,4 +1,4 @@
-use crate::attributes::{RangeValue, Type};
+use crate::attributes::{RangeValue, Type, VecString};
 use proc_macro_error::abort_call_site;
 
 pub fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
@@ -30,16 +30,14 @@ pub fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
                     abort_call_site!("Expected Bool, got '{}'", native_type_name);
                 }
             }
-            Type::Enum(path_list) => {
+            Type::Enum(VecString(vec)) => {
                 if native_type_name != "String" {
                     abort_call_site!("Expected String, got '{}'", native_type_name);
                 }
 
-                if path_list.len() < 2 {
-                    abort_call_site!("Expected at least 2 values in enum, got '{:?}'", path_list.as_slice());
+                if vec.len() < 2 {
+                    abort_call_site!("Expected at least 2 values in enum, got '{:?}'", vec);
                 }
-
-                println!("{:?}", path_list.as_slice());
             }
             Type::Complex => abort_call_site!("Complex value not supported for now"),
         }

@@ -7,20 +7,11 @@ use quote::{quote, TokenStreamExt};
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct VecString(pub Vec<String>);
 
-/// Parsing literal array into string, i.e. `[a,b,b]`.
 impl FromMeta for VecString {
-    fn from_value(value: &syn::Lit) -> darling::Result<Self> {
-        let expr_array = syn::ExprArray::from_value(value)?;
-        // To meet rust <1.36 borrow checker rules on expr_array.elems
-        let v = expr_array
-            .elems
+    fn from_list(items: &[syn::NestedMeta]) -> darling::Result<Self> {
+        let v = items
             .iter()
-            .map(|expr| match expr {
-                syn::Expr::Lit(lit) => String::from_value(&lit.lit),
-                _ => Err(
-                    darling::Error::custom("Expected array of unsigned integers").with_span(expr),
-                ),
-            })
+            .map(|item| String::from_nested_meta(item))
             .collect::<darling::Result<Vec<String>>>();
         v.and_then(|v| Ok(VecString(v)))
     }
