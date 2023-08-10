@@ -3,14 +3,14 @@ use std::slice;
 use attributes::ConfigType;
 use darling::{FromAttributes, FromDeriveInput, FromField, ToTokens};
 use proc_macro2::TokenStream;
-use proc_macro_error::{abort, abort_call_site, proc_macro_error, emit_warning};
+use proc_macro_error::{abort, abort_call_site, emit_warning, proc_macro_error};
 use quote::{format_ident, quote};
 
 mod attributes;
 mod helpers;
 
-// TODO: add tests on attributes/whole input
 // TODO: path.get_ident() does not work if `plugin_runtime::Toto`
+// TODO: abort_call_site => find real call site
 
 #[proc_macro_derive(MylifePlugin, attributes(mylife_plugin, mylife_config, mylife_state))]
 #[proc_macro_error]
@@ -18,14 +18,19 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
     let input: syn::DeriveInput = syn::parse_macro_input!(input);
     let name = &input.ident;
     let mut streams = Vec::new();
+    let mut errors = darling::Error::accumulator();
 
-    let attr_plugin = attributes::MylifePlugin::from_derive_input(&input).unwrap();
-    streams.push(process_plugin(name, &attr_plugin));
+    match errors.handle(attributes::MylifePlugin::from_derive_input(&input)) {
+        Some(attr_plugin) => {
+            streams.push(process_plugin(name, &attr_plugin));
+        }
+        None => (),
+    };
 
     let fields = if let syn::Data::Struct(data) = &input.data {
         &data.fields
     } else {
-        abort_call_site!("pan");
+        abort_call_site!("Unexpected parsing error (expected struct)");
     };
 
     for field in fields.iter() {
@@ -33,19 +38,34 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
             let attr_ident = attr.path.get_ident().unwrap();
             match attr_ident.to_string().as_str() {
                 "mylife_config" => {
-                    let attr_config = attributes::MylifeConfig::from_field(&field).unwrap();
-                    streams.push(process_config(name, &attr_config));
+                    match errors.handle(attributes::MylifeConfig::from_field(&field)) {
+                        Some(attr_config) => {
+                            streams.push(process_config(name, &attr_config));
+                        }
+                        None => (),
+                    };
                 }
 
                 "mylife_state" => {
-                    let attr_state = attributes::MylifeState::from_field(&field).unwrap();
-                    streams.push(process_state(name, &attr_state));
+                    match errors.handle(attributes::MylifeState::from_field(&field)) {
+                        Some(attr_state) => {
+                            streams.push(process_state(name, &attr_state));
+                        }
+                        None => (),
+                    };
                 }
 
                 unknown => {
                     emit_warning!(attr_ident, "Ignored attribute : {}", unknown);
                 }
             }
+        }
+    }
+
+    match errors.finish() {
+        Ok(_) => (),
+        Err(err) => {
+            return err.write_errors().into();
         }
     }
 
@@ -88,11 +108,12 @@ pub fn mylife_actions(
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let input: syn::ItemImpl = syn::parse_macro_input!(input);
+    let mut errors = darling::Error::accumulator();
 
     let name = if let syn::Type::Path(path) = input.self_ty.as_ref() {
         path.path.get_ident().unwrap()
     } else {
-        abort_call_site!("pan");
+        abort_call_site!("Unexpected parsing error");
     };
 
     let inventory_name = format_ident!("__MylifeInternalsInventory{}__", name);
@@ -110,10 +131,15 @@ pub fn mylife_actions(
                 let attr_ident = attr.path.get_ident().unwrap();
                 match attr_ident.to_string().as_str() {
                     "mylife_action" => {
-                        let attr_action =
-                            attributes::MylifeAction::from_attributes(slice::from_ref(attr))
-                                .unwrap();
-                        streams.push(process_action(name, &method.sig, &attr_action));
+                        match errors.handle(attributes::MylifeAction::from_attributes(
+                            slice::from_ref(attr),
+                        )) {
+                            Some(attr_action) => {
+                                streams.push(process_action(name, &method.sig, &attr_action));
+                            }
+                            None => (),
+                        };
+
                         return false;
                     }
 
@@ -123,6 +149,13 @@ pub fn mylife_actions(
                     }
                 }
             });
+        }
+    }
+
+    match errors.finish() {
+        Ok(_) => (),
+        Err(err) => {
+            return err.write_errors().into();
         }
     }
 
