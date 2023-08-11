@@ -245,11 +245,11 @@ fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> To
             use plugin_runtime::runtime::TypedInto;
 
             lazy_static::lazy_static! {
-                static ref runtime_type: plugin_runtime::metadata::Type = #r#type;
+                static ref RUNTIME_TYPE: plugin_runtime::metadata::Type = #r#type;
             }
 
             let native_value = target.#target_ident.get();
-            native_value.clone().typed_into(&runtime_type)
+            native_value.clone().typed_into(&RUNTIME_TYPE)
         }
     };
 
@@ -293,10 +293,10 @@ fn process_action(
             use plugin_runtime::runtime::TypedTryInto;
 
             lazy_static::lazy_static! {
-                static ref runtime_type: plugin_runtime::metadata::Type = #r#type;
+                static ref RUNTIME_TYPE: plugin_runtime::metadata::Type = #r#type;
             }
 
-            let value: #var_type = arg.clone().typed_try_into(&runtime_type)?;
+            let value: #var_type = arg.clone().typed_try_into(&RUNTIME_TYPE)?;
             target.#target_ident(value)#end_ident;
 
             std::result::Result::Ok(())

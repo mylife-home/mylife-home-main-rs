@@ -9,12 +9,7 @@ use crate::utils::TestMetadata;
 
 mod utils;
 
-// TODO: this one also act as example, but example should be put aside:
-// - no default (keep id)
-// - Drop impl
-// - action with and without result
-
-#[derive(MylifePlugin)]
+#[derive(MylifePlugin, Default)]
 #[mylife_plugin(
     name = "plugin-name",
     description = "plugin description",
@@ -35,10 +30,7 @@ struct TestPlugin {
 // impl Drop si besoin de terminate
 impl MylifePluginHooks for TestPlugin {
     fn new(_id: &str) -> Self {
-        TestPlugin {
-            config_value: Default::default(),
-            state_value: Default::default(),
-        }
+        TestPlugin::default()
     }
 
     fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -46,13 +38,8 @@ impl MylifePluginHooks for TestPlugin {
     }
 }
 
-impl Drop for TestPlugin {
-    fn drop(&mut self) {}
-}
-
 #[mylife_actions]
 impl TestPlugin {
-    // can return Result<(), Box<dyn std::error::Error>> or nothing
     #[mylife_action(
         name = "actionName",
         description = "action description",
