@@ -74,7 +74,7 @@ impl ToTokens for Type {
             Type::Float => quote! { plugin_runtime::metadata::Type::Float },
             Type::Bool => quote! { plugin_runtime::metadata::Type::Bool },
             Type::Enum(VecString(vec)) => {
-                quote! { plugin_runtime::metadata::Type::Enum(#(#vec),*) }
+                quote! { plugin_runtime::metadata::Type::Enum(vec![#(#vec.to_string()),*]) }
             }
             Type::Complex => quote! { plugin_runtime::metadata::Type::Complex },
         };

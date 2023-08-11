@@ -11,4 +11,5 @@ crate-type = ["cdylib"]
 plugin_runtime = { path = "../../plugin-runtime" }
 plugin_macros = { path = "../../plugin-macros" }
 inventory = "0.3.2"
+lazy_static = "1.4.0"
 log = "0.4.17"
