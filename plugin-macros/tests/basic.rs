@@ -27,7 +27,6 @@ struct TestPlugin {
     state_value: State<bool>,
 }
 
-// impl Drop si besoin de terminate
 impl MylifePluginHooks for TestPlugin {
     fn new(_id: &str) -> Self {
         TestPlugin::default()
