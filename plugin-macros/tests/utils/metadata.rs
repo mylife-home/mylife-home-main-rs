@@ -50,7 +50,7 @@ impl TestMetadata {
         TestMetadata {
             name: String::from(name),
             description: description.map(str::to_string),
-            usage: usage,
+            usage,
             config: Vec::new(),
             members: Vec::new(),
         }
@@ -83,7 +83,7 @@ impl TestMetadata {
             name: String::from(name),
             description: description.map(str::to_string),
             member_type: MemberType::State,
-            value_type: value_type,
+            value_type,
         });
 
         self.members.sort_by_key(|member| member.name.clone());
@@ -101,7 +101,7 @@ impl TestMetadata {
             name: String::from(name),
             description: description.map(str::to_string),
             member_type: MemberType::Action,
-            value_type: value_type,
+            value_type,
         });
 
         self.members.sort_by_key(|member| member.name.clone());
