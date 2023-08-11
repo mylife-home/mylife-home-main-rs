@@ -243,7 +243,10 @@ fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> To
     let getter = quote! {
         |target: &#plugin_name| -> plugin_runtime::runtime::Value {
             use plugin_runtime::runtime::TypedInto;
-            static runtime_type: plugin_runtime::metadata::Type = #r#type;
+
+            lazy_static::lazy_static! {
+                static ref runtime_type: plugin_runtime::metadata::Type = #r#type;
+            }
 
             let native_value = target.#target_ident.get();
             native_value.clone().typed_into(&runtime_type)
@@ -288,7 +291,10 @@ fn process_action(
     let executor = quote! {
         |target: &mut #plugin_name, arg: plugin_runtime::runtime::Value| -> std::result::Result<(), Box<dyn std::error::Error>> {
             use plugin_runtime::runtime::TypedTryInto;
-            static runtime_type: plugin_runtime::metadata::Type = #r#type;
+
+            lazy_static::lazy_static! {
+                static ref runtime_type: plugin_runtime::metadata::Type = #r#type;
+            }
 
             let value: #var_type = arg.clone().typed_try_into(&runtime_type)?;
             target.#target_ident(value)#end_ident;
