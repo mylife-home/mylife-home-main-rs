@@ -9,7 +9,7 @@ mod module;
 static ALLOCATOR: System = System;
 
 // TODO: Error: anyhow pour plugins, thiserror pour core ?
-// TODO: try tokio with plugins
+// TODO: try tokio with plugins (implement "minuterie")
 // TODO: proc macro cleanup
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
