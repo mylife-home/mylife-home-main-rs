@@ -1,6 +1,6 @@
 use std::{fmt, path::Path, sync::Arc};
 
-use libloading::Library;
+use libloading::{Library, library_filename};
 use log::{debug, trace};
 use plugin_runtime::{
     metadata::PluginMetadata, runtime::MylifeComponent, ModuleDeclaration, PluginRegistry,
@@ -54,7 +54,7 @@ impl Module {
         module_path: &str,
         name: &str,
     ) -> Result<Vec<Arc<Plugin>>, Box<dyn std::error::Error>> {
-        let path = Path::new(module_path).join(format!("lib{}.so", name));
+        let path = Path::new(module_path).join(library_filename(name));
         debug!(
             target: LOG_TARGET,
             "Loading module '{}' (path='{}')",
