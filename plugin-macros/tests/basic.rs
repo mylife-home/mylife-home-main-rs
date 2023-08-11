@@ -10,7 +10,7 @@ use crate::utils::TestMetadata;
 mod utils;
 
 // TODO: this one also act as example, but example should be put aside:
-// - no default (not recommanded since it offers a public ctor with no args)
+// - no default (keep id)
 // - Drop impl
 // - action with and without result
 
