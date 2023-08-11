@@ -1,4 +1,7 @@
+use std::env;
+
 use crate::attributes::{RangeValue, Type, VecString};
+use proc_macro2::TokenStream;
 use proc_macro_error::abort_call_site;
 
 pub fn get_type(native_type: &syn::Type, provided_type: &Option<Type>) -> Type {
@@ -73,4 +76,14 @@ pub fn make_plugin_name(name: &syn::Ident) -> String {
 pub fn make_member_name(name: &syn::Ident) -> String {
     use convert_case::{Case, Casing};
     name.to_string().to_case(Case::Camel)
+}
+
+pub fn dump_output(output: &TokenStream) {
+    if !env::var("PRINT_MACRO_OUTPUT").is_ok() {
+        return;
+    }
+
+    println!("--------------- OUTPUT BEGIN ---------------");
+    println!("{}", output);
+    println!("--------------- OUTPUT END -----------------");
 }

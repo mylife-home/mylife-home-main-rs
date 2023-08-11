@@ -69,10 +69,6 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
         }
     }
 
-    // for stream in streams.iter() {
-    //     println!("{}", stream);
-    // }
-
     let inventory_name = format_ident!("__MylifeInternalsInventory{}__", name);
 
     let gen = quote! {
@@ -95,8 +91,9 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
         inventory::submit!(#inventory_name(|builder| {
             #(#streams)*
         }));
-
     };
+
+    helpers::dump_output(&gen);
 
     gen.into()
 }
@@ -159,10 +156,6 @@ pub fn mylife_actions(
         }
     }
 
-    // for stream in streams.iter() {
-    //     println!("{}", stream);
-    // }
-
     let gen = quote! {
         #input
 
@@ -170,6 +163,8 @@ pub fn mylife_actions(
             #(#streams)*
         }));
     };
+    
+    helpers::dump_output(&gen);
 
     gen.into()
 }
