@@ -10,7 +10,7 @@ static ALLOCATOR: System = System;
 
 // TODO: Error: anyhow pour plugins, thiserror pour core ?
 // TODO: try tokio with plugins (implement "minuterie")
-// TODO: proc macro cleanup
+// TODO: proc macro cleanup -> parse Type from literal
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
