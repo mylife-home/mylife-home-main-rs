@@ -20,7 +20,7 @@ struct TestPlugin {
   #[mylife_state(
         name = "stateRange",
         description = "state description",
-        r#type(range(min=0, max=42))
+        r#type = "range[0;42]"
     )]
     state_range: State<i64>,
 
@@ -40,7 +40,7 @@ struct TestPlugin {
     #[mylife_state(
         name = "stateEnum",
         description = "state description",
-        r#type(enum("one","two","three"))
+        r#type = "enum{one,two,three}"
     )]
     state_enum: State<String>,
 

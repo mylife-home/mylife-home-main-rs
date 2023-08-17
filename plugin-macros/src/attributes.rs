@@ -1,9 +1,11 @@
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 use darling::{FromAttributes, FromDeriveInput, FromField, FromMeta, ToTokens};
 use proc_macro2::TokenStream;
 use quote::{quote, TokenStreamExt};
+use plugin_runtime::metadata;
 
+/*
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct VecString(pub Vec<String>);
 
@@ -16,6 +18,7 @@ impl FromMeta for VecString {
         v.and_then(|v| Ok(VecString(v)))
     }
 }
+*/
 
 pub fn option_string_to_tokens(value: &Option<String>) -> TokenStream {
     if let Some(str) = value {
@@ -47,36 +50,41 @@ impl ToTokens for PluginUsage {
     }
 }
 
-#[derive(FromMeta, PartialEq, Eq, Debug, Clone)]
-pub struct RangeValue {
-    pub min: i64,
-    pub max: i64,
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct Type(metadata::Type);
+
+impl Type {
+    pub fn value(&self) -> &metadata::Type {
+        &self.0
+    }
+
+    pub fn new(r#type: metadata::Type) -> Self {
+        Type(r#type)
+    }
 }
 
-// c/c from metadata to add FromMeta
-#[derive(FromMeta, PartialEq, Eq, Debug, Clone)]
-pub enum Type {
-    Range(RangeValue),
-    Text,
-    Float,
-    Bool,
-    Enum(VecString),
-    Complex,
+impl FromMeta for Type {
+    fn from_string(value: &str) -> Result<Self, darling::Error> {
+        match metadata::Type::from_str(value) {
+            Ok(typ) => Ok(Type(typ)),
+            Err(err) => Err(darling::Error::custom(err)),
+        }
+    }
 }
 
 impl ToTokens for Type {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let gen = match &*self {
-            Type::Range(RangeValue { min, max }) => {
+        let gen = match self.value() {
+            metadata::Type::Range(min, max) => {
                 quote! { plugin_runtime::metadata::Type::Range(#min, #max) }
             }
-            Type::Text => quote! { plugin_runtime::metadata::Type::Text },
-            Type::Float => quote! { plugin_runtime::metadata::Type::Float },
-            Type::Bool => quote! { plugin_runtime::metadata::Type::Bool },
-            Type::Enum(VecString(vec)) => {
+            metadata::Type::Text => quote! { plugin_runtime::metadata::Type::Text },
+            metadata::Type::Float => quote! { plugin_runtime::metadata::Type::Float },
+            metadata::Type::Bool => quote! { plugin_runtime::metadata::Type::Bool },
+            metadata::Type::Enum(vec) => {
                 quote! { plugin_runtime::metadata::Type::Enum(vec![#(#vec.to_string()),*]) }
             }
-            Type::Complex => quote! { plugin_runtime::metadata::Type::Complex },
+            metadata::Type::Complex => quote! { plugin_runtime::metadata::Type::Complex },
         };
 
         tokens.append_all(gen);
