@@ -5,21 +5,6 @@ use proc_macro2::TokenStream;
 use quote::{quote, TokenStreamExt};
 use plugin_runtime::metadata;
 
-/*
-#[derive(PartialEq, Eq, Debug, Clone)]
-pub struct VecString(pub Vec<String>);
-
-impl FromMeta for VecString {
-    fn from_list(items: &[syn::NestedMeta]) -> darling::Result<Self> {
-        let v = items
-            .iter()
-            .map(|item| String::from_nested_meta(item))
-            .collect::<darling::Result<Vec<String>>>();
-        v.and_then(|v| Ok(VecString(v)))
-    }
-}
-*/
-
 pub fn option_string_to_tokens(value: &Option<String>) -> TokenStream {
     if let Some(str) = value {
         quote! { Some(#str) }
