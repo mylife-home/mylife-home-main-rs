@@ -29,7 +29,6 @@ struct TestPlugin {
     config_float: f64,
 
     // Range: cannot infer
-
     #[mylife_state(name = "stateText", description = "state description")]
     state_text: State<String>,
 
@@ -38,7 +37,6 @@ struct TestPlugin {
 
     #[mylife_state(name = "stateBool", description = "state description")]
     state_bool: State<bool>,
-
     // Enum: cannot infer
 
     // Complex: not implemented
@@ -65,9 +63,17 @@ fn test_typing() {
         PluginUsage::Logic,
     );
 
-    expected.add_config("configString", Some("config description"), ConfigType::String);
+    expected.add_config(
+        "configString",
+        Some("config description"),
+        ConfigType::String,
+    );
     expected.add_config("configBool", Some("config description"), ConfigType::Bool);
-    expected.add_config("configInteger", Some("config description"), ConfigType::Integer);
+    expected.add_config(
+        "configInteger",
+        Some("config description"),
+        ConfigType::Integer,
+    );
     expected.add_config("configFloat", Some("config description"), ConfigType::Float);
     expected.add_state("stateText", Some("state description"), Type::Text);
     expected.add_state("stateFloat", Some("state description"), Type::Float);

@@ -51,11 +51,7 @@ impl<T: Default + Clone + TypedInto<Value>> State<T> {
         &self.value
     }
 
-    pub fn runtime_register(
-        &mut self,
-        listener: Box<dyn Fn(Value)>,
-        r#type: metadata::Type,
-    ) {
+    pub fn runtime_register(&mut self, listener: Box<dyn Fn(Value)>, r#type: metadata::Type) {
         self.runtime = Some(StateRuntimeData { listener, r#type });
     }
 }

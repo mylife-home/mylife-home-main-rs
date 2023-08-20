@@ -1,10 +1,10 @@
-use std::{fmt, path::PathBuf, sync::Arc, fs::read_dir, collections::HashMap};
-use regex::Regex;
-use libloading::Library;
-use log::{debug, trace};
 use core_plugin_runtime::{
     metadata::PluginMetadata, runtime::MylifeComponent, ModuleDeclaration, PluginRegistry,
 };
+use libloading::Library;
+use log::{debug, trace};
+use regex::Regex;
+use std::{collections::HashMap, fmt, fs::read_dir, path::PathBuf, sync::Arc};
 
 const LOG_TARGET: &str = "mylife:home:core:module";
 
@@ -14,16 +14,19 @@ struct PluginRegistryImpl<'registry> {
 }
 
 impl<'registry> PluginRegistryImpl<'registry> {
-    fn new(module: Arc<Module>, plugins: &'registry mut HashMap<String, Arc<Plugin>>) -> PluginRegistryImpl<'registry> {
-        PluginRegistryImpl {
-            module,
-            plugins,
-        }
+    fn new(
+        module: Arc<Module>,
+        plugins: &'registry mut HashMap<String, Arc<Plugin>>,
+    ) -> PluginRegistryImpl<'registry> {
+        PluginRegistryImpl { module, plugins }
     }
 }
 
 impl PluginRegistry for PluginRegistryImpl<'_> {
-    fn register_plugin(&mut self, plugin: Box<dyn core_plugin_runtime::runtime::MylifePluginRuntime>) {
+    fn register_plugin(
+        &mut self,
+        plugin: Box<dyn core_plugin_runtime::runtime::MylifePluginRuntime>,
+    ) {
         let plugin = Arc::new(Plugin::new(self.module.clone(), plugin));
 
         debug!(
@@ -113,9 +116,14 @@ impl Plugin {
 pub fn load_modules(
     module_path: &str,
 ) -> Result<HashMap<String, Arc<Plugin>>, Box<dyn std::error::Error>> {
-
     let mut plugins: HashMap<String, Arc<Plugin>> = HashMap::new();
-    let name_match = Regex::new(&format!("{}{}(.*){}", std::env::consts::DLL_PREFIX, "plugin_", std::env::consts::DLL_SUFFIX)).unwrap();
+    let name_match = Regex::new(&format!(
+        "{}{}(.*){}",
+        std::env::consts::DLL_PREFIX,
+        "plugin_",
+        std::env::consts::DLL_SUFFIX
+    ))
+    .unwrap();
 
     for path in read_dir(module_path)? {
         let entry = path?;
@@ -127,7 +135,7 @@ pub fn load_modules(
                 continue;
             }
         }
-    
+
         trace!(
             target: LOG_TARGET,
             "File ignored: {}",
@@ -141,7 +149,7 @@ pub fn load_modules(
 fn load_module(
     file_path: PathBuf,
     name: &str,
-    plugins: &mut HashMap<String, Arc<Plugin>>
+    plugins: &mut HashMap<String, Arc<Plugin>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     trace!(
         target: LOG_TARGET,

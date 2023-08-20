@@ -52,7 +52,7 @@ impl MylifePluginHooks for ExamplePlugin {
 // Drop implementation if cleanup tasks needed
 impl Drop for ExamplePlugin {
     fn drop(&mut self) {
-      // Cleanup tasks
+        // Cleanup tasks
     }
 }
 
@@ -65,7 +65,7 @@ impl ExamplePlugin {
         r#type = "bool"
     )]
     fn action1(&mut self, _arg: bool) {
-      // Do something
+        // Do something
     }
 }
 
@@ -79,8 +79,8 @@ impl ExamplePlugin {
         r#type = "bool"
     )]
     fn action2(&mut self, _arg: bool) -> Result<(), Box<dyn std::error::Error>> {
-      // Do something
-      Ok(())
+        // Do something
+        Ok(())
     }
 }
 

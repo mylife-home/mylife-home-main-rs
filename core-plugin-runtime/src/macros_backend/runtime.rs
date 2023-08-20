@@ -1,10 +1,5 @@
 use log::trace;
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    fmt,
-    sync::Arc,
-};
+use std::{cell::RefCell, collections::HashMap, fmt, sync::Arc};
 
 use crate::{
     metadata::PluginMetadata,
@@ -153,7 +148,11 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
     }
 
     // TODO: better error type
-    fn execute_action(&mut self, name: &str, action: Value) -> Result<(), Box<dyn std::error::Error>> {
+    fn execute_action(
+        &mut self,
+        name: &str,
+        action: Value,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let handler = self.access.actions.get(name).ok_or_else(|| {
             Box::new(NoSuchActionError {
                 name: String::from(name),

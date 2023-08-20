@@ -5,7 +5,10 @@ use core_plugin_runtime::metadata;
 use proc_macro2::TokenStream;
 use proc_macro_error::abort_call_site;
 
-pub fn get_type(native_type: &syn::Type, provided_type: &Option<attributes::Type>) -> attributes::Type {
+pub fn get_type(
+    native_type: &syn::Type,
+    provided_type: &Option<attributes::Type>,
+) -> attributes::Type {
     let native_type_name = get_native_type_name(native_type);
 
     if let Some(provided_type) = provided_type {

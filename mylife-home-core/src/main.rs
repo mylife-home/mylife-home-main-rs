@@ -12,10 +12,13 @@ static ALLOCATOR: System = System;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
-    
+
     let plugins = module::load_modules("target/debug")?;
 
-    let mut component = plugins.get("logic-base.value-binary").unwrap().create_component("comp-id");
+    let mut component = plugins
+        .get("logic-base.value-binary")
+        .unwrap()
+        .create_component("comp-id");
 
     component.set_on_state(Box::new(|name: &str, value: Value| {
         println!("STATE: {} = {:?}", name, value);

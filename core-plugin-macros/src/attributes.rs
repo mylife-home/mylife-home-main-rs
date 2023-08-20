@@ -1,9 +1,9 @@
 use std::{fmt, str::FromStr};
 
+use core_plugin_runtime::metadata;
 use darling::{FromAttributes, FromDeriveInput, FromField, FromMeta, ToTokens};
 use proc_macro2::TokenStream;
 use quote::{quote, TokenStreamExt};
-use core_plugin_runtime::metadata;
 
 pub fn option_string_to_tokens(value: &Option<String>) -> TokenStream {
     if let Some(str) = value {
@@ -26,7 +26,9 @@ impl ToTokens for PluginUsage {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let gen = match *self {
             PluginUsage::Sensor => quote! { core_plugin_runtime::metadata::PluginUsage::Sensor },
-            PluginUsage::Actuator => quote! { core_plugin_runtime::metadata::PluginUsage::Actuator },
+            PluginUsage::Actuator => {
+                quote! { core_plugin_runtime::metadata::PluginUsage::Actuator }
+            }
             PluginUsage::Logic => quote! { core_plugin_runtime::metadata::PluginUsage::Logic },
             PluginUsage::Ui => quote! { core_plugin_runtime::metadata::PluginUsage::Ui },
         };

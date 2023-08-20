@@ -163,7 +163,7 @@ pub fn mylife_actions(
             #(#streams)*
         }));
     };
-    
+
     helpers::dump_output(&gen);
 
     gen.into()

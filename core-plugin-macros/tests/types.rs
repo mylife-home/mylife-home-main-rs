@@ -16,8 +16,7 @@ mod utils;
     usage = "logic"
 )]
 struct TestPlugin {
-
-  #[mylife_state(
+    #[mylife_state(
         name = "stateRange",
         description = "state description",
         r#type = "range[0;42]"
@@ -43,7 +42,6 @@ struct TestPlugin {
         r#type = "enum{one,two,three}"
     )]
     state_enum: State<String>,
-
     // Complex: not implemented
 }
 
