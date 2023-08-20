@@ -1,6 +1,6 @@
-use std::{fmt, path::Path, sync::Arc, fs::read_dir};
+use std::{fmt, path::PathBuf, sync::Arc, fs::read_dir};
 use regex::Regex;
-use libloading::{Library, library_filename};
+use libloading::Library;
 use log::{debug, trace};
 use core_plugin_runtime::{
     metadata::PluginMetadata, runtime::MylifeComponent, ModuleDeclaration, PluginRegistry,
@@ -111,14 +111,15 @@ pub fn load_modules(
 ) -> Result<Vec<Arc<Plugin>>, Box<dyn std::error::Error>> {
 
     let mut plugins: Vec<Arc<Plugin>> = Vec::new();
-    let name_match = Regex::new(&format!("{}(.*){}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX)).unwrap();
+    let name_match = Regex::new(&format!("{}{}(.*){}", std::env::consts::DLL_PREFIX, "plugin_", std::env::consts::DLL_SUFFIX)).unwrap();
 
     for path in read_dir(module_path)? {
-        let file_name = String::from(path?.file_name().to_string_lossy());
+        let entry = path?;
+        let file_name = String::from(entry.file_name().to_string_lossy());
         if let Some(matchs) = name_match.captures(&file_name) {
             if matchs.len() == 2 {
                 let name = &matchs[1];
-                load_module(module_path, name, &mut plugins)?;
+                load_module(entry.path(), name, &mut plugins)?;
                 continue;
             }
         }
@@ -134,18 +135,17 @@ pub fn load_modules(
 }
 
 fn load_module(
-    module_path: &str,
+    file_path: PathBuf,
     name: &str,
     plugins: &mut Vec<Arc<Plugin>>
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let path = Path::new(module_path).join(library_filename(name));
     trace!(
         target: LOG_TARGET,
         "Opening module from path '{}'",
-        path.display()
+        file_path.display()
     );
 
-    let library = unsafe { Library::new(path)? };
+    let library = unsafe { Library::new(file_path)? };
 
     let module_declaration = unsafe {
         library
@@ -177,7 +177,7 @@ fn load_module(
     debug!(
         target: LOG_TARGET,
         "Loading module '{}' v{}",
-        name,
+        module.name(),
         module.version()
     );
 

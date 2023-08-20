@@ -9,12 +9,10 @@ static ALLOCATOR: System = System;
 
 // TODO: Error: anyhow pour plugins, thiserror pour core ?
 // TODO: try tokio with plugins (implement "minuterie")
-// TODO: proc macro cleanup -> parse Type from literal
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
     
-    //let plugins = Module::load("target/debug", "logic_base")?;
     let plugins = module::load_modules("target/debug")?;
 
     let mut component = plugins[0].create_component("comp-id");
