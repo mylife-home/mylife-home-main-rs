@@ -1,5 +1,5 @@
 [package]
-name = "plugin_macros"
+name = "core_plugin_macros"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,7 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
-plugin_runtime = { path = "../plugin-runtime" }
+core_plugin_runtime = { path = "../core-plugin-runtime" }
 syn = "1.0"
 quote = "1.0"
 darling = "0.14.1"

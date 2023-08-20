@@ -9,7 +9,7 @@ use quote::{format_ident, quote};
 mod attributes;
 mod helpers;
 
-// TODO: path.get_ident() does not work if `plugin_runtime::Toto`
+// TODO: path.get_ident() does not work if `core_plugin_runtime::Toto`
 // TODO: abort_call_site => find real call site
 
 #[proc_macro_derive(MylifePlugin, attributes(mylife_plugin, mylife_config, mylife_state))]
@@ -72,9 +72,9 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
     let inventory_name = format_ident!("__MylifeInternalsInventory{}__", name);
 
     let gen = quote! {
-        impl plugin_runtime::MylifePlugin for #name {
-            fn runtime() -> Box<dyn plugin_runtime::runtime::MylifePluginRuntime> {
-                let mut builder = plugin_runtime::macros_backend::PluginRuntimeBuilder::new();
+        impl core_plugin_runtime::MylifePlugin for #name {
+            fn runtime() -> Box<dyn core_plugin_runtime::runtime::MylifePluginRuntime> {
+                let mut builder = core_plugin_runtime::macros_backend::PluginRuntimeBuilder::new();
 
                 for item in inventory::iter::<#inventory_name> {
                     let callback = item.0;
@@ -85,7 +85,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
             }
         }
 
-        pub struct #inventory_name(plugin_runtime::macros_backend::BuilderPartCallback<#name>);
+        pub struct #inventory_name(core_plugin_runtime::macros_backend::BuilderPartCallback<#name>);
         inventory::collect!(#inventory_name);
 
         inventory::submit!(#inventory_name(|builder| {
@@ -193,7 +193,7 @@ fn process_config(plugin_name: &syn::Ident, attr: &attributes::MylifeConfig) -> 
     let target_ident = &attr.ident;
 
     let setter = quote! {
-        |target: &mut #plugin_name, arg: plugin_runtime::runtime::ConfigValue| -> std::result::Result<(), Box<dyn std::error::Error>> {
+        |target: &mut #plugin_name, arg: core_plugin_runtime::runtime::ConfigValue| -> std::result::Result<(), Box<dyn std::error::Error>> {
             target.#target_ident = arg.try_into()?;
 
             std::result::Result::Ok(())
@@ -234,18 +234,18 @@ fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> To
     let target_ident = &attr.ident;
 
     let register = quote! {
-        |target: &mut #plugin_name, listener: std::boxed::Box<dyn std::ops::Fn(plugin_runtime::runtime::Value)>| {
-            let runtime_type: plugin_runtime::metadata::Type = #r#type;
+        |target: &mut #plugin_name, listener: std::boxed::Box<dyn std::ops::Fn(core_plugin_runtime::runtime::Value)>| {
+            let runtime_type: core_plugin_runtime::metadata::Type = #r#type;
             target.#target_ident.runtime_register(listener, runtime_type);
         }
     };
 
     let getter = quote! {
-        |target: &#plugin_name| -> plugin_runtime::runtime::Value {
-            use plugin_runtime::runtime::TypedInto;
+        |target: &#plugin_name| -> core_plugin_runtime::runtime::Value {
+            use core_plugin_runtime::runtime::TypedInto;
 
             lazy_static::lazy_static! {
-                static ref RUNTIME_TYPE: plugin_runtime::metadata::Type = #r#type;
+                static ref RUNTIME_TYPE: core_plugin_runtime::metadata::Type = #r#type;
             }
 
             let native_value = target.#target_ident.get();
@@ -289,11 +289,11 @@ fn process_action(
     };
 
     let executor = quote! {
-        |target: &mut #plugin_name, arg: plugin_runtime::runtime::Value| -> std::result::Result<(), Box<dyn std::error::Error>> {
-            use plugin_runtime::runtime::TypedTryInto;
+        |target: &mut #plugin_name, arg: core_plugin_runtime::runtime::Value| -> std::result::Result<(), Box<dyn std::error::Error>> {
+            use core_plugin_runtime::runtime::TypedTryInto;
 
             lazy_static::lazy_static! {
-                static ref RUNTIME_TYPE: plugin_runtime::metadata::Type = #r#type;
+                static ref RUNTIME_TYPE: core_plugin_runtime::metadata::Type = #r#type;
             }
 
             let value: #var_type = arg.clone().typed_try_into(&RUNTIME_TYPE)?;

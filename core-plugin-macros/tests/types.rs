@@ -1,5 +1,5 @@
-use plugin_macros::MylifePlugin;
-use plugin_runtime::{
+use core_plugin_macros::MylifePlugin;
+use core_plugin_runtime::{
     metadata::{PluginUsage, Type},
     runtime::MylifePluginRuntime,
     MylifePlugin, MylifePluginHooks, State,

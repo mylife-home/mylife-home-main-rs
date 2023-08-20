@@ -1,29 +1,29 @@
-use std::{fmt, path::Path, sync::Arc};
-
+use std::{fmt, path::Path, sync::Arc, fs::read_dir};
+use regex::Regex;
 use libloading::{Library, library_filename};
 use log::{debug, trace};
-use plugin_runtime::{
+use core_plugin_runtime::{
     metadata::PluginMetadata, runtime::MylifeComponent, ModuleDeclaration, PluginRegistry,
 };
 
 const LOG_TARGET: &str = "mylife:home:core:module";
 
-struct PluginRegistryImpl {
+struct PluginRegistryImpl<'registry> {
     module: Arc<Module>,
-    plugins: Vec<Arc<Plugin>>,
+    plugins: &'registry mut Vec<Arc<Plugin>>,
 }
 
-impl PluginRegistryImpl {
-    fn new(module: Arc<Module>) -> PluginRegistryImpl {
+impl<'registry> PluginRegistryImpl<'registry> {
+    fn new(module: Arc<Module>, plugins: &'registry mut Vec<Arc<Plugin>>) -> PluginRegistryImpl<'registry> {
         PluginRegistryImpl {
             module,
-            plugins: Vec::new(),
+            plugins,
         }
     }
 }
 
-impl PluginRegistry for PluginRegistryImpl {
-    fn register_plugin(&mut self, plugin: Box<dyn plugin_runtime::runtime::MylifePluginRuntime>) {
+impl PluginRegistry for PluginRegistryImpl<'_> {
+    fn register_plugin(&mut self, plugin: Box<dyn core_plugin_runtime::runtime::MylifePluginRuntime>) {
         let plugin = Arc::new(Plugin::new(self.module.clone(), plugin));
 
         debug!(
@@ -43,64 +43,21 @@ impl PluginRegistry for PluginRegistryImpl {
     }
 }
 
-pub struct Module {
+struct Module {
     _library: Library,
     name: String,
     version: String,
 }
 
 impl Module {
-    pub fn load(
-        module_path: &str,
-        name: &str,
-    ) -> Result<Vec<Arc<Plugin>>, Box<dyn std::error::Error>> {
-        let path = Path::new(module_path).join(library_filename(name));
-        debug!(
-            target: LOG_TARGET,
-            "Loading module '{}' (path='{}')",
-            name,
-            path.display()
-        );
+    fn new(library: Library, base_name: &str, version: &str) -> Arc<Self> {
+        use convert_case::{Case, Casing};
 
-        let library = unsafe { Library::new(path)? };
-
-        let module_declaration = unsafe {
-            library
-                .get::<*const ModuleDeclaration>(b"mylife_home_core_module_declaration\0")?
-                .read()
-        };
-
-        if module_declaration.rustc_version != plugin_runtime::RUSTC_VERSION {
-            return Err(Box::new(ModuleLoadError::RustCompilerVersionMismatch(
-                module_declaration.rustc_version.into(),
-                plugin_runtime::RUSTC_VERSION.into(),
-            )));
-        } else if module_declaration.core_version != plugin_runtime::CORE_VERSION {
-            return Err(Box::new(ModuleLoadError::CoreVersionMismatch(
-                module_declaration.core_version.into(),
-                plugin_runtime::CORE_VERSION.into(),
-            )));
-        } else if module_declaration.mylife_runtime_version
-            != plugin_runtime::MYLIFE_RUNTIME_VERSION
-        {
-            return Err(Box::new(ModuleLoadError::MylifeRuntimeVersionMismatch(
-                module_declaration.mylife_runtime_version.into(),
-                plugin_runtime::MYLIFE_RUNTIME_VERSION.into(),
-            )));
-        }
-
-        let module = Arc::new(Module {
+        Arc::new(Module {
             _library: library,
-            name: make_module_name(name),
-            version: String::from(module_declaration.module_version),
-        });
-
-        let ModuleDeclaration { register, .. } = module_declaration;
-
-        let mut registry = PluginRegistryImpl::new(module.clone());
-        register(&mut registry);
-
-        Ok(registry.plugins)
+            name: base_name.to_case(Case::Kebab),
+            version: String::from(version),
+        })
     }
 
     pub fn name(&self) -> &str {
@@ -112,21 +69,16 @@ impl Module {
     }
 }
 
-fn make_module_name(name: &str) -> String {
-    use convert_case::{Case, Casing};
-    name.to_case(Case::Kebab)
-}
-
 pub struct Plugin {
     id: String,
-    runtime: Box<dyn plugin_runtime::runtime::MylifePluginRuntime>,
+    runtime: Box<dyn core_plugin_runtime::runtime::MylifePluginRuntime>,
     module: Arc<Module>, // Note: keep it last so it is dropped last
 }
 
 impl Plugin {
     fn new(
         module: Arc<Module>,
-        runtime: Box<dyn plugin_runtime::runtime::MylifePluginRuntime>,
+        runtime: Box<dyn core_plugin_runtime::runtime::MylifePluginRuntime>,
     ) -> Plugin {
         let id = format!("{}.{}", module.name(), runtime.metadata().name());
 
@@ -141,12 +93,8 @@ impl Plugin {
         &self.id
     }
 
-    // pub fn module(&self) -> &str {
-    //     self.module.name()
-    // }
-
     pub fn version(&self) -> &str {
-        self.module.version()
+        &self.module.version()
     }
 
     pub fn metadata(&self) -> &PluginMetadata {
@@ -156,6 +104,89 @@ impl Plugin {
     pub fn create_component(&self, id: &str) -> Box<dyn MylifeComponent> {
         self.runtime.create(id)
     }
+}
+
+pub fn load_modules(
+    module_path: &str,
+) -> Result<Vec<Arc<Plugin>>, Box<dyn std::error::Error>> {
+
+    let mut plugins: Vec<Arc<Plugin>> = Vec::new();
+    let name_match = Regex::new(&format!("{}(.*){}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX)).unwrap();
+
+    for path in read_dir(module_path)? {
+        let file_name = String::from(path?.file_name().to_string_lossy());
+        if let Some(matchs) = name_match.captures(&file_name) {
+            if matchs.len() == 2 {
+                let name = &matchs[1];
+                load_module(module_path, name, &mut plugins)?;
+                continue;
+            }
+        }
+    
+        trace!(
+            target: LOG_TARGET,
+            "File ignored: {}",
+            file_name
+        );
+    }
+
+    Ok(plugins)
+}
+
+fn load_module(
+    module_path: &str,
+    name: &str,
+    plugins: &mut Vec<Arc<Plugin>>
+) -> Result<(), Box<dyn std::error::Error>> {
+    let path = Path::new(module_path).join(library_filename(name));
+    trace!(
+        target: LOG_TARGET,
+        "Opening module from path '{}'",
+        path.display()
+    );
+
+    let library = unsafe { Library::new(path)? };
+
+    let module_declaration = unsafe {
+        library
+            .get::<*const ModuleDeclaration>(b"mylife_home_core_module_declaration\0")?
+            .read()
+    };
+
+    if module_declaration.rustc_version != core_plugin_runtime::RUSTC_VERSION {
+        return Err(Box::new(ModuleLoadError::RustCompilerVersionMismatch(
+            module_declaration.rustc_version.into(),
+            core_plugin_runtime::RUSTC_VERSION.into(),
+        )));
+    } else if module_declaration.core_version != core_plugin_runtime::CORE_VERSION {
+        return Err(Box::new(ModuleLoadError::CoreVersionMismatch(
+            module_declaration.core_version.into(),
+            core_plugin_runtime::CORE_VERSION.into(),
+        )));
+    } else if module_declaration.mylife_runtime_version
+        != core_plugin_runtime::MYLIFE_RUNTIME_VERSION
+    {
+        return Err(Box::new(ModuleLoadError::MylifeRuntimeVersionMismatch(
+            module_declaration.mylife_runtime_version.into(),
+            core_plugin_runtime::MYLIFE_RUNTIME_VERSION.into(),
+        )));
+    }
+
+    let module = Module::new(library, name, module_declaration.module_version);
+
+    debug!(
+        target: LOG_TARGET,
+        "Loading module '{}' v{}",
+        name,
+        module.version()
+    );
+
+    let register = module_declaration.register;
+
+    let mut registry = PluginRegistryImpl::new(module, plugins);
+    register(&mut registry);
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]

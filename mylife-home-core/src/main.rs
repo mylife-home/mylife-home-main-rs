@@ -1,7 +1,6 @@
 use std::alloc::System;
 
-use module::Module;
-use plugin_runtime::runtime::{Config, ConfigValue, Value};
+use core_plugin_runtime::runtime::{Config, ConfigValue, Value};
 
 mod module;
 
@@ -15,7 +14,8 @@ static ALLOCATOR: System = System;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
     
-    let plugins = Module::load("target/debug", "logic_base")?;
+    //let plugins = Module::load("target/debug", "logic_base")?;
+    let plugins = module::load_modules("target/debug")?;
 
     let mut component = plugins[0].create_component("comp-id");
 
