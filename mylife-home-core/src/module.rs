@@ -1,4 +1,4 @@
-use std::{fmt, path::PathBuf, sync::Arc, fs::read_dir};
+use std::{fmt, path::PathBuf, sync::Arc, fs::read_dir, collections::HashMap};
 use regex::Regex;
 use libloading::Library;
 use log::{debug, trace};
@@ -10,11 +10,11 @@ const LOG_TARGET: &str = "mylife:home:core:module";
 
 struct PluginRegistryImpl<'registry> {
     module: Arc<Module>,
-    plugins: &'registry mut Vec<Arc<Plugin>>,
+    plugins: &'registry mut HashMap<String, Arc<Plugin>>,
 }
 
 impl<'registry> PluginRegistryImpl<'registry> {
-    fn new(module: Arc<Module>, plugins: &'registry mut Vec<Arc<Plugin>>) -> PluginRegistryImpl<'registry> {
+    fn new(module: Arc<Module>, plugins: &'registry mut HashMap<String, Arc<Plugin>>) -> PluginRegistryImpl<'registry> {
         PluginRegistryImpl {
             module,
             plugins,
@@ -39,7 +39,11 @@ impl PluginRegistry for PluginRegistryImpl<'_> {
             plugin.metadata()
         );
 
-        self.plugins.push(plugin);
+        let id = String::from(plugin.id());
+
+        if let Some(other) = self.plugins.insert(id, plugin) {
+            panic!("Plugin id duplicate '{}'", other.id());
+        }
     }
 }
 
@@ -108,9 +112,9 @@ impl Plugin {
 
 pub fn load_modules(
     module_path: &str,
-) -> Result<Vec<Arc<Plugin>>, Box<dyn std::error::Error>> {
+) -> Result<HashMap<String, Arc<Plugin>>, Box<dyn std::error::Error>> {
 
-    let mut plugins: Vec<Arc<Plugin>> = Vec::new();
+    let mut plugins: HashMap<String, Arc<Plugin>> = HashMap::new();
     let name_match = Regex::new(&format!("{}{}(.*){}", std::env::consts::DLL_PREFIX, "plugin_", std::env::consts::DLL_SUFFIX)).unwrap();
 
     for path in read_dir(module_path)? {
@@ -137,7 +141,7 @@ pub fn load_modules(
 fn load_module(
     file_path: PathBuf,
     name: &str,
-    plugins: &mut Vec<Arc<Plugin>>
+    plugins: &mut HashMap<String, Arc<Plugin>>
 ) -> Result<(), Box<dyn std::error::Error>> {
     trace!(
         target: LOG_TARGET,
