@@ -2,7 +2,7 @@ use std::alloc::System;
 
 use core_plugin_runtime::runtime::{Config, ConfigValue, Value};
 
-mod module;
+mod modules;
 
 #[global_allocator]
 static ALLOCATOR: System = System;
@@ -13,9 +13,9 @@ static ALLOCATOR: System = System;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
 
-    let plugins = module::load_modules("target/debug")?;
+    modules::init("target/debug")?;
 
-    let mut component = plugins
+    let mut component = modules::repository()
         .get("logic-base.value-binary")
         .unwrap()
         .create_component("comp-id");

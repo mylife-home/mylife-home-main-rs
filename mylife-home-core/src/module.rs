@@ -231,3 +231,24 @@ impl fmt::Display for ModuleLoadError {
         }
     }
 }
+
+pub type Repository = HashMap<String, Arc<Plugin>>;
+
+static mut repository: Option<Repository> = None;
+
+pub fn init(module_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let plugins = load_modules(module_path)?;
+
+    // Note: 
+    // - This is called at init, before access
+    // - This is the only possible mutation
+    // I guess this is OK
+    unsafe { repository = Some(plugins) };
+
+    Ok(())
+}
+
+pub fn get_repository() -> &'static Repository {
+    // Note: no mutation
+    unsafe { repository.as_ref().expect("Repository not initialized!") }
+}
