@@ -24,6 +24,7 @@ struct TestMember {
     value_type: Type,
 }
 
+#[allow(dead_code)]
 impl TestMetadata {
     pub fn from_metadata(source: &PluginMetadata) -> Self {
         let mut meta = TestMetadata::new(source.name(), source.description(), source.usage());

@@ -22,7 +22,7 @@ pub trait MylifeComponent {
 
 pub type Config = HashMap<String, ConfigValue>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Range(i64),
     Text(String),
