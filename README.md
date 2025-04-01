@@ -1,2 +1,2 @@
-# mylife-home-core-rs
-MyLife Home Core, Rust implementation
+# mylife-home-main-rs
+MyLife Home Main, Rust implementation
