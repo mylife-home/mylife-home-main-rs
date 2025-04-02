@@ -142,8 +142,7 @@ impl TryFrom<&syn::Type> for ConfigType {
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(mylife_plugin), supports(struct_named))]
 pub struct MylifePlugin {
-    pub ident: syn::Ident,
-
+    // pub ident: syn::Ident,
     #[darling(default)]
     pub name: Option<String>,
 

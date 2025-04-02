@@ -5,6 +5,8 @@ use plugin_runtime::runtime::{Config, ConfigValue, Value};
 mod modules;
 
 mod modules_include {
+    #![allow(unused_imports)]
+    
     use plugin_logic_base::*;
 }
 
