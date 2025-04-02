@@ -11,11 +11,11 @@ pub enum PluginUsage {
 
 #[derive(Debug)]
 pub struct PluginMetadata {
-    // id
+    id: String,
     name: String,
-    // module
+    module: String,
     usage: PluginUsage,
-    // version
+    version: String,
     description: Option<String>,
 
     members: HashMap<String, Member>,
@@ -25,30 +25,47 @@ pub struct PluginMetadata {
 impl PluginMetadata {
     pub(crate) fn new(
         name: String,
+        module: String,
         usage: PluginUsage,
+        version: String,
         description: Option<String>,
         members: HashMap<String, Member>,
         config: HashMap<String, ConfigItem>,
     ) -> PluginMetadata {
         PluginMetadata {
+            id: format!("{}.{}", module, name),
             name,
+            module,
             usage,
+            version,
             description,
             members,
             config,
         }
     }
 
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn description(&self) -> Option<&str> {
-        self.description.as_deref()
+    pub fn module(&self) -> &str {
+        &self.module
     }
 
     pub fn usage(&self) -> PluginUsage {
         self.usage
+    }
+
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
     }
 
     pub fn members(&self) -> &HashMap<String, Member> {

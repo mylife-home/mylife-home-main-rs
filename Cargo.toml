@@ -5,3 +5,4 @@ members = [
   "core-plugin-macros",
   "plugins/logic-base"
 ]
+resolver = "2"

@@ -3,6 +3,8 @@ use crate::{
     runtime::{self, TypedInto, Value},
 };
 
+use std::fmt;
+
 pub trait MylifePluginHooks: Sized {
     fn new(id: &str) -> Self;
 
@@ -13,7 +15,7 @@ pub trait MylifePluginHooks: Sized {
 }
 
 // Trait implemented by the plugin itself
-pub trait MylifePlugin: MylifePluginHooks {
+pub trait MylifePlugin: MylifePluginHooks + fmt::Debug {
     // used to export
     fn runtime() -> Box<dyn runtime::MylifePluginRuntime>;
 }
@@ -23,6 +25,16 @@ struct StateRuntimeData {
     r#type: metadata::Type,
 }
 
+impl fmt::Debug for StateRuntimeData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StateRuntimeData")
+            .field("listener", &"Box<dyn Fn(Value)>")
+            .field("type", &self.r#type)
+            .finish()
+    }
+}
+
+#[derive(Debug)]
 pub struct State<T: Default> {
     value: T,
     runtime: Option<StateRuntimeData>,

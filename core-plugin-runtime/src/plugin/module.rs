@@ -1,33 +1,19 @@
-use crate::runtime;
+use crate::runtime::MylifePluginRuntime;
 
-pub static CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub static RUSTC_VERSION: &str = env!("RUSTC_VERSION");
-pub static MYLIFE_RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
+use crate::MylifePlugin;
 
-pub struct ModuleDeclaration {
-    pub rustc_version: &'static str,
-    pub core_version: &'static str,
-    pub mylife_runtime_version: &'static str,
-    pub module_version: &'static str,
-    pub register: fn(registry: &mut dyn PluginRegistry),
+pub struct PluginRegistration(fn() -> Box<dyn MylifePluginRuntime>);
+
+impl PluginRegistration {
+    pub const fn new<PluginType: MylifePlugin>() -> Self {
+        PluginRegistration(|| PluginType::runtime())
+    }
+
+    pub fn runtimes() -> Vec<Box<dyn MylifePluginRuntime>> {
+        inventory::iter::<PluginRegistration>()
+            .map(|item| (item.0)())
+            .collect()
+    }
 }
 
-#[macro_export]
-macro_rules! export_module {
-    ($register:expr) => {
-        #[doc(hidden)]
-        #[no_mangle]
-        pub static mylife_home_core_module_declaration: $crate::ModuleDeclaration =
-            $crate::ModuleDeclaration {
-                rustc_version: $crate::RUSTC_VERSION,
-                core_version: $crate::CORE_VERSION,
-                mylife_runtime_version: $crate::MYLIFE_RUNTIME_VERSION,
-                module_version: env!("CARGO_PKG_VERSION"),
-                register: $register,
-            };
-    };
-}
-
-pub trait PluginRegistry {
-    fn register_plugin(&mut self, plugin: Box<dyn runtime::MylifePluginRuntime>);
-}
+inventory::collect!(PluginRegistration);

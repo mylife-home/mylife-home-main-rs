@@ -7,6 +7,7 @@ use crate::{
     MylifePlugin,
 };
 
+#[derive(Debug)]
 pub struct PluginRuntimeImpl<PluginType: MylifePlugin + 'static> {
     metadata: PluginMetadata,
     access: Arc<PluginRuntimeAccess<PluginType>>,
@@ -31,6 +32,7 @@ impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginT
     }
 }
 
+#[derive(Debug)]
 pub struct StateRuntime<PluginType> {
     pub(crate) register: StateRuntimeRegister<PluginType>,
     pub(crate) getter: StateRuntimeGetter<PluginType>,
@@ -44,6 +46,7 @@ pub type StateRuntimeGetter<PluginType> = fn(target: &PluginType) -> Value;
 pub type ActionRuntimeExecutor<PluginType> =
     fn(target: &mut PluginType, action: Value) -> Result<(), Box<dyn std::error::Error>>;
 
+#[derive(Debug)]
 pub struct PluginRuntimeAccess<PluginType: MylifePlugin> {
     configs: HashMap<String, ConfigRuntimeSetter<PluginType>>,
     states: HashMap<String, StateRuntime<PluginType>>,
@@ -69,6 +72,16 @@ struct ComponentImpl<PluginType: MylifePlugin> {
     component: PluginType,
     id: String,
     state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>>>>,
+}
+
+impl<PluginType: MylifePlugin> fmt::Debug for ComponentImpl<PluginType> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        f.debug_struct("ComponentImpl")
+            .field("access", &self.access)
+            .field("component", &self.component)
+            .field("id", &self.id)
+            .finish()
+    }
 }
 
 impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {

@@ -9,7 +9,7 @@ use crate::utils::TestMetadata;
 
 mod utils;
 
-#[derive(MylifePlugin, Default)]
+#[derive(MylifePlugin, Default, Debug)]
 #[mylife_plugin(
     name = "plugin-name",
     description = "plugin description",

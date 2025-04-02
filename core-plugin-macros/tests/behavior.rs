@@ -40,7 +40,7 @@ lazy_static::lazy_static! {
   static ref HISTORY: History = History::new();
 }
 
-#[derive(MylifePlugin, Default)]
+#[derive(MylifePlugin, Default, Debug)]
 #[mylife_plugin(usage = "logic")]
 struct TestPlugin {
     #[mylife_config]
@@ -94,10 +94,13 @@ fn test_behavior() {
         .execute_action("actionValue", Value::Text("action-arg".into()))
         .unwrap();
 
-    assert_eq!(HISTORY.get_all(), vec![
-      HistoryItem::Init("config-value".into()),
-      HistoryItem::Action("action-arg".into()),
-    ]);
+    assert_eq!(
+        HISTORY.get_all(),
+        vec![
+            HistoryItem::Init("config-value".into()),
+            HistoryItem::Action("action-arg".into()),
+        ]
+    );
 
     // on state
     assert_eq!(

@@ -5,7 +5,7 @@ use core_plugin_runtime::{MylifePluginHooks, State};
 
 const LOG_TARGET: &str = "mylife:home:core:plugins:logic-base:value-binary";
 
-#[derive(MylifePlugin)]
+#[derive(MylifePlugin, Debug)]
 #[mylife_plugin(description = "step relay", usage = "logic")] // name=
 pub struct ValueBinary {
     id: String,

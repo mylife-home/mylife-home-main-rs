@@ -13,7 +13,9 @@ use super::{
 
 pub struct PluginRuntimeBuilder<PluginType: MylifePlugin + 'static> {
     name: Option<String>,
+    module: Option<String>,
     usage: Option<PluginUsage>,
+    version: Option<String>,
     description: Option<String>,
     members: HashMap<String, Member>,
     config: HashMap<String, ConfigItem>,
@@ -26,7 +28,9 @@ impl<PluginType: MylifePlugin + 'static> PluginRuntimeBuilder<PluginType> {
     pub fn new() -> Self {
         PluginRuntimeBuilder {
             name: None,
+            module: None,
             usage: None,
+            version: None,
             description: None,
             members: HashMap::new(),
             config: HashMap::new(),
@@ -37,12 +41,14 @@ impl<PluginType: MylifePlugin + 'static> PluginRuntimeBuilder<PluginType> {
     }
 
     pub fn build(self) -> Box<dyn MylifePluginRuntime> {
-        let generator_panic = "Plugin macros error: name has not been set, this indicates an incorrect behavior in the macro code generator";
+        let generator_panic = "Plugin macros error: missing field, this indicates an incorrect behavior in the macro code generator";
 
         PluginRuntimeImpl::<PluginType>::new(
             PluginMetadata::new(
                 self.name.expect(generator_panic),
+                self.module.expect(generator_panic),
                 self.usage.expect(generator_panic),
+                self.version.expect(generator_panic),
                 self.description,
                 self.members,
                 self.config,
@@ -51,10 +57,19 @@ impl<PluginType: MylifePlugin + 'static> PluginRuntimeBuilder<PluginType> {
         )
     }
 
-    pub fn set_plugin(&mut self, name: &str, description: Option<&str>, usage: PluginUsage) {
+    pub fn set_plugin(&mut self, name: &str, description: Option<&str>, usage: PluginUsage, package_name: &str, package_version: &str) {
+        let module_name = {
+            use convert_case::{Case, Casing};
+            
+            let formatted = package_name.to_case(Case::Kebab);
+            String::from(formatted.trim_start_matches("plugin-"))
+        };
+
         self.name = Some(String::from(name));
-        self.description = description.map(String::from);
+        self.module = Some(module_name);
         self.usage = Some(usage);
+        self.version = Some(String::from(package_version));
+        self.description = description.map(String::from);
     }
 
     pub fn add_config(
@@ -101,3 +116,12 @@ impl<PluginType: MylifePlugin + 'static> PluginRuntimeBuilder<PluginType> {
 }
 
 pub type BuilderPartCallback<PluginType> = fn(builder: &mut PluginRuntimeBuilder<PluginType>);
+
+#[macro_export]
+macro_rules! publish_plugin {
+    ($plugin_type:ty) => {
+        inventory::submit!(core_plugin_runtime::PluginRegistration::new::<$plugin_type>());
+    };
+}
+
+pub use publish_plugin;

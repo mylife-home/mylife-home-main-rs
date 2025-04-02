@@ -1,8 +1,11 @@
-use std::{collections::HashMap, fmt};
+use std::{
+    collections::HashMap,
+    fmt::{self, Debug},
+};
 
 use crate::metadata;
 
-pub trait MylifePluginRuntime {
+pub trait MylifePluginRuntime: Send + Sync + Debug {
     fn metadata(&self) -> &metadata::PluginMetadata;
     fn create(&self, id: &str) -> Box<dyn MylifeComponent>;
 }

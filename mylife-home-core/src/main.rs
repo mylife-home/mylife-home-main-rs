@@ -4,6 +4,10 @@ use core_plugin_runtime::runtime::{Config, ConfigValue, Value};
 
 mod modules;
 
+mod modules_include {
+    use plugin_logic_base::*;
+}
+
 #[global_allocator]
 static ALLOCATOR: System = System;
 
@@ -13,10 +17,10 @@ static ALLOCATOR: System = System;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
 
-    modules::init("target/debug")?;
+    modules::init();
 
-    let mut component = modules::repository()
-        .get("logic-base.value-binary")
+    let mut component = modules::registry()
+        .plugin("logic-base.value-binary")
         .unwrap()
         .create_component("comp-id");
 

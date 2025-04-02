@@ -9,7 +9,7 @@ use crate::utils::TestMetadata;
 
 mod utils;
 
-#[derive(MylifePlugin)]
+#[derive(MylifePlugin, Debug)]
 #[mylife_plugin(
     name = "example-plugin", // Optional, infered from struct name
     description = "plugin description", // Optional

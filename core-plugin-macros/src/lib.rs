@@ -91,6 +91,8 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
         inventory::submit!(#inventory_name(|builder| {
             #(#streams)*
         }));
+
+        core_plugin_runtime::macros_backend::publish_plugin!(#name);
     };
 
     helpers::dump_output(&gen);
@@ -176,7 +178,13 @@ fn process_plugin(name: &syn::Ident, attr: &attributes::MylifePlugin) -> TokenSt
     let usage = &attr.usage;
 
     quote! {
-        builder.set_plugin(#name, #description, #usage);
+        builder.set_plugin(
+            #name,
+            #description,
+            #usage, 
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION")
+        );
     }
 }
 
