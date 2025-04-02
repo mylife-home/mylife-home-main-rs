@@ -167,12 +167,16 @@ pub fn registry() -> &'static Registry<'static> {
 }
 
 unsafe fn unsafe_ref<T>(value: &Pin<Box<T>>) -> &'static T {
-    let ptr = Pin::into_inner_unchecked(value.as_ref()) as *const T;
-    &*ptr
+    unsafe {
+        let ptr = Pin::into_inner_unchecked(value.as_ref()) as *const T;
+        &*ptr
+    }
 }
 
 unsafe fn unsafe_mut_ref<T>(value: &Pin<Box<T>>) -> &'static mut T {
-    let ptr = Pin::into_inner_unchecked(value.as_ref()) as *const T as *mut T;
-    #[allow(invalid_reference_casting)]
-    &mut *ptr
+    unsafe {
+        let ptr = Pin::into_inner_unchecked(value.as_ref()) as *const T as *mut T;
+        #[allow(invalid_reference_casting)]
+        &mut *ptr
+    }
 }
