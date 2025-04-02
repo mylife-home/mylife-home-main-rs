@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use crate::{
+    MylifePlugin,
     metadata::{ConfigItem, ConfigType, Member, MemberType, PluginMetadata, PluginUsage, Type},
     runtime::MylifePluginRuntime,
-    MylifePlugin,
 };
 
 use super::{
@@ -57,10 +57,17 @@ impl<PluginType: MylifePlugin + 'static> PluginRuntimeBuilder<PluginType> {
         )
     }
 
-    pub fn set_plugin(&mut self, name: &str, description: Option<&str>, usage: PluginUsage, package_name: &str, package_version: &str) {
+    pub fn set_plugin(
+        &mut self,
+        name: &str,
+        description: Option<&str>,
+        usage: PluginUsage,
+        package_name: &str,
+        package_version: &str,
+    ) {
         let module_name = {
             use convert_case::{Case, Casing};
-            
+
             let formatted = package_name.to_case(Case::Kebab);
             String::from(formatted.trim_start_matches("plugin-"))
         };

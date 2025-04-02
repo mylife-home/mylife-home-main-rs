@@ -2,8 +2,8 @@ use std::slice;
 
 use attributes::ConfigType;
 use darling::{FromAttributes, FromDeriveInput, FromField, ToTokens};
-use proc_macro2::TokenStream;
 use proc_macro_error::{abort, abort_call_site, emit_warning, proc_macro_error};
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 mod attributes;
@@ -71,7 +71,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
 
     let inventory_name = format_ident!("__MylifeInternalsInventory{}__", name);
 
-    let gen = quote! {
+    let generated = quote! {
         impl core_plugin_runtime::MylifePlugin for #name {
             fn runtime() -> Box<dyn core_plugin_runtime::runtime::MylifePluginRuntime> {
                 let mut builder = core_plugin_runtime::macros_backend::PluginRuntimeBuilder::new();
@@ -95,9 +95,9 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
         core_plugin_runtime::macros_backend::publish_plugin!(#name);
     };
 
-    helpers::dump_output(&gen);
+    helpers::dump_output(&generated);
 
-    gen.into()
+    generated.into()
 }
 
 #[proc_macro_attribute]
@@ -158,7 +158,7 @@ pub fn mylife_actions(
         }
     }
 
-    let gen = quote! {
+    let generated = quote! {
         #input
 
         inventory::submit!(#inventory_name(|builder| {
@@ -166,9 +166,9 @@ pub fn mylife_actions(
         }));
     };
 
-    helpers::dump_output(&gen);
+    helpers::dump_output(&generated);
 
-    gen.into()
+    generated.into()
 }
 
 fn process_plugin(name: &syn::Ident, attr: &attributes::MylifePlugin) -> TokenStream {
@@ -181,7 +181,7 @@ fn process_plugin(name: &syn::Ident, attr: &attributes::MylifePlugin) -> TokenSt
         builder.set_plugin(
             #name,
             #description,
-            #usage, 
+            #usage,
             env!("CARGO_PKG_NAME"),
             env!("CARGO_PKG_VERSION")
         );

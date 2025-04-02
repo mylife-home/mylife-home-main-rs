@@ -1,8 +1,8 @@
 use core_plugin_macros::MylifePlugin;
 use core_plugin_runtime::{
+    MylifePlugin, MylifePluginHooks, State,
     metadata::{PluginUsage, Type},
     runtime::MylifePluginRuntime,
-    MylifePlugin, MylifePluginHooks, State,
 };
 
 use crate::utils::TestMetadata;

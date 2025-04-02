@@ -2,10 +2,10 @@
 
 use std::sync::Mutex;
 
-use core_plugin_macros::{mylife_actions, MylifePlugin};
+use core_plugin_macros::{MylifePlugin, mylife_actions};
 use core_plugin_runtime::{
-    runtime::{Config, ConfigValue, MylifePluginRuntime, Value},
     MylifePlugin, MylifePluginHooks, State,
+    runtime::{Config, ConfigValue, MylifePluginRuntime, Value},
 };
 
 mod utils;

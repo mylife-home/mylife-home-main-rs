@@ -1,4 +1,4 @@
-use core_plugin_runtime::{metadata::PluginMetadata, runtime::MylifeComponent, PluginRegistration};
+use core_plugin_runtime::{PluginRegistration, metadata::PluginMetadata, runtime::MylifeComponent};
 use log::debug;
 use std::{
     collections::HashMap,
@@ -109,9 +109,7 @@ impl<'a> Registry<'a> {
 
     fn mapper<T>(object: &'a Pin<Box<T>>) -> &'a T {
         // SAFETY: We are inside the Registry lifetime, so the object pointer remains valid.
-        unsafe {
-            Pin::into_inner_unchecked(object.as_ref())
-        }
+        unsafe { Pin::into_inner_unchecked(object.as_ref()) }
     }
 }
 

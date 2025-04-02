@@ -2,8 +2,8 @@ use std::env;
 
 use crate::attributes;
 use core_plugin_runtime::metadata;
-use proc_macro2::TokenStream;
 use proc_macro_error::abort_call_site;
+use proc_macro2::TokenStream;
 
 pub fn get_type(
     native_type: &syn::Type,

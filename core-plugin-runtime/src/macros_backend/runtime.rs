@@ -2,9 +2,9 @@ use log::trace;
 use std::{cell::RefCell, collections::HashMap, fmt, sync::Arc};
 
 use crate::{
+    MylifePlugin,
     metadata::PluginMetadata,
     runtime::{Config, ConfigValue, MylifeComponent, MylifePluginRuntime, Value},
-    MylifePlugin,
 };
 
 #[derive(Debug)]

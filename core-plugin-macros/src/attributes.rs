@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use core_plugin_runtime::metadata;
 use darling::{FromAttributes, FromDeriveInput, FromField, FromMeta, ToTokens};
 use proc_macro2::TokenStream;
-use quote::{quote, TokenStreamExt};
+use quote::{TokenStreamExt, quote};
 
 pub fn option_string_to_tokens(value: &Option<String>) -> TokenStream {
     if let Some(str) = value {
@@ -24,7 +24,7 @@ pub enum PluginUsage {
 
 impl ToTokens for PluginUsage {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let gen = match *self {
+        let generated = match *self {
             PluginUsage::Sensor => quote! { core_plugin_runtime::metadata::PluginUsage::Sensor },
             PluginUsage::Actuator => {
                 quote! { core_plugin_runtime::metadata::PluginUsage::Actuator }
@@ -33,7 +33,7 @@ impl ToTokens for PluginUsage {
             PluginUsage::Ui => quote! { core_plugin_runtime::metadata::PluginUsage::Ui },
         };
 
-        tokens.append_all(gen);
+        tokens.append_all(generated);
     }
 }
 
@@ -61,7 +61,7 @@ impl FromMeta for Type {
 
 impl ToTokens for Type {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let gen = match self.value() {
+        let generated = match self.value() {
             metadata::Type::Range(min, max) => {
                 quote! { core_plugin_runtime::metadata::Type::Range(#min, #max) }
             }
@@ -74,7 +74,7 @@ impl ToTokens for Type {
             metadata::Type::Complex => quote! { core_plugin_runtime::metadata::Type::Complex },
         };
 
-        tokens.append_all(gen);
+        tokens.append_all(generated);
     }
 }
 
@@ -89,14 +89,14 @@ pub enum ConfigType {
 
 impl ToTokens for ConfigType {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let gen = match *self {
+        let generated = match *self {
             ConfigType::String => quote! { core_plugin_runtime::metadata::ConfigType::String },
             ConfigType::Bool => quote! { core_plugin_runtime::metadata::ConfigType::Bool },
             ConfigType::Integer => quote! { core_plugin_runtime::metadata::ConfigType::Integer },
             ConfigType::Float => quote! { core_plugin_runtime::metadata::ConfigType::Float },
         };
 
-        tokens.append_all(gen);
+        tokens.append_all(generated);
     }
 }
 
