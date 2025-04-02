@@ -35,7 +35,7 @@ pub fn derive_mylife_plugin(input: proc_macro::TokenStream) -> proc_macro::Token
 
     for field in fields.iter() {
         for attr in field.attrs.iter() {
-            let attr_ident = attr.path.get_ident().unwrap();
+            let attr_ident = attr.path().get_ident().unwrap();
             match attr_ident.to_string().as_str() {
                 "mylife_config" => {
                     match errors.handle(attributes::MylifeConfig::from_field(&field)) {
@@ -125,9 +125,9 @@ pub fn mylife_actions(
     let mut input = input.clone();
 
     for item in input.items.iter_mut() {
-        if let syn::ImplItem::Method(method) = item {
+        if let syn::ImplItem::Fn(method) = item {
             method.attrs.retain(|attr| {
-                let attr_ident = attr.path.get_ident().unwrap();
+                let attr_ident = attr.path().get_ident().unwrap();
                 match attr_ident.to_string().as_str() {
                     "mylife_action" => {
                         match errors.handle(attributes::MylifeAction::from_attributes(

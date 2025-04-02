@@ -13,4 +13,4 @@ path = "src/main.rs"
 core_plugin_runtime = { path = "../core-plugin-runtime" }
 plugin_logic_base = { path = "../plugins/logic-base" }
 log = "0.4.27"
-pretty_env_logger = "0.4.0"
+pretty_env_logger = "0.5.0"

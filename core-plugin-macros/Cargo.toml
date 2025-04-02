@@ -8,11 +8,11 @@ proc-macro = true
 
 [dependencies]
 core_plugin_runtime = { path = "../core-plugin-runtime" }
-syn = "1.0"
+syn = "2.0"
 quote = "1.0"
-darling = "0.14.4"
+darling = "0.20.11"
 proc-macro2 = "1.0.94"
-convert_case = "0.6.0"
+convert_case = "0.8.0"
 proc-macro-error = "1.0.4"
 
 [dev-dependencies]
