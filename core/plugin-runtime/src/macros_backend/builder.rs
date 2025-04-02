@@ -127,7 +127,7 @@ pub type BuilderPartCallback<PluginType> = fn(builder: &mut PluginRuntimeBuilder
 #[macro_export]
 macro_rules! publish_plugin {
     ($plugin_type:ty) => {
-        inventory::submit!(core_plugin_runtime::PluginRegistration::new::<$plugin_type>());
+        inventory::submit!(plugin_runtime::PluginRegistration::new::<$plugin_type>());
     };
 }
 

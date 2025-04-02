@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-use core_plugin_runtime::metadata;
+use plugin_runtime::metadata;
 use darling::{FromAttributes, FromDeriveInput, FromField, FromMeta, ToTokens};
 use proc_macro2::TokenStream;
 use quote::{TokenStreamExt, quote};
@@ -25,12 +25,12 @@ pub enum PluginUsage {
 impl ToTokens for PluginUsage {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let generated = match *self {
-            PluginUsage::Sensor => quote! { core_plugin_runtime::metadata::PluginUsage::Sensor },
+            PluginUsage::Sensor => quote! { plugin_runtime::metadata::PluginUsage::Sensor },
             PluginUsage::Actuator => {
-                quote! { core_plugin_runtime::metadata::PluginUsage::Actuator }
+                quote! { plugin_runtime::metadata::PluginUsage::Actuator }
             }
-            PluginUsage::Logic => quote! { core_plugin_runtime::metadata::PluginUsage::Logic },
-            PluginUsage::Ui => quote! { core_plugin_runtime::metadata::PluginUsage::Ui },
+            PluginUsage::Logic => quote! { plugin_runtime::metadata::PluginUsage::Logic },
+            PluginUsage::Ui => quote! { plugin_runtime::metadata::PluginUsage::Ui },
         };
 
         tokens.append_all(generated);
@@ -63,15 +63,15 @@ impl ToTokens for Type {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let generated = match self.value() {
             metadata::Type::Range(min, max) => {
-                quote! { core_plugin_runtime::metadata::Type::Range(#min, #max) }
+                quote! { plugin_runtime::metadata::Type::Range(#min, #max) }
             }
-            metadata::Type::Text => quote! { core_plugin_runtime::metadata::Type::Text },
-            metadata::Type::Float => quote! { core_plugin_runtime::metadata::Type::Float },
-            metadata::Type::Bool => quote! { core_plugin_runtime::metadata::Type::Bool },
+            metadata::Type::Text => quote! { plugin_runtime::metadata::Type::Text },
+            metadata::Type::Float => quote! { plugin_runtime::metadata::Type::Float },
+            metadata::Type::Bool => quote! { plugin_runtime::metadata::Type::Bool },
             metadata::Type::Enum(vec) => {
-                quote! { core_plugin_runtime::metadata::Type::Enum(vec![#(#vec.to_string()),*]) }
+                quote! { plugin_runtime::metadata::Type::Enum(vec![#(#vec.to_string()),*]) }
             }
-            metadata::Type::Complex => quote! { core_plugin_runtime::metadata::Type::Complex },
+            metadata::Type::Complex => quote! { plugin_runtime::metadata::Type::Complex },
         };
 
         tokens.append_all(generated);
@@ -90,10 +90,10 @@ pub enum ConfigType {
 impl ToTokens for ConfigType {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let generated = match *self {
-            ConfigType::String => quote! { core_plugin_runtime::metadata::ConfigType::String },
-            ConfigType::Bool => quote! { core_plugin_runtime::metadata::ConfigType::Bool },
-            ConfigType::Integer => quote! { core_plugin_runtime::metadata::ConfigType::Integer },
-            ConfigType::Float => quote! { core_plugin_runtime::metadata::ConfigType::Float },
+            ConfigType::String => quote! { plugin_runtime::metadata::ConfigType::String },
+            ConfigType::Bool => quote! { plugin_runtime::metadata::ConfigType::Bool },
+            ConfigType::Integer => quote! { plugin_runtime::metadata::ConfigType::Integer },
+            ConfigType::Float => quote! { plugin_runtime::metadata::ConfigType::Float },
         };
 
         tokens.append_all(generated);

@@ -1,4 +1,4 @@
-use core_plugin_runtime::metadata::{ConfigType, MemberType, PluginMetadata, PluginUsage, Type};
+use plugin_runtime::metadata::{ConfigType, MemberType, PluginMetadata, PluginUsage, Type};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestMetadata {

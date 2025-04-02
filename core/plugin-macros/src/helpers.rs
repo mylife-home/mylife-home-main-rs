@@ -1,7 +1,7 @@
 use std::env;
 
 use crate::attributes;
-use core_plugin_runtime::metadata;
+use plugin_runtime::metadata;
 use proc_macro_error::abort_call_site;
 use proc_macro2::TokenStream;
 

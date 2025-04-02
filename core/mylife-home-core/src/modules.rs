@@ -1,4 +1,4 @@
-use core_plugin_runtime::{PluginRegistration, metadata::PluginMetadata, runtime::MylifeComponent};
+use plugin_runtime::{PluginRegistration, metadata::PluginMetadata, runtime::MylifeComponent};
 use log::debug;
 use std::{
     collections::HashMap,
@@ -48,13 +48,13 @@ impl<'a> Module<'a> {
 
 #[derive(Debug)]
 pub struct Plugin<'a> {
-    runtime: Box<dyn core_plugin_runtime::runtime::MylifePluginRuntime>,
+    runtime: Box<dyn plugin_runtime::runtime::MylifePluginRuntime>,
     module: &'a Module<'a>,
 }
 
 impl<'a> Plugin<'a> {
     fn new(
-        runtime: Box<dyn core_plugin_runtime::runtime::MylifePluginRuntime>,
+        runtime: Box<dyn plugin_runtime::runtime::MylifePluginRuntime>,
         module: &'a Module,
     ) -> Pin<Box<Self>> {
         Box::pin(Self { runtime, module })

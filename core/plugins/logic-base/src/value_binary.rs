@@ -1,7 +1,7 @@
 use log::debug;
 
-use core_plugin_macros::{MylifePlugin, mylife_actions};
-use core_plugin_runtime::{MylifePluginHooks, State};
+use plugin_macros::{MylifePlugin, mylife_actions};
+use plugin_runtime::{MylifePluginHooks, State};
 
 const LOG_TARGET: &str = "mylife:home:core:plugins:logic-base:value-binary";
 

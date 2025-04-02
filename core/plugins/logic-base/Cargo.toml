@@ -7,8 +7,8 @@ edition = "2024"
 [lib]
 
 [dependencies]
-core_plugin_runtime = { path = "../../core-plugin-runtime" }
-core_plugin_macros = { path = "../../core-plugin-macros" }
+plugin_runtime = { path = "../../plugin-runtime" }
+plugin_macros = { path = "../../plugin-macros" }
 inventory = "0.3.20"
 lazy_static = "1.5.0"
 log = "0.4.27"

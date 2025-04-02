@@ -1,6 +1,6 @@
 use std::alloc::System;
 
-use core_plugin_runtime::runtime::{Config, ConfigValue, Value};
+use plugin_runtime::runtime::{Config, ConfigValue, Value};
 
 mod modules;
 

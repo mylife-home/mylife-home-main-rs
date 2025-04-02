@@ -1,9 +1,9 @@
-// Note : this also test runtime, but is easier to implement here than in core_plugin_runtime
+// Note : this also test runtime, but is easier to implement here than in plugin_runtime
 
 use std::sync::Mutex;
 
-use core_plugin_macros::{MylifePlugin, mylife_actions};
-use core_plugin_runtime::{
+use plugin_macros::{MylifePlugin, mylife_actions};
+use plugin_runtime::{
     MylifePlugin, MylifePluginHooks, State,
     runtime::{Config, ConfigValue, MylifePluginRuntime, Value},
 };
