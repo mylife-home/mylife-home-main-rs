@@ -10,11 +10,11 @@ proc-macro = true
 core_plugin_runtime = { path = "../core-plugin-runtime" }
 syn = "1.0"
 quote = "1.0"
-darling = "0.14.1"
-proc-macro2 = "1.0.47"
+darling = "0.14.4"
+proc-macro2 = "1.0.94"
 convert_case = "0.6.0"
 proc-macro-error = "1.0.4"
 
 [dev-dependencies]
-inventory = "0.3.2"
-lazy_static = "1.4.0"
+inventory = "0.3.20"
+lazy_static = "1.5.0"

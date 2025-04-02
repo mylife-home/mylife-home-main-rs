@@ -11,6 +11,6 @@ name = "plugin_logic_base"
 [dependencies]
 core_plugin_runtime = { path = "../../core-plugin-runtime" }
 core_plugin_macros = { path = "../../core-plugin-macros" }
-inventory = "0.3.2"
-lazy_static = "1.4.0"
-log = "0.4.17"
+inventory = "0.3.20"
+lazy_static = "1.5.0"
+log = "0.4.27"
