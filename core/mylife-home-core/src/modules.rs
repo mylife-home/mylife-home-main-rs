@@ -1,15 +1,11 @@
 use log::debug;
 use plugin_runtime::{PluginRegistration, metadata::PluginMetadata, runtime::MylifeComponent};
-use std::{
-    collections::HashMap,
-    pin::Pin,
-    sync::{Arc, OnceLock},
-};
+use std::{collections::HashMap, pin::Pin, sync::OnceLock};
 
 const LOG_TARGET: &str = "mylife:home:core:modules";
 
 #[derive(Debug)]
-struct Module<'a> {
+pub struct Module<'a> {
     name: String,
     version: String,
     plugins: HashMap<String, &'a Plugin<'a>>,
