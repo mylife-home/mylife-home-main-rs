@@ -10,9 +10,6 @@ mod modules_include {
     use plugin_logic_base::*;
 }
 
-#[global_allocator]
-static ALLOCATOR: System = System;
-
 // TODO: Error: anyhow pour plugins, thiserror pour core ?
 // TODO: try tokio with plugins (implement "minuterie")
 
