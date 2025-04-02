@@ -1,5 +1,3 @@
-use std::alloc::System;
-
 use plugin_runtime::runtime::{Config, ConfigValue, Value};
 
 mod modules;
