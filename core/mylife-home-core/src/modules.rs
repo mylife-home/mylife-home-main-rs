@@ -1,5 +1,5 @@
-use plugin_runtime::{PluginRegistration, metadata::PluginMetadata, runtime::MylifeComponent};
 use log::debug;
+use plugin_runtime::{PluginRegistration, metadata::PluginMetadata, runtime::MylifeComponent};
 use std::{
     collections::HashMap,
     pin::Pin,

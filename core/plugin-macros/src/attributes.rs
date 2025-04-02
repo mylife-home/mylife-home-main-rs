@@ -1,7 +1,7 @@
 use std::{fmt, str::FromStr};
 
-use plugin_runtime::metadata;
 use darling::{FromAttributes, FromDeriveInput, FromField, FromMeta, ToTokens};
+use plugin_runtime::metadata;
 use proc_macro2::TokenStream;
 use quote::{TokenStreamExt, quote};
 
