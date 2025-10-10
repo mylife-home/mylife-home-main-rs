@@ -4,5 +4,5 @@ members = [
   "core/plugin-runtime",
   "core/plugin-macros",
   "core/plugins/logic-base"
-]
+, "common"]
 resolver = "2"
