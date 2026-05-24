@@ -62,12 +62,10 @@ pub enum MqttEvent {
     Message {
         topic: String,
         payload: Vec<u8>,
-        qos: QoS,
         retain: bool,
     },
     SubscriptionAcknowledged {
         topic: String,
-        qos: QoS,
     },
     SubscriptionFailed {
         topic: String,
@@ -384,15 +382,9 @@ impl IoWorker {
                     )));
                 }
                 Packet::Publish(publish) => {
-                    let qos = match publish.qospid {
-                        QosPid::AtMostOnce => QoS::AtMostOnce,
-                        QosPid::AtLeastOnce(_) => QoS::AtLeastOnce,
-                        QosPid::ExactlyOnce(_) => QoS::ExactlyOnce,
-                    };
                     let _ = self.events_tx.send(MqttEvent::Message {
                         topic: publish.topic_name.to_owned(),
                         payload: publish.payload.to_vec(),
-                        qos,
                         retain: publish.retain,
                     });
                     continue;
@@ -498,15 +490,9 @@ impl IoWorker {
                 }
             }
             Packet::Publish(publish) => {
-                let qos = match publish.qospid {
-                    QosPid::AtMostOnce => QoS::AtMostOnce,
-                    QosPid::AtLeastOnce(_) => QoS::AtLeastOnce,
-                    QosPid::ExactlyOnce(_) => QoS::ExactlyOnce,
-                };
                 let _ = self.events_tx.send(MqttEvent::Message {
                     topic: publish.topic_name.to_owned(),
                     payload: publish.payload.to_vec(),
-                    qos,
                     retain: publish.retain,
                 });
                 match publish.qospid {
@@ -529,14 +515,10 @@ impl IoWorker {
                     .pending_subscription_topic
                     .clone()
                     .unwrap_or_else(|| "<unknown>".to_owned());
-                let qos = suback.return_codes.first().and_then(|code| match code {
-                    mqttrs::SubscribeReturnCodes::Success(qos) => Some(*qos),
-                    mqttrs::SubscribeReturnCodes::Failure => None,
-                }).unwrap_or(QoS::AtMostOnce);
 
                 let success = suback.return_codes.iter().all(|code| matches!(code, mqttrs::SubscribeReturnCodes::Success(_)));
                 if success {
-                    let _ = self.events_tx.send(MqttEvent::SubscriptionAcknowledged { topic, qos });
+                    let _ = self.events_tx.send(MqttEvent::SubscriptionAcknowledged { topic });
                 } else {
                     let _ = self.events_tx.send(MqttEvent::SubscriptionFailed {
                         topic,
