@@ -336,19 +336,16 @@ impl IoWorker {
     }
 
     async fn connect_once(&self) -> Result<(TcpStream, Vec<u8>), MqttError> {
-        let stream = timeout(
+        let mut stream = timeout(
             CONNECT_TIMEOUT,
             TcpStream::connect(&self.server_address),
         )
         .await
         .map_err(|_| MqttError::Timeout("connect timeout".to_owned()))??;
-        let mut stream = stream;
         stream.set_nodelay(true)?;
 
         let connect_packet = self.build_connect_packet();
-        let frame = self.encode_packet(&connect_packet)?;
-        stream.write_all(&frame).await?;
-        stream.flush().await?;
+        self.send_packet(&mut stream, &connect_packet).await?;
 
         let mut recv_buf = Vec::new();
         let mut scratch = [0u8; 4096];
@@ -445,9 +442,7 @@ impl IoWorker {
             }
             MqttCommand::Shutdown { reply } => {
                 let packet = Packet::Disconnect;
-                let frame = self.encode_packet(&packet)?;
-                stream.write_all(&frame).await?;
-                stream.flush().await?;
+                self.send_packet(stream, &packet).await?;
                 let _ = stream.shutdown().await;
                 self.shutting_down = true;
                 let _ = reply.send(Ok(()));
@@ -595,16 +590,13 @@ impl IoWorker {
         stream: &mut TcpStream,
         packet: &Packet<'_>,
     ) -> Result<(), MqttError> {
-        let frame = self.encode_packet(packet)?;
-        stream.write_all(&frame).await?;
+        let mut frame_buffer = [0u8; 8192];
+        let len = encode_slice(packet, &mut frame_buffer)?;
+        let frame = &frame_buffer[..len];
+
+        stream.write_all(frame).await?;
         stream.flush().await?;
         Ok(())
-    }
-
-    fn encode_packet(&self,packet: &Packet<'_>) -> Result<Vec<u8>, MqttError> {
-        let mut frame = [0u8; 8192];
-        let len = encode_slice(packet, &mut frame)?;
-        Ok(frame[..len].to_vec())
     }
 }
 
