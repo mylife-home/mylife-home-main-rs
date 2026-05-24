@@ -1,4 +1,4 @@
 pub mod bus;
 
 pub use mqttrs::QoS;
-pub use bus::client::{MqttClient, MqttConfig, MqttError, MqttEvent};
+pub use bus::client::{MqttClient, MqttError, MqttEvent};

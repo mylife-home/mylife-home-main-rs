@@ -40,21 +40,6 @@ const RECEIVE_QUEUE_CAPACITY: usize = 128;
 const TRANSMIT_QUEUE_CAPACITY: usize = 128;
 
 #[derive(Debug, Clone)]
-pub struct MqttConfig {
-    pub server_address: String,
-    pub instance_name: String,
-}
-
-impl Default for MqttConfig {
-    fn default() -> Self {
-        Self {
-            server_address: "localhost:1883".to_owned(),
-            instance_name: "common-mqtt-client".to_owned(),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub enum MqttEvent {
     Connected,
     Disconnected {
@@ -138,15 +123,24 @@ pub struct MqttClient {
 }
 
 impl MqttClient {
-    pub async fn connect(config: MqttConfig) -> Result<Self, MqttError> {
-        validate_config(&config)?;
+    pub async fn connect(instance_name: String, server_address: String) -> Result<Self, MqttError> {
+        if instance_name.trim().is_empty() {
+            return Err(MqttError::InvalidConfig(
+                "instance_name must not be empty".to_owned(),
+            ));
+        }
+        if server_address.trim().is_empty() {
+            return Err(MqttError::InvalidConfig(
+                "server_address must not be empty".to_owned(),
+            ));
+        }
 
         let (command_tx, command_rx) = mpsc::channel(TRANSMIT_QUEUE_CAPACITY);
         let (events_tx, _) = broadcast::channel(RECEIVE_QUEUE_CAPACITY);
         let woker_events = events_tx.clone();
 
         tokio::spawn(async move {
-            let mut woker = IoWorker::new(config, command_rx, woker_events);
+            let mut woker = IoWorker::new(instance_name, server_address, command_rx, woker_events);
             woker.run().await;
         });
 
@@ -210,7 +204,8 @@ impl MqttClient {
 }
 
 struct IoWorker {
-    config: MqttConfig,
+    instance_name: String,
+    server_address: String,
     command_rx: mpsc::Receiver<MqttCommand>,
     events_tx: broadcast::Sender<MqttEvent>,
     pending_commands: VecDeque<MqttCommand>,
@@ -223,12 +218,14 @@ struct IoWorker {
 
 impl IoWorker {
     fn new(
-        config: MqttConfig,
+        instance_name: String,
+        server_address: String,
         command_rx: mpsc::Receiver<MqttCommand>,
         events_tx: broadcast::Sender<MqttEvent>,
     ) -> Self {
         Self {
-            config,
+            instance_name,
+            server_address,
             command_rx,
             events_tx,
             pending_commands: VecDeque::new(),
@@ -341,7 +338,7 @@ impl IoWorker {
     async fn connect_once(&self) -> Result<(TcpStream, Vec<u8>), MqttError> {
         let stream = timeout(
             CONNECT_TIMEOUT,
-            TcpStream::connect(&self.config.server_address),
+            TcpStream::connect(&self.server_address),
         )
         .await
         .map_err(|_| MqttError::Timeout("connect timeout".to_owned()))??;
@@ -553,7 +550,7 @@ impl IoWorker {
         Packet::Connect(Connect {
             protocol: Protocol::MQTT311,
             keep_alive: KEEP_ALIVE.as_secs() as u16,
-            client_id: &self.config.instance_name,
+            client_id: &self.instance_name,
             clean_session: true,
             last_will: None,
             username: None,
@@ -603,20 +600,6 @@ impl IoWorker {
         stream.flush().await?;
         Ok(())
     }
-}
-
-fn validate_config(config: &MqttConfig) -> Result<(), MqttError> {
-    if config.instance_name.trim().is_empty() {
-        return Err(MqttError::InvalidConfig(
-            "instance_name must not be empty".to_owned(),
-        ));
-    }
-    if config.server_address.trim().is_empty() {
-        return Err(MqttError::InvalidConfig(
-            "server_address must not be empty".to_owned(),
-        ));
-    }
-    Ok(())
 }
 
 fn encode_packet(packet: &Packet<'_>) -> Result<Vec<u8>, MqttError> {
