@@ -3,13 +3,13 @@ use std::fmt;
 use std::time::Duration;
 
 use mqttrs::{
-    clone_packet, decode_slice, encode_slice, Connect, ConnectReturnCode, Packet, Pid, Protocol,
-    Publish, QoS, QosPid, Subscribe, SubscribeTopic, Unsubscribe,
+    Connect, ConnectReturnCode, Packet, Pid, Protocol, Publish, QoS, QosPid, Subscribe,
+    SubscribeTopic, Unsubscribe, clone_packet, decode_slice, encode_slice,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio::time::{self, interval, MissedTickBehavior, timeout};
+use tokio::time::{self, MissedTickBehavior, interval, timeout};
 
 /// Keep-alive interval for MQTT connection. The client will send a ping to the broker at half this interval, and
 /// expect a response within the full interval. If the broker does not respond within the full interval, the client
@@ -57,7 +57,9 @@ impl Default for MqttConfig {
 #[derive(Debug, Clone)]
 pub enum MqttEvent {
     Connected,
-    Disconnected { reason: String },
+    Disconnected {
+        reason: String,
+    },
     Error(String),
     Message {
         topic: String,
@@ -79,6 +81,7 @@ pub enum MqttError {
     Io(std::io::Error),
     Codec(mqttrs::Error),
     CommandClosed,
+    CommandQueueFull,
     ConnectionRefused(String),
     Timeout(String),
 }
@@ -90,6 +93,7 @@ impl fmt::Display for MqttError {
             Self::Io(error) => write!(f, "io error: {error}"),
             Self::Codec(error) => write!(f, "codec error: {error}"),
             Self::CommandClosed => write!(f, "mqtt command channel closed"),
+            Self::CommandQueueFull => write!(f, "mqtt command queue full"),
             Self::ConnectionRefused(reason) => write!(f, "connection refused: {reason}"),
             Self::Timeout(reason) => write!(f, "timeout: {reason}"),
         }
@@ -116,15 +120,12 @@ enum MqttCommand {
         topic: String,
         payload: Vec<u8>,
         retain: bool,
-        reply: oneshot::Sender<Result<(), MqttError>>,
     },
     Subscribe {
         topic: String,
-        reply: oneshot::Sender<Result<(), MqttError>>,
     },
     Unsubscribe {
         topic: String,
-        reply: oneshot::Sender<Result<(), MqttError>>,
     },
     Shutdown {
         reply: oneshot::Sender<Result<(), MqttError>>,
@@ -159,42 +160,43 @@ impl MqttClient {
         self.events_tx.subscribe()
     }
 
-    pub async fn publish(&self, topic: &str, payload: &[u8], retain: bool) -> Result<(), MqttError> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        self.command_tx
-            .send(MqttCommand::Publish {
-                topic: topic.to_owned(),
-                payload: payload.to_vec(),
-                retain,
-                reply: reply_tx,
-            })
-            .await
-            .map_err(|_| MqttError::CommandClosed)?;
-        reply_rx.await.map_err(|_| MqttError::CommandClosed)?
+    /// Publish a message to the specified topic with the given payload and retain flag. This method will return an
+    /// error if the command queue is full or closed, but it does not wait for the message to be sent to the broker.
+    /// The client will handle sending the message in the background, and any errors that occur during transmission
+    /// will be reported through the event channel.
+    pub fn publish(&self, topic: &str, payload: &[u8], retain: bool) -> Result<(), MqttError> {
+        self.try_send_command(MqttCommand::Publish {
+            topic: topic.to_owned(),
+            payload: payload.to_vec(),
+            retain,
+        })
     }
 
-    pub async fn subscribe(&self, topic: &str) -> Result<(), MqttError> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        self.command_tx
-            .send(MqttCommand::Subscribe {
-                topic: topic.to_owned(),
-                reply: reply_tx,
-            })
-            .await
-            .map_err(|_| MqttError::CommandClosed)?;
-        reply_rx.await.map_err(|_| MqttError::CommandClosed)?
+    /// Subscribe to the specified topic. This method will return an error if the command queue is full or closed,
+    /// but it does not wait for the subscription to be acknowledged by the broker. The client will handle sending the
+    /// subscription request in the background, and the result of the subscription attempt (success or failure) will be
+    /// reported through the event channel.
+    pub fn subscribe(&self, topic: &str) -> Result<(), MqttError> {
+        self.try_send_command(MqttCommand::Subscribe {
+            topic: topic.to_owned(),
+        })
     }
 
-    pub async fn unsubscribe(&self, topic: &str) -> Result<(), MqttError> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        self.command_tx
-            .send(MqttCommand::Unsubscribe {
-                topic: topic.to_owned(),
-                reply: reply_tx,
-            })
-            .await
-            .map_err(|_| MqttError::CommandClosed)?;
-        reply_rx.await.map_err(|_| MqttError::CommandClosed)?
+    /// Unsubscribe from the specified topic. This method will return an error if the command queue is full or closed,
+    /// but it does not wait for the unsubscription to be acknowledged by the broker. The client will handle sending the
+    /// unsubscription request in the background, and the result of the unsubscription attempt (success or failure) will be
+    /// reported through the event channel.
+    pub fn unsubscribe(&self, topic: &str) -> Result<(), MqttError> {
+        self.try_send_command(MqttCommand::Unsubscribe {
+            topic: topic.to_owned(),
+        })
+    }
+
+    fn try_send_command(&self, command: MqttCommand) -> Result<(), MqttError> {
+        self.command_tx.try_send(command).map_err(|e| match e {
+            mpsc::error::TrySendError::Full(_) => MqttError::CommandQueueFull,
+            mpsc::error::TrySendError::Closed(_) => MqttError::CommandClosed,
+        })
     }
 
     pub async fn shutdown(&self) -> Result<(), MqttError> {
@@ -262,7 +264,10 @@ impl IoWorker {
                         self.connected = true;
                         self.reconnect_delay = Duration::ZERO;
                         let _ = self.events_tx.send(MqttEvent::Connected);
-                        if let Err(error) = self.flush_pending_commands(stream.as_mut().unwrap(), &mut recv_buf).await {
+                        if let Err(error) = self
+                            .flush_pending_commands(stream.as_mut().unwrap(), &mut recv_buf)
+                            .await
+                        {
                             let _ = self.events_tx.send(MqttEvent::Error(error.to_string()));
                             self.connected = false;
                             continue;
@@ -334,9 +339,12 @@ impl IoWorker {
     }
 
     async fn connect_once(&self) -> Result<(TcpStream, Vec<u8>), MqttError> {
-        let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&self.config.server_address))
-            .await
-            .map_err(|_| MqttError::Timeout("connect timeout".to_owned()))??;
+        let stream = timeout(
+            CONNECT_TIMEOUT,
+            TcpStream::connect(&self.config.server_address),
+        )
+        .await
+        .map_err(|_| MqttError::Timeout("connect timeout".to_owned()))??;
         let mut stream = stream;
         stream.set_nodelay(true)?;
 
@@ -415,28 +423,28 @@ impl IoWorker {
         Ok(())
     }
 
-    async fn handle_command(&mut self, stream: &mut TcpStream, command: MqttCommand) -> Result<(), MqttError> {
+    async fn handle_command(
+        &mut self,
+        stream: &mut TcpStream,
+        command: MqttCommand,
+    ) -> Result<(), MqttError> {
         match command {
             MqttCommand::Publish {
                 topic,
                 payload,
                 retain,
-                reply,
             } => {
                 let packet = self.build_publish_packet(&topic, &payload, retain);
                 self.send_packet(stream, &packet).await?;
-                let _ = reply.send(Ok(()));
             }
-            MqttCommand::Subscribe { topic, reply } => {
+            MqttCommand::Subscribe { topic } => {
                 self.pending_subscription_topic = Some(topic.clone());
                 let packet = self.build_subscribe_packet(&topic);
                 self.send_packet(stream, &packet).await?;
-                let _ = reply.send(Ok(()));
             }
-            MqttCommand::Unsubscribe { topic, reply } => {
+            MqttCommand::Unsubscribe { topic } => {
                 let packet = self.build_unsubscribe_packet(&topic);
                 self.send_packet(stream, &packet).await?;
-                let _ = reply.send(Ok(()));
             }
             MqttCommand::Shutdown { reply } => {
                 let packet = Packet::Disconnect;
@@ -514,9 +522,14 @@ impl IoWorker {
                     .clone()
                     .unwrap_or_else(|| "<unknown>".to_owned());
 
-                let success = suback.return_codes.iter().all(|code| matches!(code, mqttrs::SubscribeReturnCodes::Success(_)));
+                let success = suback
+                    .return_codes
+                    .iter()
+                    .all(|code| matches!(code, mqttrs::SubscribeReturnCodes::Success(_)));
                 if success {
-                    let _ = self.events_tx.send(MqttEvent::SubscriptionAcknowledged { topic });
+                    let _ = self
+                        .events_tx
+                        .send(MqttEvent::SubscriptionAcknowledged { topic });
                 } else {
                     let _ = self.events_tx.send(MqttEvent::SubscriptionFailed {
                         topic,
@@ -564,10 +577,13 @@ impl IoWorker {
     }
 
     fn build_subscribe_packet(&self, topic: &str) -> Packet<'_> {
-        Packet::Subscribe(Subscribe::new(Pid::new(), vec![SubscribeTopic {
-            topic_path: topic.to_owned().into(),
-            qos: QoS::AtMostOnce,
-        }]))
+        Packet::Subscribe(Subscribe::new(
+            Pid::new(),
+            vec![SubscribeTopic {
+                topic_path: topic.to_owned().into(),
+                qos: QoS::AtMostOnce,
+            }],
+        ))
     }
 
     fn build_unsubscribe_packet(&self, topic: &str) -> Packet<'_> {
@@ -577,7 +593,11 @@ impl IoWorker {
         })
     }
 
-    async fn send_packet(&self, stream: &mut TcpStream, packet: &Packet<'_>) -> Result<(), MqttError> {
+    async fn send_packet(
+        &self,
+        stream: &mut TcpStream,
+        packet: &Packet<'_>,
+    ) -> Result<(), MqttError> {
         let frame = encode_packet(packet)?;
         stream.write_all(&frame).await?;
         stream.flush().await?;
@@ -608,7 +628,7 @@ fn encode_packet(packet: &Packet<'_>) -> Result<Vec<u8>, MqttError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mqttrs::{decode_slice, encode_slice, Packet};
+    use mqttrs::{Packet, decode_slice, encode_slice};
 
     #[test]
     fn connect_packet_roundtrip() {

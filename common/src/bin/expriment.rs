@@ -24,11 +24,9 @@ async fn main() {
 
     client
         .subscribe("#")
-        .await
         .expect("failed to subscribe");
     // client
     //     .publish(&topic, payload.as_bytes(), false)
-    //     .await
     //     .expect("failed to publish");
 
     tokio::time::sleep(Duration::from_secs(3)).await;
