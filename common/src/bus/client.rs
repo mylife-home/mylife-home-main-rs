@@ -193,6 +193,9 @@ impl MqttClient {
         })
     }
 
+    /// Gracefully shut down the MQTT client by sending a disconnect command to the broker and closing the connection.
+    /// This method will wait for the shutdown process to complete, and it will return an error if the command queue
+    /// is closed or if any errors occur during shutdown.
     pub async fn shutdown(&self) -> Result<(), MqttError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.command_tx
