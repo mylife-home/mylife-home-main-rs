@@ -11,26 +11,45 @@ use tokio::net::TcpStream;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::{self, interval, MissedTickBehavior, timeout};
 
+/// Keep-alive interval for MQTT connection. The client will send a ping to the broker at half this interval, and
+/// expect a response within the full interval. If the broker does not respond within the full interval, the client
+/// will consider the connection lost and attempt to reconnect.
 const KEEP_ALIVE: Duration = Duration::from_secs(30);
+
+/// Timeout for establishing a connection to the broker and waiting for the CONNACK response. If the client fails to
+/// connect or receive a valid CONNACK within this duration, it will consider the connection attempt failed and try
+/// again (if applicable).
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Base delay for reconnection attempts. When the client loses connection to the broker, it will wait this long
+/// before attempting to reconnect. If the reconnection attempt fails, the client will double the delay and try again,
+/// up to a maximum of `RECONNECT_MAX_DELAY`.
 const RECONNECT_BASE_DELAY: Duration = Duration::from_secs(1);
+
+/// Maximum delay for reconnection attempts. The client will use exponential backoff for reconnection attempts,
+/// starting with `RECONNECT_BASE_DELAY` and doubling the delay after each failed attempt, up to this maximum.
 const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
+
+/// Capacity for the channel used to send commands from the `MqttClient` to the `IoWorker`. This should be large enough
+/// to accommodate bursts of commands without overwhelming the service, but not so large as to consume excessive memory.
+const RECEIVE_QUEUE_CAPACITY: usize = 128;
+
+/// Capacity for the broadcast channel used to send events from the `IoWorker` to all subscribed `MqttClient` instances.
+/// This should be large enough to accommodate bursts of events without losing messages, but not so large as to consume
+/// excessive memory.
+const TRANSMIT_QUEUE_CAPACITY: usize = 128;
 
 #[derive(Debug, Clone)]
 pub struct MqttConfig {
-    pub broker_host: String,
-    pub broker_port: u16,
-    pub client_id: String,
-    pub event_capacity: usize,
+    pub server_address: String,
+    pub instance_name: String,
 }
 
 impl Default for MqttConfig {
     fn default() -> Self {
         Self {
-            broker_host: "localhost".to_owned(),
-            broker_port: 1883,
-            client_id: "common-mqtt-client".to_owned(),
-            event_capacity: 128,
+            server_address: "localhost:1883".to_owned(),
+            instance_name: "common-mqtt-client".to_owned(),
         }
     }
 }
@@ -136,13 +155,13 @@ impl MqttClient {
     pub async fn connect(config: MqttConfig) -> Result<Self, MqttError> {
         validate_config(&config)?;
 
-        let (command_tx, command_rx) = mpsc::channel(128);
-        let (events_tx, _) = broadcast::channel(config.event_capacity);
-        let service_events = events_tx.clone();
+        let (command_tx, command_rx) = mpsc::channel(TRANSMIT_QUEUE_CAPACITY);
+        let (events_tx, _) = broadcast::channel(RECEIVE_QUEUE_CAPACITY);
+        let woker_events = events_tx.clone();
 
         tokio::spawn(async move {
-            let mut service = MqttService::new(config, command_rx, service_events);
-            service.run().await;
+            let mut woker = IoWorker::new(config, command_rx, woker_events);
+            woker.run().await;
         });
 
         Ok(Self {
@@ -205,7 +224,7 @@ impl MqttClient {
     }
 }
 
-struct MqttService {
+struct IoWorker {
     config: MqttConfig,
     command_rx: mpsc::Receiver<MqttCommand>,
     events_tx: broadcast::Sender<MqttEvent>,
@@ -219,7 +238,7 @@ struct MqttService {
     reconnect_delay: Duration,
 }
 
-impl MqttService {
+impl IoWorker {
     fn new(
         config: MqttConfig,
         command_rx: mpsc::Receiver<MqttCommand>,
@@ -336,8 +355,7 @@ impl MqttService {
     }
 
     async fn connect_once(&self) -> Result<(TcpStream, Vec<u8>), MqttError> {
-        let address = (self.config.broker_host.as_str(), self.config.broker_port);
-        let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(address))
+        let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&self.config.server_address))
             .await
             .map_err(|_| MqttError::Timeout("connect timeout".to_owned()))??;
         let mut stream = stream;
@@ -606,7 +624,7 @@ impl MqttService {
         Connect {
             protocol: Protocol::MQTT311,
             keep_alive: KEEP_ALIVE.as_secs() as u16,
-            client_id: &self.config.client_id,
+            client_id: &self.config.instance_name,
             clean_session: true,
             last_will: None,
             username: None,
@@ -670,14 +688,14 @@ impl MqttService {
 }
 
 fn validate_config(config: &MqttConfig) -> Result<(), MqttError> {
-    if config.client_id.trim().is_empty() {
+    if config.instance_name.trim().is_empty() {
         return Err(MqttError::InvalidConfig(
-            "client_id must not be empty".to_owned(),
+            "instance_name must not be empty".to_owned(),
         ));
     }
-    if config.broker_host.trim().is_empty() {
+    if config.server_address.trim().is_empty() {
         return Err(MqttError::InvalidConfig(
-            "broker_host must not be empty".to_owned(),
+            "server_address must not be empty".to_owned(),
         ));
     }
     Ok(())
