@@ -444,7 +444,7 @@ impl IoWorker {
                 let _ = reply.send(Ok(()));
             }
             MqttCommand::Unsubscribe { topic, reply } => {
-                let packet = self.build_unsubscribe_packet(&topic)?;
+                let packet = self.build_unsubscribe_packet(&topic);
                 self.send_packet(stream, &packet).await?;
                 let _ = reply.send(Ok(()));
             }
@@ -557,7 +557,7 @@ impl IoWorker {
     }
 
     fn build_connect_packet(&self) -> Packet<'_> {
-        Connect {
+        Packet::Connect(Connect {
             protocol: Protocol::MQTT311,
             keep_alive: KEEP_ALIVE.as_secs() as u16,
             client_id: &self.config.instance_name,
@@ -565,8 +565,7 @@ impl IoWorker {
             last_will: None,
             username: None,
             password: None,
-        }
-        .into()
+        })
     }
 
     fn build_publish_packet<'a>(
@@ -585,21 +584,17 @@ impl IoWorker {
     }
 
     fn build_subscribe_packet(&self, topic: &str) -> Packet<'_> {
-        let mut topics = Vec::new();
-        topics.push(SubscribeTopic {
+        Packet::Subscribe(Subscribe::new(Pid::new(), vec![SubscribeTopic {
             topic_path: topic.to_owned().into(),
             qos: QoS::AtMostOnce,
-        });
-        Packet::Subscribe(Subscribe::new(Pid::new(), topics))
+        }]))
     }
 
-    fn build_unsubscribe_packet(&self, topic: &str) -> Result<Packet<'_>, MqttError> {
-        let mut topics = Vec::new();
-        topics.push(topic.to_owned().into());
-        Ok(Packet::Unsubscribe(Unsubscribe {
+    fn build_unsubscribe_packet(&self, topic: &str) -> Packet<'_> {
+        Packet::Unsubscribe(Unsubscribe {
             pid: Pid::new(),
-            topics,
-        }))
+            topics: vec![topic.to_owned().into()],
+        })
     }
 
     async fn send_packet(&self, stream: &mut TcpStream, packet: &Packet<'_>) -> Result<(), MqttError> {
