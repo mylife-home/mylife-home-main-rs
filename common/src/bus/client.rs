@@ -346,7 +346,7 @@ impl IoWorker {
         stream.set_nodelay(true)?;
 
         let connect_packet = self.build_connect_packet();
-        let frame = encode_packet(&connect_packet)?;
+        let frame = self.encode_packet(&connect_packet)?;
         stream.write_all(&frame).await?;
         stream.flush().await?;
 
@@ -445,7 +445,7 @@ impl IoWorker {
             }
             MqttCommand::Shutdown { reply } => {
                 let packet = Packet::Disconnect;
-                let frame = encode_packet(&packet)?;
+                let frame = self.encode_packet(&packet)?;
                 stream.write_all(&frame).await?;
                 stream.flush().await?;
                 let _ = stream.shutdown().await;
@@ -595,17 +595,17 @@ impl IoWorker {
         stream: &mut TcpStream,
         packet: &Packet<'_>,
     ) -> Result<(), MqttError> {
-        let frame = encode_packet(packet)?;
+        let frame = self.encode_packet(packet)?;
         stream.write_all(&frame).await?;
         stream.flush().await?;
         Ok(())
     }
-}
 
-fn encode_packet(packet: &Packet<'_>) -> Result<Vec<u8>, MqttError> {
-    let mut frame = [0u8; 8192];
-    let len = encode_slice(packet, &mut frame)?;
-    Ok(frame[..len].to_vec())
+    fn encode_packet(&self,packet: &Packet<'_>) -> Result<Vec<u8>, MqttError> {
+        let mut frame = [0u8; 8192];
+        let len = encode_slice(packet, &mut frame)?;
+        Ok(frame[..len].to_vec())
+    }
 }
 
 #[cfg(test)]
