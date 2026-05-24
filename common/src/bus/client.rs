@@ -11,18 +11,16 @@ use tokio::net::TcpStream;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::{self, interval, MissedTickBehavior, timeout};
 
+const KEEP_ALIVE: Duration = Duration::from_secs(30);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const RECONNECT_BASE_DELAY: Duration = Duration::from_secs(1);
+const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
+
 #[derive(Debug, Clone)]
 pub struct MqttConfig {
     pub broker_host: String,
     pub broker_port: u16,
     pub client_id: String,
-    pub clean_session: bool,
-    pub keep_alive: Duration,
-    pub username: Option<String>,
-    pub password: Option<Vec<u8>>,
-    pub connect_timeout: Duration,
-    pub reconnect_base_delay: Duration,
-    pub reconnect_max_delay: Duration,
     pub event_capacity: usize,
 }
 
@@ -32,13 +30,6 @@ impl Default for MqttConfig {
             broker_host: "localhost".to_owned(),
             broker_port: 1883,
             client_id: "common-mqtt-client".to_owned(),
-            clean_session: true,
-            keep_alive: Duration::from_secs(30),
-            username: None,
-            password: None,
-            connect_timeout: Duration::from_secs(5),
-            reconnect_base_delay: Duration::from_secs(1),
-            reconnect_max_delay: Duration::from_secs(30),
             event_capacity: 128,
         }
     }
@@ -252,7 +243,7 @@ impl MqttService {
     async fn run(&mut self) {
         let mut stream: Option<TcpStream> = None;
         let mut recv_buf = Vec::new();
-        let mut ping_interval = interval(self.config.keep_alive / 2);
+        let mut ping_interval = interval(KEEP_ALIVE / 2);
         ping_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
@@ -282,9 +273,9 @@ impl MqttService {
                     Err(error) => {
                         let _ = self.events_tx.send(MqttEvent::Error(error.to_string()));
                         self.reconnect_delay = if self.reconnect_delay.is_zero() {
-                            self.config.reconnect_base_delay
+                            RECONNECT_BASE_DELAY
                         } else {
-                            std::cmp::min(self.reconnect_delay * 2, self.config.reconnect_max_delay)
+                            std::cmp::min(self.reconnect_delay * 2, RECONNECT_MAX_DELAY)
                         };
                         time::sleep(self.reconnect_delay).await;
                         continue;
@@ -346,7 +337,7 @@ impl MqttService {
 
     async fn connect_once(&self) -> Result<(TcpStream, Vec<u8>), MqttError> {
         let address = (self.config.broker_host.as_str(), self.config.broker_port);
-        let stream = timeout(self.config.connect_timeout, TcpStream::connect(address))
+        let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(address))
             .await
             .map_err(|_| MqttError::Timeout("connect timeout".to_owned()))??;
         let mut stream = stream;
@@ -361,7 +352,7 @@ impl MqttService {
         let mut scratch = [0u8; 4096];
 
         loop {
-            let n = timeout(self.config.connect_timeout, stream.read(&mut scratch))
+            let n = timeout(CONNECT_TIMEOUT, stream.read(&mut scratch))
                 .await
                 .map_err(|_| MqttError::Timeout("connack timeout".to_owned()))??;
             if n == 0 {
@@ -614,12 +605,12 @@ impl MqttService {
     fn build_connect_packet(&self) -> Packet<'_> {
         Connect {
             protocol: Protocol::MQTT311,
-            keep_alive: self.config.keep_alive.as_secs() as u16,
+            keep_alive: KEEP_ALIVE.as_secs() as u16,
             client_id: &self.config.client_id,
-            clean_session: self.config.clean_session,
+            clean_session: true,
             last_will: None,
-            username: self.config.username.as_deref(),
-            password: self.config.password.as_deref(),
+            username: None,
+            password: None,
         }
         .into()
     }
@@ -687,21 +678,6 @@ fn validate_config(config: &MqttConfig) -> Result<(), MqttError> {
     if config.broker_host.trim().is_empty() {
         return Err(MqttError::InvalidConfig(
             "broker_host must not be empty".to_owned(),
-        ));
-    }
-    if config.keep_alive.is_zero() {
-        return Err(MqttError::InvalidConfig(
-            "keep_alive must be greater than zero".to_owned(),
-        ));
-    }
-    if config.reconnect_base_delay.is_zero() || config.reconnect_max_delay.is_zero() {
-        return Err(MqttError::InvalidConfig(
-            "reconnect delays must be greater than zero".to_owned(),
-        ));
-    }
-    if config.connect_timeout.is_zero() {
-        return Err(MqttError::InvalidConfig(
-            "connect_timeout must be greater than zero".to_owned(),
         ));
     }
     Ok(())

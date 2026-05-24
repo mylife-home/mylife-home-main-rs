@@ -19,13 +19,6 @@ async fn main() {
         broker_host: host,
         broker_port: port,
         client_id,
-        clean_session: true,
-        keep_alive: Duration::from_secs(30),
-        username: env::var("BROKER_USERNAME").ok(),
-        password: env::var("BROKER_PASSWORD").ok().map(|value| value.into_bytes()),
-        connect_timeout: Duration::from_secs(5),
-        reconnect_base_delay: Duration::from_secs(1),
-        reconnect_max_delay: Duration::from_secs(20),
         event_capacity: 128,
     };
 
