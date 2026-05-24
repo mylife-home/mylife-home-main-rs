@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use common::{MqttClient, MqttConfig, QoS};
+use common::{MqttClient, MqttConfig};
 
 #[tokio::main]
 async fn main() {
@@ -23,11 +23,11 @@ async fn main() {
     });
 
     client
-        .subscribe("#", QoS::AtMostOnce)
+        .subscribe("#")
         .await
         .expect("failed to subscribe");
     // client
-    //     .publish(&topic, payload.as_bytes(), QoS::AtMostOnce, false)
+    //     .publish(&topic, payload.as_bytes(), false)
     //     .await
     //     .expect("failed to publish");
 

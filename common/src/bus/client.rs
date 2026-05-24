@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::fmt;
 use std::time::Duration;
 
@@ -119,13 +119,11 @@ enum MqttCommand {
     Publish {
         topic: String,
         payload: Vec<u8>,
-        qos: QoS,
         retain: bool,
         reply: oneshot::Sender<Result<(), MqttError>>,
     },
     Subscribe {
         topic: String,
-        qos: QoS,
         reply: oneshot::Sender<Result<(), MqttError>>,
     },
     Unsubscribe {
@@ -135,15 +133,6 @@ enum MqttCommand {
     Shutdown {
         reply: oneshot::Sender<Result<(), MqttError>>,
     },
-}
-
-#[derive(Debug)]
-struct PendingPublish {
-    pid: Pid,
-    topic: String,
-    payload: Vec<u8>,
-    qos: QoS,
-    retain: bool,
 }
 
 pub struct MqttClient {
@@ -174,13 +163,12 @@ impl MqttClient {
         self.events_tx.subscribe()
     }
 
-    pub async fn publish(&self, topic: &str, payload: &[u8], qos: QoS, retain: bool) -> Result<(), MqttError> {
+    pub async fn publish(&self, topic: &str, payload: &[u8], retain: bool) -> Result<(), MqttError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.command_tx
             .send(MqttCommand::Publish {
                 topic: topic.to_owned(),
                 payload: payload.to_vec(),
-                qos,
                 retain,
                 reply: reply_tx,
             })
@@ -189,12 +177,11 @@ impl MqttClient {
         reply_rx.await.map_err(|_| MqttError::CommandClosed)?
     }
 
-    pub async fn subscribe(&self, topic: &str, qos: QoS) -> Result<(), MqttError> {
+    pub async fn subscribe(&self, topic: &str) -> Result<(), MqttError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.command_tx
             .send(MqttCommand::Subscribe {
                 topic: topic.to_owned(),
-                qos,
                 reply: reply_tx,
             })
             .await
@@ -229,8 +216,6 @@ struct IoWorker {
     command_rx: mpsc::Receiver<MqttCommand>,
     events_tx: broadcast::Sender<MqttEvent>,
     pending_commands: VecDeque<MqttCommand>,
-    desired_subscriptions: HashMap<String, QoS>,
-    pending_publishes: HashMap<u16, PendingPublish>,
     pending_qos2: HashSet<u16>,
     pending_subscription_topic: Option<String>,
     connected: bool,
@@ -249,8 +234,6 @@ impl IoWorker {
             command_rx,
             events_tx,
             pending_commands: VecDeque::new(),
-            desired_subscriptions: HashMap::new(),
-            pending_publishes: HashMap::new(),
             pending_qos2: HashSet::new(),
             pending_subscription_topic: None,
             connected: false,
@@ -439,22 +422,6 @@ impl IoWorker {
             return Ok(());
         }
 
-        for (topic, qos) in self.desired_subscriptions.clone() {
-            let packet = self.build_subscribe_packet(&topic, qos)?;
-            self.send_packet(stream, &packet).await?;
-        }
-
-        for pending in self.pending_publishes.values() {
-            let packet = self.build_publish_packet(
-                &pending.topic,
-                &pending.payload,
-                pending.qos,
-                pending.retain,
-                Some(pending.pid),
-            )?;
-            self.send_packet(stream, &packet).await?;
-        }
-
         Ok(())
     }
 
@@ -463,48 +430,20 @@ impl IoWorker {
             MqttCommand::Publish {
                 topic,
                 payload,
-                qos,
                 retain,
                 reply,
             } => {
-                if matches!(qos, QoS::ExactlyOnce) {
-                    let _ = reply.send(Err(MqttError::UnsupportedQoS(qos)));
-                    return Err(MqttError::UnsupportedQoS(qos));
-                }
-
-                let pid = match qos {
-                    QoS::AtMostOnce => None,
-                    QoS::AtLeastOnce => Some(Pid::new()),
-                    QoS::ExactlyOnce => unreachable!(),
-                };
-
-                let packet = self.build_publish_packet(&topic, &payload, qos, retain, pid)?;
+                let packet = self.build_publish_packet(&topic, &payload, retain);
                 self.send_packet(stream, &packet).await?;
-
-                if let Some(pid) = pid {
-                    self.pending_publishes.insert(
-                        pid.get(),
-                        PendingPublish {
-                            pid,
-                            topic,
-                            payload,
-                            qos,
-                            retain,
-                        },
-                    );
-                }
-
                 let _ = reply.send(Ok(()));
             }
-            MqttCommand::Subscribe { topic, qos, reply } => {
-                self.desired_subscriptions.insert(topic.clone(), qos);
+            MqttCommand::Subscribe { topic, reply } => {
                 self.pending_subscription_topic = Some(topic.clone());
-                let packet = self.build_subscribe_packet(&topic, qos)?;
+                let packet = self.build_subscribe_packet(&topic);
                 self.send_packet(stream, &packet).await?;
                 let _ = reply.send(Ok(()));
             }
             MqttCommand::Unsubscribe { topic, reply } => {
-                self.desired_subscriptions.remove(&topic);
                 let packet = self.build_unsubscribe_packet(&topic)?;
                 self.send_packet(stream, &packet).await?;
                 let _ = reply.send(Ok(()));
@@ -581,9 +520,6 @@ impl IoWorker {
                     }
                 }
             }
-            Packet::Puback(pid) => {
-                self.pending_publishes.remove(&pid.get());
-            }
             Packet::Pubrel(pid) => {
                 self.send_packet(stream, &Packet::Pubcomp(pid)).await?;
                 self.pending_qos2.remove(&pid.get());
@@ -637,37 +573,24 @@ impl IoWorker {
         &self,
         topic: &'a str,
         payload: &'a [u8],
-        qos: QoS,
         retain: bool,
-        pid: Option<Pid>,
-    ) -> Result<Packet<'a>, MqttError> {
-        let qospid = match (qos, pid) {
-            (QoS::AtMostOnce, None) => QosPid::AtMostOnce,
-            (QoS::AtLeastOnce, Some(pid)) => QosPid::AtLeastOnce(pid),
-            (QoS::ExactlyOnce, _) => return Err(MqttError::UnsupportedQoS(qos)),
-            _ => {
-                return Err(MqttError::InvalidConfig(
-                    "publish qos/pid mismatch".to_owned(),
-                ))
-            }
-        };
-
-        Ok(Packet::Publish(Publish {
+    ) -> Packet<'a> {
+        Packet::Publish(Publish {
             dup: false,
-            qospid,
+            qospid: QosPid::AtMostOnce,
             retain,
             topic_name: topic,
             payload,
-        }))
+        })
     }
 
-    fn build_subscribe_packet(&self, topic: &str, qos: QoS) -> Result<Packet<'_>, MqttError> {
+    fn build_subscribe_packet(&self, topic: &str) -> Packet<'_> {
         let mut topics = Vec::new();
         topics.push(SubscribeTopic {
             topic_path: topic.to_owned().into(),
-            qos,
+            qos: QoS::AtMostOnce,
         });
-        Ok(Packet::Subscribe(Subscribe::new(Pid::new(), topics)))
+        Packet::Subscribe(Subscribe::new(Pid::new(), topics))
     }
 
     fn build_unsubscribe_packet(&self, topic: &str) -> Result<Packet<'_>, MqttError> {
