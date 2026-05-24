@@ -81,7 +81,6 @@ pub enum MqttError {
     CommandClosed,
     ConnectionRefused(String),
     Timeout(String),
-    UnsupportedQoS(QoS),
 }
 
 impl fmt::Display for MqttError {
@@ -93,7 +92,6 @@ impl fmt::Display for MqttError {
             Self::CommandClosed => write!(f, "mqtt command channel closed"),
             Self::ConnectionRefused(reason) => write!(f, "connection refused: {reason}"),
             Self::Timeout(reason) => write!(f, "timeout: {reason}"),
-            Self::UnsupportedQoS(qos) => write!(f, "unsupported qos: {qos:?}"),
         }
     }
 }
