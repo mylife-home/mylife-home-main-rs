@@ -298,6 +298,7 @@ impl IoWorker {
                     let _ = existing.shutdown().await;
                 }
                 recv_buf.clear();
+                self.pending_subscription_topic = None;
 
                 match self.connect_once().await {
                     Ok((new_stream, new_recv_buf)) => {
