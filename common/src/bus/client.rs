@@ -41,13 +41,18 @@ const RECEIVE_QUEUE_CAPACITY: usize = 128;
 /// excessive memory.
 const TRANSMIT_QUEUE_CAPACITY: usize = 128;
 
+/// MQTT events emitted by the `MqttClient` to indicate changes in connection status, incoming messages, and errors.
 #[derive(Debug, Clone)]
 pub enum MqttEvent {
+    /// Emitted when the client successfully establishes a connection to the broker.
     Connected,
+    /// Emitted when the client loses connection to the broker, either due to an error or because the broker closed the connection.
     Disconnected {
         reason: String,
     },
+    /// Emitted when an error occurs in the client or worker, such as a failure to connect, a network error, or a protocol error.
     Error(Arc<MqttError>),
+    /// Emitted when a message is received from the broker on a subscribed topic. The event includes the topic, payload, and retain flag of the message.
     Message {
         topic: String,
         payload: Vec<u8>,
@@ -55,15 +60,36 @@ pub enum MqttEvent {
     },
 }
 
+/// Errors that can occur in the `MqttClient` and `IoWorker`, such as configuration errors, network errors, protocol errors, and command errors.
 #[derive(Debug)]
 pub enum MqttError {
+    /// Indicates that the client was configured with invalid parameters, such as an empty instance name or server
+    /// address.
     InvalidConfig { message: String },
+
+    /// Indicates that an I/O error occurred while communicating with the broker, such as a network error or a failure
+    /// to read or write to the socket.
     Io(std::io::Error),
+
+    /// Indicates that a protocol error occurred while encoding or decoding MQTT packets, such as an invalid packet
+    /// format or an unsupported packet type.
     Codec(mqttrs::Error),
+
+    /// Indicates that a command could not be sent to the worker because the command channel was closed, which likely
+    /// means that the client is shutting down.
     CommandClosed,
+
+    /// Indicates that a command could not be sent to the worker because the command channel is full, which likely
+    /// means that the worker is overwhelmed and cannot process commands in a timely manner.
     CommandQueueFull,
+
+    /// Indicates that the broker refused the connection attempt, usually due to authentication or authorization
+    /// issues.
     ConnectionRefused { reason: String },
+
+    /// Indicates that subscribing to a topic failed.
     SubscriptionFailed { topic: String },
+    /// Indicates that an operation timed out, such as a connection attempt or waiting for a response from the broker.
     Timeout { reason: String },
 }
 
@@ -112,6 +138,14 @@ enum MqttCommand {
     Shutdown,
 }
 
+/// MQTT client for connecting to a broker, publishing messages, and subscribing to topics. The client runs an internal
+/// worker task that manages the connection to the broker and handles sending and receiving MQTT packets.
+/// The client provides a simple API for publishing messages and subscribing to topics, and it emits events for
+/// connection status changes, incoming messages, and errors through a broadcast channel that can be subscribed to
+/// using the `events()` method.
+/// The client automatically handles reconnection with exponential backoff if the connection to the broker is lost,
+/// and it can be gracefully shut down using the `shutdown()` method.
+#[derive(Debug)]
 pub struct MqttClient {
     command_tx: mpsc::Sender<MqttCommand>,
     events_tx: broadcast::Sender<MqttEvent>,
@@ -119,7 +153,10 @@ pub struct MqttClient {
 }
 
 impl MqttClient {
-    pub async fn connect(instance_name: String, server_address: String) -> Result<Self, MqttError> {
+    /// Create a new MQTT client instance with the specified instance name and server address.
+    /// In the background, the client will attempt to connect to the MQTT broker at the specified address and maintain
+    /// the connection, automatically reconnecting if the connection is lost.
+    pub fn create(instance_name: String, server_address: String) -> Result<Self, MqttError> {
         if instance_name.trim().is_empty() {
             return Err(MqttError::InvalidConfig { message: "instance_name must not be empty".to_owned() });
         }
@@ -143,6 +180,11 @@ impl MqttClient {
         })
     }
 
+    /// Subscribe to MQTT events emitted by the client. Each call to this method will return a new receiver that will
+    /// receive all events emitted by the client from the time of subscription onward. If the event channel is full,
+    /// events may be dropped, but the client will continue to operate and emit events as normal. If the event channel
+    /// is closed (which should only happen if the client is shutting down), this method will return a receiver that
+    /// will immediately return an error on `recv()`, and the client will not emit any further events.
     pub fn events(&self) -> broadcast::Receiver<MqttEvent> {
         self.events_tx.subscribe()
     }
@@ -320,7 +362,7 @@ impl IoWorker {
                             }
                         }
                         Err(error) => {
-                            self.emit_event(MqttEvent::Error(Arc::new(MqttError::Io(error))));
+                            self.emit_event(MqttEvent::Error(Arc::new(error.into())));
                             self.connected = false;
                         }
                     }

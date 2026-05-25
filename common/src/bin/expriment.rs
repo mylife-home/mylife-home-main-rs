@@ -8,11 +8,10 @@ async fn main() {
 
     // let payload = env::var("MQTT_PAYLOAD").unwrap_or_else(|_| "hello from common".to_owned());
 
-    let client = MqttClient::connect(
+    let client = MqttClient::create(
         "common-demo-client".to_owned(),
         "rpi-dev-home-main:1883".to_owned(),
     )
-    .await
     .expect("failed to start mqtt client");
 
     let mut events = client.events();
