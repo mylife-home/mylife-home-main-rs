@@ -4,6 +4,8 @@ use common::MqttClient;
 
 #[tokio::main]
 async fn main() {
+    pretty_env_logger::init();
+
     // let payload = env::var("MQTT_PAYLOAD").unwrap_or_else(|_| "hello from common".to_owned());
 
     let client = MqttClient::connect(
@@ -26,5 +28,5 @@ async fn main() {
     //     .expect("failed to publish");
 
     tokio::time::sleep(Duration::from_secs(3)).await;
-    client.shutdown().await.expect("failed to shutdown client");
+    client.shutdown().await;
 }

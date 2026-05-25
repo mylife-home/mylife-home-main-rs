@@ -1,5 +1,5 @@
 use std::collections::{HashSet, VecDeque};
-use std::fmt;
+use std::{fmt, panic};
 use std::time::Duration;
 
 use mqttrs::{
@@ -8,7 +8,8 @@ use mqttrs::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc};
+use tokio::task::JoinHandle;
 use tokio::time::{self, MissedTickBehavior, interval, timeout};
 
 /// Keep-alive interval for MQTT connection. The client will send a ping to the broker at half this interval, and
@@ -112,14 +113,13 @@ enum MqttCommand {
     Unsubscribe {
         topic: String,
     },
-    Shutdown {
-        reply: oneshot::Sender<Result<(), MqttError>>,
-    },
+    Shutdown,
 }
 
 pub struct MqttClient {
     command_tx: mpsc::Sender<MqttCommand>,
     events_tx: broadcast::Sender<MqttEvent>,
+    worker_handle: JoinHandle<()>,
 }
 
 impl MqttClient {
@@ -139,7 +139,7 @@ impl MqttClient {
         let (events_tx, _) = broadcast::channel(RECEIVE_QUEUE_CAPACITY);
         let woker_events = events_tx.clone();
 
-        tokio::spawn(async move {
+        let worker_handle = tokio::spawn(async move {
             let mut woker = IoWorker::new(instance_name, server_address, command_rx, woker_events);
             woker.run().await;
         });
@@ -147,6 +147,7 @@ impl MqttClient {
         Ok(Self {
             command_tx,
             events_tx,
+            worker_handle,
         })
     }
 
@@ -196,13 +197,24 @@ impl MqttClient {
     /// Gracefully shut down the MQTT client by sending a disconnect command to the broker and closing the connection.
     /// This method will wait for the shutdown process to complete, and it will return an error if the command queue
     /// is closed or if any errors occur during shutdown.
-    pub async fn shutdown(&self) -> Result<(), MqttError> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        self.command_tx
-            .send(MqttCommand::Shutdown { reply: reply_tx })
-            .await
-            .map_err(|_| MqttError::CommandClosed)?;
-        reply_rx.await.map_err(|_| MqttError::CommandClosed)?
+    pub async fn shutdown(self) {
+        // If the channel is closed already, the worker is likely already shut down, so we can ignore the error in that case.
+        let _ = self.command_tx
+            .send(MqttCommand::Shutdown)
+            .await;
+
+        if let Err(err) = self.worker_handle.await {
+            if err.is_panic() {
+                // Resume the panic on the main task
+                panic::resume_unwind(err.into_panic());
+            }
+
+            if err.is_cancelled() {
+                panic!("mqtt worker task was cancelled during shutdown");
+            }
+
+            panic!("mqtt worker task join error during shutdown: {err}");
+        }
     }
 }
 
@@ -443,12 +455,11 @@ impl IoWorker {
                 let packet = self.build_unsubscribe_packet(&topic);
                 self.send_packet(stream, &packet).await?;
             }
-            MqttCommand::Shutdown { reply } => {
+            MqttCommand::Shutdown => {
                 let packet = Packet::Disconnect;
                 self.send_packet(stream, &packet).await?;
                 let _ = stream.shutdown().await;
                 self.shutting_down = true;
-                let _ = reply.send(Ok(()));
             }
         }
 
