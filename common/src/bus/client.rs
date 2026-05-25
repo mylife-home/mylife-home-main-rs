@@ -2,6 +2,7 @@ use std::collections::{HashSet, VecDeque};
 use std::{fmt, panic};
 use std::time::Duration;
 
+use log::warn;
 use mqttrs::{
     Connect, ConnectReturnCode, Packet, Pid, Protocol, Publish, QoS, QosPid, Subscribe,
     SubscribeTopic, Unsubscribe, clone_packet, decode_slice, encode_slice,
@@ -52,36 +53,31 @@ pub enum MqttEvent {
         payload: Vec<u8>,
         retain: bool,
     },
-    SubscriptionAcknowledged {
-        topic: String,
-    },
-    SubscriptionFailed {
-        topic: String,
-        reason: String,
-    },
 }
 
 #[derive(Debug)]
 pub enum MqttError {
-    InvalidConfig(String),
+    InvalidConfig { message: String },
     Io(std::io::Error),
     Codec(mqttrs::Error),
     CommandClosed,
     CommandQueueFull,
-    ConnectionRefused(String),
-    Timeout(String),
+    ConnectionRefused { reason: String },
+    SubscriptionFailed { topic: String },
+    Timeout { reason: String },
 }
 
 impl fmt::Display for MqttError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidConfig(message) => write!(f, "invalid config: {message}"),
+            Self::InvalidConfig {message} => write!(f, "invalid config: {message}"),
             Self::Io(error) => write!(f, "io error: {error}"),
             Self::Codec(error) => write!(f, "codec error: {error}"),
             Self::CommandClosed => write!(f, "mqtt command channel closed"),
             Self::CommandQueueFull => write!(f, "mqtt command queue full"),
-            Self::ConnectionRefused(reason) => write!(f, "connection refused: {reason}"),
-            Self::Timeout(reason) => write!(f, "timeout: {reason}"),
+            Self::ConnectionRefused { reason } => write!(f, "connection refused: {reason}"),
+            Self::SubscriptionFailed { topic } => write!(f, "subscription failed on topic '{topic}'"),
+            Self::Timeout { reason } => write!(f, "timeout: {reason}"),
         }
     }
 }
@@ -125,14 +121,10 @@ pub struct MqttClient {
 impl MqttClient {
     pub async fn connect(instance_name: String, server_address: String) -> Result<Self, MqttError> {
         if instance_name.trim().is_empty() {
-            return Err(MqttError::InvalidConfig(
-                "instance_name must not be empty".to_owned(),
-            ));
+            return Err(MqttError::InvalidConfig { message: "instance_name must not be empty".to_owned() });
         }
         if server_address.trim().is_empty() {
-            return Err(MqttError::InvalidConfig(
-                "server_address must not be empty".to_owned(),
-            ));
+            return Err(MqttError::InvalidConfig { message: "server_address must not be empty".to_owned() });
         }
 
         let (command_tx, command_rx) = mpsc::channel(TRANSMIT_QUEUE_CAPACITY);
@@ -224,7 +216,6 @@ struct IoWorker {
     command_rx: mpsc::Receiver<MqttCommand>,
     events_tx: broadcast::Sender<MqttEvent>,
     pending_commands: VecDeque<MqttCommand>,
-    pending_qos2: HashSet<u16>,
     pending_subscription_topic: Option<String>,
     connected: bool,
     shutting_down: bool,
@@ -244,7 +235,6 @@ impl IoWorker {
             command_rx,
             events_tx,
             pending_commands: VecDeque::new(),
-            pending_qos2: HashSet::new(),
             pending_subscription_topic: None,
             connected: false,
             shutting_down: false,
@@ -275,18 +265,18 @@ impl IoWorker {
                         recv_buf = new_recv_buf;
                         self.connected = true;
                         self.reconnect_delay = Duration::ZERO;
-                        let _ = self.events_tx.send(MqttEvent::Connected);
+                        self.emit_event(MqttEvent::Connected);
                         if let Err(error) = self
                             .flush_pending_commands(stream.as_mut().unwrap(), &mut recv_buf)
                             .await
                         {
-                            let _ = self.events_tx.send(MqttEvent::Error(error.to_string()));
+                            self.emit_event(MqttEvent::Error(error.to_string()));
                             self.connected = false;
                             continue;
                         }
                     }
                     Err(error) => {
-                        let _ = self.events_tx.send(MqttEvent::Error(error.to_string()));
+                        self.emit_event(MqttEvent::Error(error.to_string()));
                         self.reconnect_delay = if self.reconnect_delay.is_zero() {
                             RECONNECT_BASE_DELAY
                         } else {
@@ -310,12 +300,12 @@ impl IoWorker {
                         Some(command) => {
                             self.pending_commands.push_back(command);
                             if let Err(error) = self.flush_pending_commands(stream, &mut recv_buf).await {
-                                let _ = self.events_tx.send(MqttEvent::Error(error.to_string()));
+                                self.emit_event(MqttEvent::Error(error.to_string()));
                                 self.connected = false;
                             }
                         }
                         None => {
-                            let _ = self.events_tx.send(MqttEvent::Disconnected { reason: "command channel closed".to_owned() });
+                            self.emit_event(MqttEvent::Disconnected { reason: "command channel closed".to_owned() });
                             let _ = stream.shutdown().await;
                             break;
                         }
@@ -323,7 +313,7 @@ impl IoWorker {
                 }
                 _ = ping_interval.tick() => {
                     if let Err(error) = self.send_packet(stream, &Packet::Pingreq).await {
-                        let _ = self.events_tx.send(MqttEvent::Error(error.to_string()));
+                        self.emit_event(MqttEvent::Error(error.to_string()));
                         self.connected = false;
                     }
                 }
@@ -331,17 +321,17 @@ impl IoWorker {
                     match read_result {
                         Ok(0) => {
                             self.connected = false;
-                            let _ = self.events_tx.send(MqttEvent::Disconnected { reason: "connection closed by peer".to_owned() });
+                            self.emit_event(MqttEvent::Disconnected { reason: "connection closed by peer".to_owned() });
                         }
                         Ok(n) => {
                             recv_buf.extend_from_slice(&read_buf[..n]);
                             if let Err(error) = self.process_received_packets(stream, &mut recv_buf).await {
-                                let _ = self.events_tx.send(MqttEvent::Error(error.to_string()));
+                                self.emit_event(MqttEvent::Error(error.to_string()));
                                 self.connected = false;
                             }
                         }
                         Err(error) => {
-                            let _ = self.events_tx.send(MqttEvent::Error(error.to_string()));
+                            self.emit_event(MqttEvent::Error(error.to_string()));
                             self.connected = false;
                         }
                     }
@@ -356,7 +346,7 @@ impl IoWorker {
             TcpStream::connect(&self.server_address),
         )
         .await
-        .map_err(|_| MqttError::Timeout("connect timeout".to_owned()))??;
+        .map_err(|_| MqttError::Timeout { reason: "connect timeout".to_owned() })??;
         stream.set_nodelay(true)?;
 
         let connect_packet = self.build_connect_packet();
@@ -368,11 +358,11 @@ impl IoWorker {
         loop {
             let n = timeout(CONNECT_TIMEOUT, stream.read(&mut scratch))
                 .await
-                .map_err(|_| MqttError::Timeout("connack timeout".to_owned()))??;
+                .map_err(|_| MqttError::Timeout { reason: "connack timeout".to_owned() })??;
             if n == 0 {
-                return Err(MqttError::ConnectionRefused(
-                    "connection closed before connack".to_owned(),
-                ));
+                return Err(MqttError::ConnectionRefused {
+                    reason: "connection closed before connack".to_owned(),
+                });
             }
 
             recv_buf.extend_from_slice(&scratch[..n]);
@@ -391,13 +381,12 @@ impl IoWorker {
                     if connack.code == ConnectReturnCode::Accepted {
                         return Ok((stream, recv_buf));
                     }
-                    return Err(MqttError::ConnectionRefused(format!(
-                        "broker refused connection: {:?}",
-                        connack.code
-                    )));
+                    return Err(MqttError::ConnectionRefused {
+                        reason: format!("broker refused connection: {:?}", connack.code)
+                    });
                 }
                 Packet::Publish(publish) => {
-                    let _ = self.events_tx.send(MqttEvent::Message {
+                    self.emit_event(MqttEvent::Message {
                         topic: publish.topic_name.to_owned(),
                         payload: publish.payload.to_vec(),
                         retain: publish.retain,
@@ -405,9 +394,9 @@ impl IoWorker {
                     continue;
                 }
                 _ => {
-                    return Err(MqttError::InvalidConfig(format!(
-                        "expected connack during handshake, got {packet:?}"
-                    )));
+                    return Err(MqttError::ConnectionRefused {
+                        reason: format!("expected connack during handshake, got {packet:?}")
+                    });
                 }
             }
         }
@@ -481,7 +470,7 @@ impl IoWorker {
             let packet = decode_slice(&clone_buf[..packet_len])?
                 .ok_or_else(|| MqttError::Codec(mqttrs::Error::InvalidHeader))?;
             recv_buf.drain(..packet_len);
-            self.handle_incoming_packet(stream, packet).await?;
+            self.handle_incoming_packet(packet).await?;
             clone_buf = vec![0u8; recv_buf.len().max(1024)];
         }
         Ok(())
@@ -489,38 +478,26 @@ impl IoWorker {
 
     async fn handle_incoming_packet(
         &mut self,
-        stream: &mut TcpStream,
         packet: Packet<'_>,
     ) -> Result<(), MqttError> {
         match packet {
             Packet::Connack(connack) => {
                 if connack.code != ConnectReturnCode::Accepted {
-                    return Err(MqttError::ConnectionRefused(format!(
-                        "broker refused connection: {:?}",
-                        connack.code
-                    )));
+                    return Err(MqttError::ConnectionRefused {
+                        reason: format!("broker refused connection: {:?}", connack.code)
+                    });
                 }
             }
             Packet::Publish(publish) => {
-                let _ = self.events_tx.send(MqttEvent::Message {
+                self.emit_event(MqttEvent::Message {
                     topic: publish.topic_name.to_owned(),
                     payload: publish.payload.to_vec(),
                     retain: publish.retain,
                 });
-                match publish.qospid {
-                    QosPid::AtMostOnce => {}
-                    QosPid::AtLeastOnce(pid) => {
-                        self.send_packet(stream, &Packet::Puback(pid)).await?;
-                    }
-                    QosPid::ExactlyOnce(pid) => {
-                        self.pending_qos2.insert(pid.get());
-                        self.send_packet(stream, &Packet::Pubrec(pid)).await?;
-                    }
+
+                if !matches!(publish.qospid, QosPid::AtMostOnce) {
+                    warn!("QoS 1 and 2 messages from broker are not fully supported yet, received QoS: {:?}", publish.qospid);
                 }
-            }
-            Packet::Pubrel(pid) => {
-                self.send_packet(stream, &Packet::Pubcomp(pid)).await?;
-                self.pending_qos2.remove(&pid.get());
             }
             Packet::Suback(suback) => {
                 let topic = self
@@ -532,25 +509,20 @@ impl IoWorker {
                     .return_codes
                     .iter()
                     .all(|code| matches!(code, mqttrs::SubscribeReturnCodes::Success(_)));
-                if success {
-                    let _ = self
-                        .events_tx
-                        .send(MqttEvent::SubscriptionAcknowledged { topic });
-                } else {
-                    let _ = self.events_tx.send(MqttEvent::SubscriptionFailed {
-                        topic,
-                        reason: "broker refused subscription".to_owned(),
-                    });
+                if !success {
+                    return Err(MqttError::SubscriptionFailed { topic });
                 }
             }
             Packet::Pingresp => {}
             Packet::Disconnect => {
                 self.connected = false;
-                let _ = self.events_tx.send(MqttEvent::Disconnected {
+                self.emit_event(MqttEvent::Disconnected {
                     reason: "broker sent disconnect".to_owned(),
                 });
             }
-            _ => {}
+            _ => {
+                warn!("received unsupported packet from broker: {packet:?}");
+            }
         }
         Ok(())
     }
@@ -597,6 +569,13 @@ impl IoWorker {
             pid: Pid::new(),
             topics: vec![topic.to_owned().into()],
         })
+    }
+
+    fn emit_event(&self, event: MqttEvent) {
+        // We can ignore errors here because if there are no active subscribers, we don't need to worry about sending
+        // the event, and if the channel is full, it's likely that the subscribers are overwhelmed and won't be able
+        // to process the events in a timely manner anyway.
+        let _ = self.events_tx.send(event);
     }
 
     async fn send_packet(
