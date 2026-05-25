@@ -15,13 +15,14 @@ async fn main() {
     .expect("failed to start mqtt client"));
 
     let mut events = client.events();
-    let thread_client = client.clone();
+    let thread_client = Arc::downgrade(&client);
     tokio::spawn(async move {
         while let Ok(event) = events.recv().await {
             println!("event: {event:?}");
 
             if let common::bus::client::MqttEvent::Connected = event {
-                thread_client.subscribe(vec![String::from("#")]).expect("failed to subscribe");
+                let client = thread_client.upgrade().expect("failed to upgrade client");
+                client.subscribe(vec![String::from("#")]).expect("failed to subscribe");
             }
         }
     });
