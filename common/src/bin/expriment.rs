@@ -1,6 +1,6 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use common::MqttClient;
+use common::bus::client::MqttClient;
 
 #[tokio::main]
 async fn main() {
@@ -8,24 +8,30 @@ async fn main() {
 
     // let payload = env::var("MQTT_PAYLOAD").unwrap_or_else(|_| "hello from common".to_owned());
 
-    let client = MqttClient::create(
+    let client = Arc::new(MqttClient::create(
         "common-demo-client".to_owned(),
         "rpi-dev-home-main:1883".to_owned(),
     )
-    .expect("failed to start mqtt client");
+    .expect("failed to start mqtt client"));
 
     let mut events = client.events();
+    let thread_client = client.clone();
     tokio::spawn(async move {
         while let Ok(event) = events.recv().await {
             println!("event: {event:?}");
+
+            if let common::bus::client::MqttEvent::Connected = event {
+                thread_client.subscribe(vec![String::from("#")]).expect("failed to subscribe");
+            }
         }
     });
 
-    client.subscribe("#").expect("failed to subscribe");
+    // client.subscribe(vec![String::from("#")]).expect("failed to subscribe");
     // client
     //     .publish(&topic, payload.as_bytes(), false)
     //     .expect("failed to publish");
 
     tokio::time::sleep(Duration::from_secs(3)).await;
+    let client = Arc::try_unwrap(client).expect("failed to unwrap client");
     client.shutdown().await;
 }

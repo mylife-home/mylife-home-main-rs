@@ -2,16 +2,21 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
+use bytes::{Bytes, BytesMut};
+use futures::sink::SinkExt;
 use log::warn;
-use mqttrs::{
-    Connect, ConnectReturnCode, Packet, Pid, Protocol, Publish, QoS, QosPid, Subscribe,
-    SubscribeTopic, Unsubscribe, clone_packet, decode_slice, encode_slice,
+use mqttbytes::QoS;
+use mqttbytes::v4::{
+    Connect, ConnectReturnCode, Disconnect, Packet, PingReq, PingResp, Publish, Subscribe,
+    SubscribeFilter, SubscribeReasonCode, Unsubscribe,
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinHandle;
 use tokio::time::{self, MissedTickBehavior, interval, timeout};
+use tokio_stream::StreamExt;
+use tokio_util::codec::{Decoder, Encoder, Framed};
 
 /// Keep-alive interval for the MQTT connection. The client will send a ping at
 /// half this interval and expect the broker to respond within the full interval.
@@ -39,12 +44,9 @@ const COMMAND_QUEUE_CAPACITY: usize = 128;
 /// Capacity for the broadcast channel used to publish events to subscribers.
 const EVENT_QUEUE_CAPACITY: usize = 128;
 
-/// Read buffer size used while waiting for bytes from the TCP stream.
-const READ_BUFFER_SIZE: usize = 4096;
-
-/// Frame buffer size used when encoding MQTT packets before writing them to the
-/// socket.
-const FRAME_BUFFER_SIZE: usize = 8192;
+/// Maximum allowed size for MQTT packets. This is used to prevent unbounded memory
+/// usage when reading from the socket.
+const MAX_PACKET_SIZE: usize = 1024 * 1024; // 1 MiB
 
 /// MQTT events emitted by the client to indicate connection state changes,
 /// inbound messages, and failures.
@@ -61,7 +63,7 @@ pub enum MqttEvent {
     /// Emitted when a message is received from a subscribed topic.
     Message {
         topic: String,
-        payload: Vec<u8>,
+        payload: Bytes,
         retain: bool,
     },
 }
@@ -75,7 +77,7 @@ pub enum MqttError {
     /// Indicates an I/O error while communicating with the broker.
     Io(std::io::Error),
     /// Indicates a protocol error while encoding or decoding MQTT packets.
-    Codec(mqttrs::Error),
+    Codec(mqttbytes::Error),
     /// Indicates that the command channel has been closed.
     CommandClosed,
     /// Indicates that the command queue is full and a new command could not be
@@ -84,7 +86,7 @@ pub enum MqttError {
     /// Indicates that the broker refused the connection attempt.
     ConnectionRefused { reason: String },
     /// Indicates that a subscription request failed.
-    SubscriptionFailed { topic: String },
+    SubscriptionFailed { paths: Vec<String> },
     /// Indicates that an operation timed out.
     Timeout { reason: String },
 }
@@ -98,8 +100,8 @@ impl fmt::Display for MqttError {
             Self::CommandClosed => write!(f, "mqtt command channel closed"),
             Self::CommandQueueFull => write!(f, "mqtt command queue full"),
             Self::ConnectionRefused { reason } => write!(f, "connection refused: {reason}"),
-            Self::SubscriptionFailed { topic } => {
-                write!(f, "subscription failed on topic '{topic}'")
+            Self::SubscriptionFailed { paths } => {
+                write!(f, "subscription failed on paths {:?}", paths)
             }
             Self::Timeout { reason } => write!(f, "timeout: {reason}"),
         }
@@ -114,8 +116,8 @@ impl From<std::io::Error> for MqttError {
     }
 }
 
-impl From<mqttrs::Error> for MqttError {
-    fn from(value: mqttrs::Error) -> Self {
+impl From<mqttbytes::Error> for MqttError {
+    fn from(value: mqttbytes::Error) -> Self {
         Self::Codec(value)
     }
 }
@@ -124,14 +126,14 @@ impl From<mqttrs::Error> for MqttError {
 enum MqttCommand {
     Publish {
         topic: String,
-        payload: Vec<u8>,
+        payload: Bytes,
         retain: bool,
     },
     Subscribe {
-        topic: String,
+        paths: Vec<String>,
     },
     Unsubscribe {
-        topic: String,
+        paths: Vec<String>,
     },
     Shutdown,
 }
@@ -192,26 +194,22 @@ impl MqttClient {
     ///
     /// This method does not wait for the broker acknowledgment; transmission is
     /// handled asynchronously by the worker.
-    pub fn publish(&self, topic: &str, payload: &[u8], retain: bool) -> Result<(), MqttError> {
+    pub fn publish(&self, topic: String, payload: Bytes, retain: bool) -> Result<(), MqttError> {
         self.try_send_command(MqttCommand::Publish {
-            topic: topic.to_owned(),
-            payload: payload.to_vec(),
+            topic,
+            payload,
             retain,
         })
     }
 
     /// Enqueues a subscription request for the worker.
-    pub fn subscribe(&self, topic: &str) -> Result<(), MqttError> {
-        self.try_send_command(MqttCommand::Subscribe {
-            topic: topic.to_owned(),
-        })
+    pub fn subscribe(&self, paths: Vec<String>) -> Result<(), MqttError> {
+        self.try_send_command(MqttCommand::Subscribe { paths })
     }
 
     /// Enqueues an unsubscription request for the worker.
-    pub fn unsubscribe(&self, topic: &str) -> Result<(), MqttError> {
-        self.try_send_command(MqttCommand::Unsubscribe {
-            topic: topic.to_owned(),
-        })
+    pub fn unsubscribe(&self, paths: Vec<String>) -> Result<(), MqttError> {
+        self.try_send_command(MqttCommand::Unsubscribe { paths })
     }
 
     /// Gracefully shuts down the client and waits for the worker task to exit.
@@ -248,7 +246,7 @@ struct IoWorker {
     server_address: String,
     command_rx: mpsc::Receiver<MqttCommand>,
     events_tx: broadcast::Sender<MqttEvent>,
-    pending_subscription_topic: Option<String>,
+    pending_subscription_paths: Option<Vec<String>>,
     connected: bool,
     shutting_down: bool,
     reconnect_delay: Duration,
@@ -266,7 +264,7 @@ impl IoWorker {
             server_address,
             command_rx,
             events_tx,
-            pending_subscription_topic: None,
+            pending_subscription_paths: None,
             connected: false,
             shutting_down: false,
             reconnect_delay: Duration::ZERO,
@@ -278,9 +276,7 @@ impl IoWorker {
     /// This method keeps the connection alive, handles inbound packets, processes
     /// outbound commands, and reconnects on failures.
     async fn run(&mut self) {
-        let mut stream: Option<TcpStream> = None;
-        let mut recv_buf = Vec::with_capacity(8192);
-        let mut read_buf = [0u8; READ_BUFFER_SIZE];
+        let mut stream: Option<Framed<TcpStream, PacketCodec>> = None;
         let mut ping_interval = interval(KEEP_ALIVE / 2);
         ping_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
@@ -291,14 +287,14 @@ impl IoWorker {
 
             if !self.connected {
                 self.close_stream(&mut stream).await;
-                recv_buf.clear();
-                self.pending_subscription_topic = None;
+                self.pending_subscription_paths = None;
 
                 match self.connect_once().await {
-                    Ok((new_stream, buffered_data)) => {
+                    Ok(new_stream) => {
                         stream = Some(new_stream);
-                        recv_buf = buffered_data;
                         self.connected = true;
+                        // Clear command queue on reconnect to avoid processing stale commands that may have been enqueued during downtime
+                        self.clear_command_queue();
                         self.reconnect_delay = Duration::ZERO;
                         self.emit_event(MqttEvent::Connected);
                     }
@@ -333,25 +329,24 @@ impl IoWorker {
                     }
                 }
                 _ = ping_interval.tick() => {
-                    if let Err(error) = self.send_packet(current_stream, &Packet::Pingreq).await {
+                    if let Err(error) = current_stream.send(Packet::PingReq).await {
                         self.emit_event(MqttEvent::Error(Arc::new(error)));
                         self.connected = false;
                     }
                 }
-                read_result = current_stream.read(&mut read_buf) => {
+                read_result = current_stream.next() => {
                     match read_result {
-                        Ok(0) => {
+                        None => {
                             self.connected = false;
                             self.emit_event(MqttEvent::Disconnected { reason: "connection closed by peer".to_owned() });
                         }
-                        Ok(bytes_read) => {
-                            recv_buf.extend_from_slice(&read_buf[..bytes_read]);
-                            if let Err(error) = self.process_received_packets(&mut recv_buf).await {
+                        Some(Ok(packet)) => {
+                            if let Err(error) = self.handle_incoming_packet(packet).await {
                                 self.emit_event(MqttEvent::Error(Arc::new(error)));
                                 self.connected = false;
                             }
                         }
-                        Err(error) => {
+                        Some(Err(error)) => {
                             self.emit_event(MqttEvent::Error(Arc::new(error.into())));
                             self.connected = false;
                         }
@@ -363,10 +358,14 @@ impl IoWorker {
         self.close_stream(&mut stream).await;
     }
 
+    fn clear_command_queue(&mut self) {
+        while let Ok(_) = self.command_rx.try_recv() {}
+    }
+
     /// Closes and drops the current TCP stream if one is present.
-    async fn close_stream(&self, stream: &mut Option<TcpStream>) {
-        if let Some(mut current_stream) = stream.take() {
-            let _ = current_stream.shutdown().await;
+    async fn close_stream(&self, stream: &mut Option<Framed<TcpStream, PacketCodec>>) {
+        if let Some(current_stream) = stream.take() {
+            let _ = current_stream.into_inner().shutdown().await;
         }
     }
 
@@ -384,51 +383,37 @@ impl IoWorker {
     /// Establishes a TCP connection, sends the CONNECT packet, and waits for a
     /// CONNACK before returning the connected stream and any leftover buffered
     /// bytes.
-    async fn connect_once(&self) -> Result<(TcpStream, Vec<u8>), MqttError> {
-        let mut stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&self.server_address))
+    async fn connect_once(&self) -> Result<Framed<TcpStream, PacketCodec>, MqttError> {
+        let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&self.server_address))
             .await
             .map_err(|_| MqttError::Timeout {
                 reason: "connect timeout".to_owned(),
             })??;
-        stream.set_nodelay(true)?;
+        // stream.set_nodelay(true)?;
 
-        self.send_packet(&mut stream, &self.build_connect_packet())
-            .await?;
+        let mut stream = Framed::new(stream, PacketCodec);
 
-        let mut recv_buf = Vec::with_capacity(8192);
-        let mut scratch = [0u8; READ_BUFFER_SIZE];
-        let mut packet_buf = Vec::with_capacity(1024);
+        stream.send(self.build_connect_packet()).await?;
 
         loop {
-            let bytes_read = timeout(CONNECT_TIMEOUT, stream.read(&mut scratch))
-                .await
-                .map_err(|_| MqttError::Timeout {
-                    reason: "connack timeout".to_owned(),
-                })??;
-
-            if bytes_read == 0 {
+            let Some(res) =
+                timeout(CONNECT_TIMEOUT, stream.next())
+                    .await
+                    .map_err(|_| MqttError::Timeout {
+                        reason: "connack timeout".to_owned(),
+                    })?
+            else {
                 return Err(MqttError::ConnectionRefused {
-                    reason: "connection closed before connack".to_owned(),
+                    reason: "connection closed by peer during handshake".to_owned(),
                 });
-            }
+            };
 
-            recv_buf.extend_from_slice(&scratch[..bytes_read]);
-            packet_buf.clear();
-            packet_buf.resize(recv_buf.len().max(1024), 0);
-
-            let packet_len = clone_packet(&recv_buf, &mut packet_buf)?;
-            if packet_len == 0 {
-                continue;
-            }
-
-            let packet = decode_slice(&packet_buf[..packet_len])?
-                .ok_or_else(|| MqttError::Codec(mqttrs::Error::InvalidHeader))?;
-            recv_buf.drain(..packet_len);
+            let packet = res?;
 
             match packet {
-                Packet::Connack(connack) => {
-                    if connack.code == ConnectReturnCode::Accepted {
-                        return Ok((stream, recv_buf));
+                Packet::ConnAck(connack) => {
+                    if connack.code == ConnectReturnCode::Success {
+                        return Ok(stream);
                     }
 
                     return Err(MqttError::ConnectionRefused {
@@ -447,7 +432,7 @@ impl IoWorker {
     /// Handles a single command received from the public client.
     async fn handle_command(
         &mut self,
-        stream: &mut TcpStream,
+        stream: &mut Framed<TcpStream, PacketCodec>,
         command: MqttCommand,
     ) -> Result<(), MqttError> {
         match command {
@@ -456,56 +441,33 @@ impl IoWorker {
                 payload,
                 retain,
             } => {
-                let packet = self.build_publish_packet(&topic, &payload, retain);
-                self.send_packet(stream, &packet).await?;
+                let packet = self.build_publish_packet(topic, payload, retain);
+                stream.send(packet).await?;
             }
-            MqttCommand::Subscribe { topic } => {
-                self.pending_subscription_topic = Some(topic.clone());
-                let packet = self.build_subscribe_packet(&topic);
-                self.send_packet(stream, &packet).await?;
+            MqttCommand::Subscribe { paths } => {
+                self.pending_subscription_paths = Some(paths.clone());
+                let packet = self.build_subscribe_packet(paths);
+                stream.send(packet).await?;
             }
-            MqttCommand::Unsubscribe { topic } => {
-                let packet = self.build_unsubscribe_packet(&topic);
-                self.send_packet(stream, &packet).await?;
+            MqttCommand::Unsubscribe { paths } => {
+                let packet = self.build_unsubscribe_packet(paths);
+                stream.send(packet).await?;
             }
             MqttCommand::Shutdown => {
                 let packet = Packet::Disconnect;
-                self.send_packet(stream, &packet).await?;
+                stream.send(packet).await?;
                 self.shutting_down = true;
-                let _ = stream.shutdown().await;
             }
-        }
-
-        Ok(())
-    }
-
-    /// Decodes all complete MQTT packets currently buffered from the socket.
-    async fn process_received_packets(&mut self, recv_buf: &mut Vec<u8>) -> Result<(), MqttError> {
-        let mut packet_buf = Vec::with_capacity(1024);
-
-        loop {
-            packet_buf.clear();
-            packet_buf.resize(recv_buf.len().max(1024), 0);
-
-            let packet_len = clone_packet(recv_buf, &mut packet_buf)?;
-            if packet_len == 0 {
-                break;
-            }
-
-            let packet = decode_slice(&packet_buf[..packet_len])?
-                .ok_or_else(|| MqttError::Codec(mqttrs::Error::InvalidHeader))?;
-            recv_buf.drain(..packet_len);
-            self.handle_incoming_packet(packet).await?;
         }
 
         Ok(())
     }
 
     /// Processes a single inbound MQTT packet.
-    async fn handle_incoming_packet(&mut self, packet: Packet<'_>) -> Result<(), MqttError> {
+    async fn handle_incoming_packet(&mut self, packet: Packet) -> Result<(), MqttError> {
         match packet {
-            Packet::Connack(connack) => {
-                if connack.code != ConnectReturnCode::Accepted {
+            Packet::ConnAck(connack) => {
+                if connack.code != ConnectReturnCode::Success {
                     return Err(MqttError::ConnectionRefused {
                         reason: format!("broker refused connection: {:?}", connack.code),
                     });
@@ -513,33 +475,33 @@ impl IoWorker {
             }
             Packet::Publish(publish) => {
                 self.emit_event(MqttEvent::Message {
-                    topic: publish.topic_name.to_owned(),
-                    payload: publish.payload.to_vec(),
+                    topic: publish.topic,
+                    payload: publish.payload,
                     retain: publish.retain,
                 });
 
-                if !matches!(publish.qospid, QosPid::AtMostOnce) {
+                if publish.qos != QoS::AtMostOnce {
                     warn!(
                         "received QoS {:?} publish from broker; broker-side QoS handling is not fully implemented yet",
-                        publish.qospid
+                        publish.qos
                     );
                 }
             }
-            Packet::Suback(suback) => {
-                let topic = self
-                    .pending_subscription_topic
+            Packet::SubAck(suback) => {
+                let paths = self
+                    .pending_subscription_paths
                     .take()
-                    .unwrap_or_else(|| "<unknown>".to_owned());
+                    .unwrap_or_else(|| vec![String::from("<unknown>")]);
                 let success = suback
                     .return_codes
                     .iter()
-                    .all(|code| matches!(code, mqttrs::SubscribeReturnCodes::Success(_)));
+                    .all(|code| matches!(code, SubscribeReasonCode::Success(_)));
 
                 if !success {
-                    return Err(MqttError::SubscriptionFailed { topic });
+                    return Err(MqttError::SubscriptionFailed { paths });
                 }
             }
-            Packet::Pingresp => {}
+            Packet::PingResp => {}
             Packet::Disconnect => {
                 self.connected = false;
                 self.emit_event(MqttEvent::Disconnected {
@@ -554,64 +516,89 @@ impl IoWorker {
         Ok(())
     }
 
-    fn build_connect_packet(&self) -> Packet<'_> {
+    fn build_connect_packet(&self) -> Packet {
         Packet::Connect(Connect {
-            protocol: Protocol::MQTT311,
+            protocol: mqttbytes::Protocol::V4,
             keep_alive: KEEP_ALIVE.as_secs() as u16,
-            client_id: &self.instance_name,
+            client_id: self.instance_name.clone(),
             clean_session: true,
             last_will: None,
-            username: None,
-            password: None,
+            login: None,
         })
     }
 
-    fn build_publish_packet<'a>(
-        &self,
-        topic: &'a str,
-        payload: &'a [u8],
-        retain: bool,
-    ) -> Packet<'a> {
+    fn build_publish_packet<'a>(&self, topic: String, payload: Bytes, retain: bool) -> Packet {
         Packet::Publish(Publish {
+            pkid: 1,
             dup: false,
-            qospid: QosPid::AtMostOnce,
+            qos: QoS::AtMostOnce,
             retain,
-            topic_name: topic,
+            topic: topic,
             payload,
         })
     }
 
-    fn build_subscribe_packet(&self, topic: &str) -> Packet<'_> {
-        Packet::Subscribe(Subscribe::new(
-            Pid::new(),
-            vec![SubscribeTopic {
-                topic_path: topic.to_owned().into(),
-                qos: QoS::AtMostOnce,
-            }],
-        ))
+    fn build_subscribe_packet(&self, paths: Vec<String>) -> Packet {
+        Packet::Subscribe(Subscribe {
+            pkid: 1,
+            filters: paths
+                .into_iter()
+                .map(|path| SubscribeFilter {
+                    path,
+                    qos: QoS::AtMostOnce,
+                })
+                .collect(),
+        })
     }
 
-    fn build_unsubscribe_packet(&self, topic: &str) -> Packet<'_> {
+    fn build_unsubscribe_packet(&self, paths: Vec<String>) -> Packet {
         Packet::Unsubscribe(Unsubscribe {
-            pid: Pid::new(),
-            topics: vec![topic.to_owned().into()],
+            pkid: 1,
+            topics: paths,
         })
     }
 
     fn emit_event(&self, event: MqttEvent) {
         let _ = self.events_tx.send(event);
     }
+}
 
-    /// Encodes and writes a single MQTT packet to the stream.
-    async fn send_packet(
-        &self,
-        stream: &mut TcpStream,
-        packet: &Packet<'_>,
-    ) -> Result<(), MqttError> {
-        let mut frame_buffer = [0u8; FRAME_BUFFER_SIZE];
-        let len = encode_slice(packet, &mut frame_buffer)?;
-        stream.write_all(&frame_buffer[..len]).await?;
-        stream.flush().await?;
+struct PacketCodec;
+
+impl Decoder for PacketCodec {
+    type Item = Packet;
+    type Error = MqttError;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        match mqttbytes::v4::read(src, MAX_PACKET_SIZE) {
+            Ok(packet) => Ok(Some(packet)),
+            Err(mqttbytes::Error::InsufficientBytes(_)) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+}
+
+impl Encoder<Packet> for PacketCodec {
+    type Error = MqttError;
+
+    fn encode(&mut self, item: Packet, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let _ = match item {
+            Packet::Connect(data) => data.write(dst),
+            Packet::ConnAck(data) => data.write(dst),
+            Packet::Publish(data) => data.write(dst),
+            Packet::PubAck(data) => data.write(dst),
+            Packet::PubRec(data) => data.write(dst),
+            Packet::PubRel(data) => data.write(dst),
+            Packet::PubComp(data) => data.write(dst),
+            Packet::Subscribe(data) => data.write(dst),
+            Packet::SubAck(data) => data.write(dst),
+            Packet::Unsubscribe(data) => data.write(dst),
+            Packet::UnsubAck(data) => data.write(dst),
+            Packet::PingReq => PingReq.write(dst),
+            Packet::PingResp => PingResp.write(dst),
+            Packet::Disconnect => Disconnect.write(dst),
+        }?;
+
         Ok(())
     }
 }
