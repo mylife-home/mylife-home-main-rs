@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::{fmt, panic};
 use std::time::Duration;
 
@@ -46,7 +47,7 @@ pub enum MqttEvent {
     Disconnected {
         reason: String,
     },
-    Error(String),
+    Error(Arc<MqttError>),
     Message {
         topic: String,
         payload: Vec<u8>,
@@ -265,7 +266,7 @@ impl IoWorker {
                         self.emit_event(MqttEvent::Connected);
                     }
                     Err(error) => {
-                        self.emit_event(MqttEvent::Error(error.to_string()));
+                        self.emit_event(MqttEvent::Error(Arc::new(error)));
                         self.reconnect_delay = if self.reconnect_delay.is_zero() {
                             RECONNECT_BASE_DELAY
                         } else {
@@ -288,7 +289,7 @@ impl IoWorker {
                     match maybe_command {
                         Some(command) => {
                             if let Err(error) = self.handle_command(stream, command).await {
-                                self.emit_event(MqttEvent::Error(error.to_string()));
+                                self.emit_event(MqttEvent::Error(Arc::new(error)));
                                 self.connected = false;
                             }
                         }
@@ -301,7 +302,7 @@ impl IoWorker {
                 }
                 _ = ping_interval.tick() => {
                     if let Err(error) = self.send_packet(stream, &Packet::Pingreq).await {
-                        self.emit_event(MqttEvent::Error(error.to_string()));
+                        self.emit_event(MqttEvent::Error(Arc::new(error)));
                         self.connected = false;
                     }
                 }
@@ -314,12 +315,12 @@ impl IoWorker {
                         Ok(n) => {
                             recv_buf.extend_from_slice(&read_buf[..n]);
                             if let Err(error) = self.process_received_packets(&mut recv_buf).await {
-                                self.emit_event(MqttEvent::Error(error.to_string()));
+                                self.emit_event(MqttEvent::Error(Arc::new(error)));
                                 self.connected = false;
                             }
                         }
                         Err(error) => {
-                            self.emit_event(MqttEvent::Error(error.to_string()));
+                            self.emit_event(MqttEvent::Error(Arc::new(MqttError::Io(error))));
                             self.connected = false;
                         }
                     }
