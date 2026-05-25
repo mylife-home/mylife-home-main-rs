@@ -564,6 +564,7 @@ impl IoWorker {
     }
 }
 
+/// Codec for encoding and decoding MQTT packets using the `mqttbytes` crate.
 struct PacketCodec;
 
 impl Decoder for PacketCodec {
