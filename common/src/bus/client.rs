@@ -1,4 +1,3 @@
-use std::collections::{HashSet, VecDeque};
 use std::{fmt, panic};
 use std::time::Duration;
 
@@ -215,7 +214,6 @@ struct IoWorker {
     server_address: String,
     command_rx: mpsc::Receiver<MqttCommand>,
     events_tx: broadcast::Sender<MqttEvent>,
-    pending_commands: VecDeque<MqttCommand>,
     pending_subscription_topic: Option<String>,
     connected: bool,
     shutting_down: bool,
@@ -234,7 +232,6 @@ impl IoWorker {
             server_address,
             command_rx,
             events_tx,
-            pending_commands: VecDeque::new(),
             pending_subscription_topic: None,
             connected: false,
             shutting_down: false,
@@ -266,14 +263,6 @@ impl IoWorker {
                         self.connected = true;
                         self.reconnect_delay = Duration::ZERO;
                         self.emit_event(MqttEvent::Connected);
-                        if let Err(error) = self
-                            .flush_pending_commands(stream.as_mut().unwrap(), &mut recv_buf)
-                            .await
-                        {
-                            self.emit_event(MqttEvent::Error(error.to_string()));
-                            self.connected = false;
-                            continue;
-                        }
                     }
                     Err(error) => {
                         self.emit_event(MqttEvent::Error(error.to_string()));
@@ -298,8 +287,7 @@ impl IoWorker {
                 maybe_command = self.command_rx.recv() => {
                     match maybe_command {
                         Some(command) => {
-                            self.pending_commands.push_back(command);
-                            if let Err(error) = self.flush_pending_commands(stream, &mut recv_buf).await {
+                            if let Err(error) = self.handle_command(stream, command).await {
                                 self.emit_event(MqttEvent::Error(error.to_string()));
                                 self.connected = false;
                             }
@@ -325,7 +313,7 @@ impl IoWorker {
                         }
                         Ok(n) => {
                             recv_buf.extend_from_slice(&read_buf[..n]);
-                            if let Err(error) = self.process_received_packets(stream, &mut recv_buf).await {
+                            if let Err(error) = self.process_received_packets(&mut recv_buf).await {
                                 self.emit_event(MqttEvent::Error(error.to_string()));
                                 self.connected = false;
                             }
@@ -385,14 +373,6 @@ impl IoWorker {
                         reason: format!("broker refused connection: {:?}", connack.code)
                     });
                 }
-                Packet::Publish(publish) => {
-                    self.emit_event(MqttEvent::Message {
-                        topic: publish.topic_name.to_owned(),
-                        payload: publish.payload.to_vec(),
-                        retain: publish.retain,
-                    });
-                    continue;
-                }
                 _ => {
                     return Err(MqttError::ConnectionRefused {
                         reason: format!("expected connack during handshake, got {packet:?}")
@@ -400,25 +380,6 @@ impl IoWorker {
                 }
             }
         }
-    }
-
-    async fn flush_pending_commands(
-        &mut self,
-        stream: &mut TcpStream,
-        _recv_buf: &mut Vec<u8>,
-    ) -> Result<(), MqttError> {
-        while let Some(command) = self.pending_commands.pop_front() {
-            self.handle_command(stream, command).await?;
-            if self.shutting_down {
-                break;
-            }
-        }
-
-        if self.shutting_down {
-            return Ok(());
-        }
-
-        Ok(())
     }
 
     async fn handle_command(
@@ -457,7 +418,6 @@ impl IoWorker {
 
     async fn process_received_packets(
         &mut self,
-        stream: &mut TcpStream,
         recv_buf: &mut Vec<u8>,
     ) -> Result<(), MqttError> {
         let mut clone_buf = vec![0u8; recv_buf.len().max(1024)];
