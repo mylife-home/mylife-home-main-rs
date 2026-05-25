@@ -158,13 +158,13 @@ impl MqttClient {
     pub fn create(instance_name: String, server_address: String) -> Result<Self, MqttError> {
         if instance_name.trim().is_empty() {
             return Err(MqttError::InvalidConfig {
-                message: "instance_name must not be empty".to_owned(),
+                message: String::from("instance_name must not be empty"),
             });
         }
 
         if server_address.trim().is_empty() {
             return Err(MqttError::InvalidConfig {
-                message: "server_address must not be empty".to_owned(),
+                message: String::from("server_address must not be empty"),
             });
         }
 
@@ -322,7 +322,7 @@ impl IoWorker {
                             }
                         }
                         None => {
-                            self.emit_event(MqttEvent::Disconnected { reason: "command channel closed".to_owned() });
+                            self.emit_event(MqttEvent::Disconnected { reason: String::from("command channel closed") });
                             self.close_stream(&mut stream).await;
                             break;
                         }
@@ -338,7 +338,7 @@ impl IoWorker {
                     match read_result {
                         None => {
                             self.connected = false;
-                            self.emit_event(MqttEvent::Disconnected { reason: "connection closed by peer".to_owned() });
+                            self.emit_event(MqttEvent::Disconnected { reason: String::from("connection closed by peer") });
                         }
                         Some(Ok(packet)) => {
                             if let Err(error) = self.handle_incoming_packet(packet).await {
@@ -387,9 +387,9 @@ impl IoWorker {
         let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&self.server_address))
             .await
             .map_err(|_| MqttError::Timeout {
-                reason: "connect timeout".to_owned(),
+                reason: String::from("connect timeout"),
             })??;
-        // stream.set_nodelay(true)?;
+        stream.set_nodelay(true)?;
 
         let mut stream = Framed::new(stream, PacketCodec);
 
@@ -400,11 +400,11 @@ impl IoWorker {
                 timeout(CONNECT_TIMEOUT, stream.next())
                     .await
                     .map_err(|_| MqttError::Timeout {
-                        reason: "connack timeout".to_owned(),
+                        reason: String::from("connack timeout"),
                     })?
             else {
                 return Err(MqttError::ConnectionRefused {
-                    reason: "connection closed by peer during handshake".to_owned(),
+                    reason: String::from("connection closed by peer during handshake"),
                 });
             };
 
@@ -505,7 +505,7 @@ impl IoWorker {
             Packet::Disconnect => {
                 self.connected = false;
                 self.emit_event(MqttEvent::Disconnected {
-                    reason: "broker sent disconnect".to_owned(),
+                    reason: String::from("broker sent disconnect"),
                 });
             }
             other => {
@@ -559,6 +559,7 @@ impl IoWorker {
     }
 
     fn emit_event(&self, event: MqttEvent) {
+        // Best effort send; if there are no subscribers or the channel is full, we can just drop the event
         let _ = self.events_tx.send(event);
     }
 }
