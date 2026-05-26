@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use common::bus::client::MqttClient;
+use common::bus::mqtt::MqttClient;
 
 #[tokio::main]
 async fn main() {
@@ -8,11 +8,13 @@ async fn main() {
 
     // let payload = env::var("MQTT_PAYLOAD").unwrap_or_else(|_| "hello from common".to_owned());
 
-    let client = Arc::new(MqttClient::create(
-        "common-demo-client".to_owned(),
-        "rpi-dev-home-main:1883".to_owned(),
-    )
-    .expect("failed to start mqtt client"));
+    let client = Arc::new(
+        MqttClient::create(
+            "common-demo-client".to_owned(),
+            "rpi-dev-home-main:1883".to_owned(),
+        )
+        .expect("failed to start mqtt client"),
+    );
 
     let mut events = client.events();
     let thread_client = Arc::downgrade(&client);
@@ -20,9 +22,11 @@ async fn main() {
         while let Ok(event) = events.recv().await {
             println!("event: {event:?}");
 
-            if let common::bus::client::MqttEvent::Connected = event {
+            if let common::bus::mqtt::MqttEvent::Connected = event {
                 let client = thread_client.upgrade().expect("failed to upgrade client");
-                client.subscribe(vec![String::from("#")]).expect("failed to subscribe");
+                client
+                    .subscribe(vec![String::from("#")])
+                    .expect("failed to subscribe");
             }
         }
     });
