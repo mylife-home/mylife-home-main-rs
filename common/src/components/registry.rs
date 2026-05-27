@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::{HashMap, HashSet}, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::components::metadata::PluginMetadata;
 
@@ -24,7 +24,7 @@ impl InstanceData {
     pub fn name(&self) -> &str {
         &self.name
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.components.is_empty() && self.plugins.is_empty()
     }
@@ -73,18 +73,28 @@ impl Registry {
     pub fn registry_plugin(&mut self, instance_name: &str, plugin: Rc<PluginMetadata>) {
         let key = InstancePluginKey::new(instance_name, plugin.id());
         if self.plugins_per_instance.contains_key(&key) {
-            log::error!("plugin {} already registered for instance {}", plugin.id(), instance_name);
+            log::error!(
+                "plugin {} already registered for instance {}",
+                plugin.id(),
+                instance_name
+            );
             return;
         }
 
         self.plugins_per_instance.insert(key, plugin.clone());
 
-        let instance_data = self.instances.entry(instance_name.to_owned())
+        let instance_data = self
+            .instances
+            .entry(instance_name.to_owned())
             .or_insert_with(|| Rc::new(RefCell::new(InstanceData::new(instance_name.to_owned()))));
 
         instance_data.borrow_mut().add_plugin(plugin.clone());
 
-        log::debug!("plugin {} registered for instance {}", plugin.id(), instance_name);
+        log::debug!(
+            "plugin {} registered for instance {}",
+            plugin.id(),
+            instance_name
+        );
         // TODO: emit event: plugin.add
     }
 
@@ -92,4 +102,3 @@ impl Registry {
         // TODO
     }
 }
-

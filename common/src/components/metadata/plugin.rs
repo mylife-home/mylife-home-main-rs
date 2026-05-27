@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use super::Type;
+use std::collections::HashMap;
 
 /// PluginUsage represents the usage of a plugin, which can be Sensor, Actuator, Logic or Ui.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -115,11 +115,7 @@ pub struct Member {
 
 impl Member {
     /// Creates a new Member instance.
-    pub fn new(
-        description: Option<String>,
-        member_type: MemberType,
-        value_type: Type,
-    ) -> Member {
+    pub fn new(description: Option<String>, member_type: MemberType, value_type: Type) -> Member {
         Member {
             description,
             member_type,

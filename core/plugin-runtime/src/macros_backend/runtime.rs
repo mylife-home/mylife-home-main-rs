@@ -1,11 +1,11 @@
 use log::trace;
 use std::{cell::RefCell, collections::HashMap, fmt, sync::Arc};
 
-use common::components::metadata::PluginMetadata;
 use crate::{
     MylifePlugin,
     runtime::{Config, ConfigValue, MylifeComponent, MylifePluginRuntime, Value},
 };
+use common::components::metadata::PluginMetadata;
 
 #[derive(Debug)]
 pub struct PluginRuntimeImpl<PluginType: MylifePlugin + 'static> {
