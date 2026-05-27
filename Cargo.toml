@@ -3,6 +3,28 @@ members = [
   "core/mylife-home-core",
   "core/plugin-runtime",
   "core/plugin-macros",
-  "core/plugins/logic-base"
-, "common"]
+  "core/plugins/logic-base",
+  "common"
+]
 resolver = "2"
+
+[workspace.dependencies]
+anyhow = "1.0.102"
+bytes = "1.11.1"
+convert_case = "0.8.0"
+darling = "0.20.11"
+futures = "0.3.32"
+inventory = "0.3.20"
+lazy_static = "1.5.0"
+log = "0.4.27"
+mqttbytes = "0.6.0"
+pretty_env_logger = "0.5.0"
+proc-macro-error = "1.0.4"
+proc-macro2 = "1.0.94"
+quote = "1.0"
+regex = "1.11.1"
+rustc_version = "0.4.1"
+syn = "2.0"
+tokio = "1.44.1"
+tokio-stream = "0.1.18"
+tokio-util = "0.7.18"
