@@ -8,6 +8,7 @@ edition = "2024"
 [lib]
 
 [dependencies]
+common = { path = "../../common" }
 convert_case = { workspace = true }
 log = { workspace = true }
 lazy_static = { workspace = true }

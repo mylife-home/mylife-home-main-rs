@@ -1,4 +1,4 @@
 mod observable;
 mod runtime;
 mod registry;
-mod metadata;
+pub mod metadata;

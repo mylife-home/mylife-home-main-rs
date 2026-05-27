@@ -1,7 +1,5 @@
-use crate::{
-    metadata,
-    runtime::{self, TypedInto, Value},
-};
+use crate::runtime::{self, TypedInto, Value};
+use common::components::metadata;
 
 use std::fmt;
 

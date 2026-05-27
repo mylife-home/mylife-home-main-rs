@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{
-    MylifePlugin,
-    metadata::{ConfigItem, ConfigType, Member, MemberType, PluginMetadata, PluginUsage, Type},
-    runtime::MylifePluginRuntime,
+use crate::{MylifePlugin, runtime::MylifePluginRuntime};
+use common::components::metadata::{
+    ConfigItem, ConfigType, Member, MemberType, PluginMetadata, PluginUsage, Type,
 };
 
 use super::{

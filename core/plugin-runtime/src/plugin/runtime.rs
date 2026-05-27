@@ -3,7 +3,7 @@ use std::{
     fmt::{self, Debug},
 };
 
-use crate::metadata;
+use common::components::metadata;
 
 pub trait MylifePluginRuntime: Send + Sync + Debug {
     fn metadata(&self) -> &metadata::PluginMetadata;
