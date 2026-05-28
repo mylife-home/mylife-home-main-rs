@@ -20,16 +20,21 @@ impl TaskSender {
 
     /// Runs a task immediately if we are on the runtime thread, or sends it to the runtime otherwise.
     pub fn run_or_send(&self, task: Task) {
-        if Runtime::is_runtime_thread() {
+        if TaskSender::is_runtime_thread() {
             task();
         } else {
             self.execute(task);
         }
     }
+
+    /// Checks if the current thread is the runtime thread.
+    pub fn is_runtime_thread() -> bool {
+        IS_RUNTIME_THREAD.with(|flag| *flag.borrow())
+    }
 }
 
 /// A simple runtime that can execute tasks sequentially.
-pub struct Runtime {
+struct Runtime {
     rx: UnboundedReceiver<Task>,
 }
 
@@ -46,11 +51,6 @@ impl Runtime {
             let _guard = RuntimeGuard::new();
             task();
         }
-    }
-
-    /// Checks if the current thread is the runtime thread.
-    pub fn is_runtime_thread() -> bool {
-        IS_RUNTIME_THREAD.with(|flag| *flag.borrow())
     }
 }
 
