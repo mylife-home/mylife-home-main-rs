@@ -1,15 +1,273 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::components::{metadata::PluginMetadata, observable::{Observable, ObserverId, Subject}};
+use crate::components::{
+    metadata::PluginMetadata,
+    observable::{Observable, ObserverId, Subject},
+};
 
 /// Component represents a component that can be registered to the registry.
 pub trait Component {
     fn id(&self) -> &str;
 }
 
+/// Registry is responsible for managing the plugins and components of all instances, and providing an observable interface for other modules to subscribe to registry events.
+pub struct Registry {
+    plugins: HashMap<String, Rc<PluginMetadata>>,
+    components: HashMap<String, ComponentData>,
+    instances: HashMap<String, RefCell<InstanceData>>,
+    subject: Subject<RegistryEvent>,
+}
+
+impl Registry {
+    /// Creates a new Registry instance.
+    pub fn new() -> Self {
+        Self {
+            plugins: HashMap::new(),
+            components: HashMap::new(),
+            instances: HashMap::new(),
+            subject: Subject::new(),
+        }
+    }
+
+    /// Add a plugin to the registry.
+    pub fn add_plugin(&mut self, instance_name: Option<&str>, plugin: Rc<PluginMetadata>) {
+        let id = Self::build_plugin_id(instance_name, plugin.id());
+        let instance_name = Self::build_instance_name(instance_name);
+
+        if self.plugins.contains_key(&id) {
+            log::error!("plugin {} already added", id);
+            return;
+        }
+
+        self.plugins.insert(id.clone(), plugin.clone());
+
+        let instance_data = self
+            .instances
+            .entry(instance_name.clone())
+            .or_insert_with(|| RefCell::new(InstanceData::new(instance_name.clone())));
+
+        instance_data.borrow_mut().add_plugin(plugin.clone());
+
+        log::debug!("plugin {} added", id);
+
+        self.subject.notify(&RegistryEvent::PluginAdded {
+            instance_name,
+            plugin,
+        });
+    }
+
+    /// Removes a plugin from the registry.
+    pub fn remove_plugin(&mut self, instance_name: Option<&str>, plugin: Rc<PluginMetadata>) {
+        let id = Self::build_plugin_id(instance_name, plugin.id());
+        let instance_name = Self::build_instance_name(instance_name);
+
+        let Some(plugin) = self.plugins.remove(&id) else {
+            log::error!("plugin {} not found", id);
+            return;
+        };
+
+        let is_empty = {
+            let mut instance_data = self
+                .instances
+                .get(&instance_name)
+                .expect("data inconsistency: instance data not found")
+                .borrow_mut();
+            instance_data.remove_plugin(&plugin);
+            instance_data.is_empty()
+        };
+
+        if is_empty {
+            self.instances.remove(&instance_name);
+        }
+
+        log::debug!("plugin {} removed", id);
+
+        self.subject.notify(&RegistryEvent::PluginRemoved {
+            instance_name,
+            plugin,
+        });
+    }
+
+    /// Gets a plugin by its unique identifier, which is a combination of the instance name and the plugin id.
+    pub fn get_plugin(
+        &self,
+        instance_name: Option<&str>,
+        plugin_id: &str,
+    ) -> Option<Rc<PluginMetadata>> {
+        let id = Self::build_plugin_id(instance_name, plugin_id);
+        self.plugins.get(&id).cloned()
+    }
+
+    /// Gets all plugins of an instance.
+    pub fn get_plugins(&self, instance_name: Option<&str>) -> Vec<Rc<PluginMetadata>> {
+        let instance_name = Self::build_instance_name(instance_name);
+
+        if let Some(instance_data) = self.instances.get(&instance_name) {
+            instance_data.borrow().plugins.values().cloned().collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Adds a component to the registry.
+    pub fn add_component(
+        &mut self,
+        instance_name: Option<&str>,
+        component: Rc<RefCell<dyn Component>>,
+    ) {
+        let component_id = component.borrow().id().to_owned();
+        let instance_name = Self::build_instance_name(instance_name);
+
+        if self.components.contains_key(&component_id) {
+            log::error!("component {} already registered", component_id);
+            return;
+        }
+
+        self.components.insert(
+            component_id.clone(),
+            ComponentData::new(instance_name.clone(), component.clone()),
+        );
+
+        let instance_data = self
+            .instances
+            .entry(instance_name.clone())
+            .or_insert_with(|| RefCell::new(InstanceData::new(instance_name.clone())));
+
+        instance_data.borrow_mut().add_component(component.clone());
+
+        log::debug!(
+            "component {} registered for instance {}",
+            component_id,
+            instance_name
+        );
+        self.subject.notify(&RegistryEvent::ComponentAdded {
+            instance_name,
+            component,
+        });
+    }
+
+    /// Removes a component from the registry.
+    pub fn remove_component(
+        &mut self,
+        instance_name: Option<&str>,
+        component: Rc<RefCell<dyn Component>>,
+    ) {
+        let component_id = component.borrow().id().to_owned();
+        let instance_name = Self::build_instance_name(instance_name);
+
+        let component_data = match self.components.remove(&component_id) {
+            Some(component_data) => component_data,
+            None => {
+                log::error!("component {} not found", component_id);
+                return;
+            }
+        };
+
+        let is_empty = {
+            let mut instance_data = self
+                .instances
+                .get(&instance_name)
+                .expect("data inconsistency: instance data not found")
+                .borrow_mut();
+            instance_data.remove_component(&component_data.component());
+            instance_data.is_empty()
+        };
+
+        if is_empty {
+            self.instances.remove(&instance_name);
+        }
+
+        log::debug!(
+            "component {} unregistered for instance {}",
+            component_id,
+            instance_name
+        );
+
+        self.subject.notify(&RegistryEvent::ComponentRemoved {
+            instance_name,
+            component,
+        });
+    }
+
+    /// Gets a component by its unique identifier.
+    pub fn get_component(&self, component_id: &str) -> Option<Rc<RefCell<dyn Component>>> {
+        self.components
+            .get(component_id)
+            .map(|data| data.component().clone())
+    }
+
+    pub fn get_component_data(
+        &self,
+        component_id: &str,
+    ) -> Option<(String, Rc<RefCell<dyn Component>>)> {
+        self.components
+            .get(component_id)
+            .map(|data| (data.instance_name().to_owned(), data.component().clone()))
+    }
+
+    /// Gets all components.
+    pub fn get_components(&self) -> Vec<Rc<RefCell<dyn Component>>> {
+        self.components
+            .values()
+            .map(|data| data.component().clone())
+            .collect()
+    }
+
+    /// Gets all instance names that have registered plugins or components.
+    pub fn get_instance_names(&self) -> Vec<String> {
+        self.instances.keys().cloned().collect()
+    }
+
+    fn build_plugin_id(instance_name: Option<&str>, plugin_id: &str) -> String {
+        let instance_name = instance_name.unwrap_or("local");
+        format!("{}:{}", instance_name, plugin_id)
+    }
+
+    fn build_instance_name(instance_name: Option<&str>) -> String {
+        instance_name.unwrap_or("local").to_owned()
+    }
+}
+
+impl Observable<RegistryEvent> for Registry {
+    fn observe(&mut self, observer: impl Fn(&RegistryEvent) + 'static) -> ObserverId {
+        self.subject.observe(observer)
+    }
+
+    fn unobserve(&mut self, id: ObserverId) -> bool {
+        self.subject.unobserve(id)
+    }
+}
+
+/// RegistryEvent represents the events that can occur in the registry, such as adding or removing a plugin or component.
+pub enum RegistryEvent {
+    /// PluginAdded is emitted when a plugin is added to the registry, containing the instance name and the plugin metadata.
+    PluginAdded {
+        instance_name: String,
+        plugin: Rc<PluginMetadata>,
+    },
+
+    /// PluginRemoved is emitted when a plugin is removed from the registry, containing the instance name and the plugin metadata.
+    PluginRemoved {
+        instance_name: String,
+        plugin: Rc<PluginMetadata>,
+    },
+
+    /// ComponentAdded is emitted when a component is added to the registry, containing the instance name and the component.
+    ComponentAdded {
+        instance_name: String,
+        component: Rc<RefCell<dyn Component>>,
+    },
+
+    /// ComponentRemoved is emitted when a component is removed from the registry, containing the instance name and the component.
+    ComponentRemoved {
+        instance_name: String,
+        component: Rc<RefCell<dyn Component>>,
+    },
+}
+
 struct InstanceData {
     name: String,
-    components: HashMap<String, Rc<dyn Component>>,
+    components: HashMap<String, Rc<RefCell<dyn Component>>>,
     plugins: HashMap<String, Rc<PluginMetadata>>,
 }
 
@@ -30,16 +288,17 @@ impl InstanceData {
         self.components.is_empty() && self.plugins.is_empty()
     }
 
-    pub fn add_component(&mut self, component: Rc<dyn Component>) {
-        self.components.insert(component.id().to_owned(), component);
+    pub fn add_component(&mut self, component: Rc<RefCell<dyn Component>>) {
+        let id = component.borrow().id().to_owned();
+        self.components.insert(id, component);
     }
 
     pub fn add_plugin(&mut self, plugin: Rc<PluginMetadata>) {
         self.plugins.insert(plugin.id().to_owned(), plugin);
     }
 
-    pub fn remove_component(&mut self, component: &Rc<dyn Component>) {
-        self.components.remove(component.id());
+    pub fn remove_component(&mut self, component: &Rc<RefCell<dyn Component>>) {
+        self.components.remove(component.borrow().id());
     }
 
     pub fn remove_plugin(&mut self, plugin: &Rc<PluginMetadata>) {
@@ -47,93 +306,24 @@ impl InstanceData {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
-struct InstancePluginKey(String, String);
-
-impl InstancePluginKey {
-    pub fn new(instance_name: &str, plugin_id: &str) -> Self {
-        Self(instance_name.to_owned(), plugin_id.to_owned())
-    }
+struct ComponentData {
+    instance_name: String,
+    component: Rc<RefCell<dyn Component>>,
 }
 
-/// Registry is responsible for managing the plugins and components of all instances, and providing an observable interface for other modules to subscribe to registry events.
-pub struct Registry {
-    plugins_per_instance: HashMap<InstancePluginKey, Rc<PluginMetadata>>,
-    components: HashMap<String, Rc<RefCell<dyn Component>>>,
-    instances: HashMap<String, Rc<RefCell<InstanceData>>>,
-    subject: Subject<RegistryEvent>,
-}
-
-impl Registry {
-    /// Creates a new Registry instance.
-    pub fn new() -> Self {
+impl ComponentData {
+    pub fn new(instance_name: String, component: Rc<RefCell<dyn Component>>) -> Self {
         Self {
-            plugins_per_instance: HashMap::new(),
-            components: HashMap::new(),
-            instances: HashMap::new(),
-            subject: Subject::new(),
+            instance_name,
+            component,
         }
     }
 
-    /// Registers a plugin to the registry.
-    pub fn registry_plugin(&mut self, instance_name: &str, plugin: Rc<PluginMetadata>) {
-        let key = InstancePluginKey::new(instance_name, plugin.id());
-        if self.plugins_per_instance.contains_key(&key) {
-            log::error!(
-                "plugin {} already registered for instance {}",
-                plugin.id(),
-                instance_name
-            );
-            return;
-        }
-
-        self.plugins_per_instance.insert(key, plugin.clone());
-
-        let instance_data = self
-            .instances
-            .entry(instance_name.to_owned())
-            .or_insert_with(|| Rc::new(RefCell::new(InstanceData::new(instance_name.to_owned()))));
-
-        instance_data.borrow_mut().add_plugin(plugin.clone());
-
-        log::debug!(
-            "plugin {} registered for instance {}",
-            plugin.id(),
-            instance_name
-        );
-        self.subject.notify(&RegistryEvent::PluginAdded {
-            instance_name: instance_name.to_owned(),
-            plugin,
-        });
+    pub fn instance_name(&self) -> &str {
+        &self.instance_name
     }
 
-    /// Unregisters a plugin from the registry.
-    pub fn unregistry_plugin(&mut self, instance_name: &str, plugin_id: &str) {
-        // TODO
+    pub fn component(&self) -> Rc<RefCell<dyn Component>> {
+        self.component.clone()
     }
-}
-
-impl Observable<RegistryEvent> for Registry {
-    fn observe(&mut self, observer: impl Fn(&RegistryEvent) + 'static) -> ObserverId {
-        self.subject.observe(observer)
-    }
-
-    fn unobserve(&mut self, id: ObserverId) -> bool {
-        self.subject.unobserve(id)
-    }
-}
-
-/// RegistryEvent represents the events that can occur in the registry, such as adding or removing a plugin or component.
-pub enum RegistryEvent {
-    /// PluginAdded is emitted when a plugin is added to the registry, containing the instance name and the plugin metadata.
-    PluginAdded{ instance_name: String, plugin: Rc<PluginMetadata> },
-
-    /// PluginRemoved is emitted when a plugin is removed from the registry, containing the instance name and the plugin metadata.
-    PluginRemoved{ instance_name: String, plugin: Rc<PluginMetadata> },
-
-    /// ComponentAdded is emitted when a component is added to the registry, containing the instance name and the component.
-    ComponentAdded{ instance_name: String, component: Rc<RefCell<dyn Component>> },
-
-    /// ComponentRemoved is emitted when a component is removed from the registry, containing the instance name and the component.
-    ComponentRemoved{ instance_name: String, component: Rc<RefCell<dyn Component>> },
 }
