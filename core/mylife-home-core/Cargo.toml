@@ -10,6 +10,8 @@ name = "mylife-home-core"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = { workspace = true }
+common = { path = "../../common" }
 plugin_runtime = { path = "../plugin-runtime" }
 plugin_logic_base = { path = "../plugins/logic-base" }
 log = { workspace = true }

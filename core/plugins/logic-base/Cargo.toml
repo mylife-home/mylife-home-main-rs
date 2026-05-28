@@ -7,6 +7,7 @@ edition = "2024"
 [lib]
 
 [dependencies]
+anyhow = { workspace = true }
 plugin_runtime = { path = "../../plugin-runtime" }
 plugin_macros = { path = "../../plugin-macros" }
 inventory = { workspace = true }

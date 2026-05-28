@@ -1,3 +1,4 @@
+use common::components::ComponentChange;
 use plugin_runtime::runtime::{Config, ConfigValue, Value};
 
 mod modules;
@@ -11,7 +12,7 @@ mod modules_include {
 // TODO: Error: anyhow pour plugins, thiserror pour core ?
 // TODO: try tokio with plugins (implement "minuterie")
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
 
     modules::init();
@@ -21,8 +22,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap()
         .create_component("comp-id");
 
-    component.set_on_state(Box::new(|name: &str, value: Value| {
-        println!("STATE: {} = {:?}", name, value);
+    component.observe(Box::new(|event: &ComponentChange| {
+        println!("EVENT: {:?}", event);
     }));
 
     let mut config = Config::new();

@@ -43,7 +43,7 @@ impl MylifePluginHooks for ExamplePlugin {
         }
     }
 
-    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn init(&mut self) -> anyhow::Result<()> {
         // This is executed after configuration has been set
         Ok(())
     }
@@ -72,13 +72,13 @@ impl ExamplePlugin {
 // Can be another impl or same impl
 #[mylife_actions]
 impl ExamplePlugin {
-    // can return Result<(), Box<dyn std::error::Error>>
+    // can return anyhow::Result<()>
     #[mylife_action(
         name = "action2", // Optional, infered from function name
         description = "action description", // Optional
         r#type = "bool"
     )]
-    fn action2(&mut self, _arg: bool) -> Result<(), Box<dyn std::error::Error>> {
+    fn action2(&mut self, _arg: bool) -> anyhow::Result<()> {
         // Do something
         Ok(())
     }

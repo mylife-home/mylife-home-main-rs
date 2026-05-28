@@ -9,7 +9,7 @@ pub type ObserverId = usize;
 /// A simple observable that can be observed for notifications.
 pub trait Observable<T> {
     /// Adds an observer that will be called on subject notification.
-    fn observe(&mut self, observer: impl Fn(&T) + 'static) -> ObserverId;
+    fn observe(&mut self, observer: Box<Observer<T>>) -> ObserverId;
 
     /// Removes an observer by its unique identifier.
     fn unobserve(&mut self, id: ObserverId) -> bool;
@@ -33,11 +33,11 @@ where
 }
 
 impl<T> Observable<T> for Subject<T> {
-    fn observe(&mut self, observer: impl Fn(&T) + 'static) -> ObserverId {
+    fn observe(&mut self, observer: Box<Observer<T>>) -> ObserverId {
         let id = self
             .id_gen
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        self.observers.borrow_mut().insert(id, Rc::new(observer));
+        self.observers.borrow_mut().insert(id, observer.into());
         id
     }
 
@@ -96,7 +96,7 @@ where
 }
 
 impl<T> Observable<T> for SubjectValue<T> {
-    fn observe(&mut self, observer: impl Fn(&T) + 'static) -> ObserverId {
+    fn observe(&mut self, observer: Box<Observer<T>>) -> ObserverId {
         self.subject.observe(observer)
     }
 

@@ -27,7 +27,7 @@ impl MylifePluginHooks for ValueBinary {
         }
     }
 
-    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn init(&mut self) -> anyhow::Result<()> {
         self.state.set(self.config);
 
         debug!(target: LOG_TARGET, "[{}] initial state = {}", self.id.as_str(), self.state.get());
@@ -38,9 +38,9 @@ impl MylifePluginHooks for ValueBinary {
 
 #[mylife_actions]
 impl ValueBinary {
-    // can return Result<(), Box<dyn std::error::Error>> or nothing
+    // can return anyhow::Result<()> or nothing
     #[mylife_action(description = "set value to on")] // type=, name=
-    fn on(&mut self, arg: bool) -> Result<(), Box<dyn std::error::Error>> {
+    fn on(&mut self, arg: bool) -> anyhow::Result<()> {
         if arg {
             self.state.set(true);
         }

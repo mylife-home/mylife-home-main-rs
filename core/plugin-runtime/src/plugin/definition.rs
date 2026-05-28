@@ -1,5 +1,8 @@
-use crate::runtime::{self, TypedInto, Value};
-use common::components::metadata;
+use crate::runtime;
+use common::components::{
+    metadata,
+    types::{TypedInto, Value},
+};
 
 use std::fmt;
 
@@ -7,7 +10,7 @@ pub trait MylifePluginHooks: Sized {
     fn new(id: &str) -> Self;
 
     // called after config
-    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn init(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 }

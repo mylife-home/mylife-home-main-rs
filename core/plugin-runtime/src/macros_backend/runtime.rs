@@ -1,15 +1,21 @@
+use anyhow::Context;
 use log::trace;
 use std::{cell::RefCell, collections::HashMap, fmt, sync::Arc};
 
 use crate::{
     MylifePlugin,
-    runtime::{Config, ConfigValue, MylifeComponent, MylifePluginRuntime, Value},
+    runtime::{MylifeComponent, MylifePluginRuntime},
 };
-use common::components::metadata::PluginMetadata;
+use common::components::{
+    Component, ComponentChange,
+    metadata::PluginMetadata,
+    observable::{Observable, Observer, ObserverId, Subject},
+    types::{Config, ConfigValue, Value},
+};
 
 #[derive(Debug)]
 pub struct PluginRuntimeImpl<PluginType: MylifePlugin + 'static> {
-    metadata: PluginMetadata,
+    metadata: Arc<PluginMetadata>,
     access: Arc<PluginRuntimeAccess<PluginType>>,
 }
 
@@ -18,7 +24,10 @@ impl<PluginType: MylifePlugin + 'static> PluginRuntimeImpl<PluginType> {
         metadata: PluginMetadata,
         access: Arc<PluginRuntimeAccess<PluginType>>,
     ) -> Box<Self> {
-        Box::new(PluginRuntimeImpl { metadata, access })
+        Box::new(PluginRuntimeImpl {
+            metadata: Arc::new(metadata),
+            access,
+        })
     }
 }
 
@@ -28,7 +37,7 @@ impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginT
     }
 
     fn create(&self, id: &str) -> Box<dyn MylifeComponent> {
-        ComponentImpl::<PluginType>::new(&self.access, id)
+        ComponentImpl::<PluginType>::new(&self.access, id, &self.metadata)
     }
 }
 
@@ -39,12 +48,12 @@ pub struct StateRuntime<PluginType> {
 }
 
 pub type ConfigRuntimeSetter<PluginType> =
-    fn(target: &mut PluginType, config: ConfigValue) -> Result<(), Box<dyn std::error::Error>>;
+    fn(target: &mut PluginType, config: ConfigValue) -> anyhow::Result<()>;
 pub type StateRuntimeRegister<PluginType> =
     fn(target: &mut PluginType, listener: Box<dyn Fn(Value)>) -> ();
 pub type StateRuntimeGetter<PluginType> = fn(target: &PluginType) -> Value;
 pub type ActionRuntimeExecutor<PluginType> =
-    fn(target: &mut PluginType, action: Value) -> Result<(), Box<dyn std::error::Error>>;
+    fn(target: &mut PluginType, action: Value) -> anyhow::Result<()>;
 
 #[derive(Debug)]
 pub struct PluginRuntimeAccess<PluginType: MylifePlugin> {
@@ -71,7 +80,8 @@ struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
     id: String,
-    state_handler: Arc<RefCell<Option<Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>>>>,
+    plugin_metadata: Arc<PluginMetadata>,
+    subject: Arc<RefCell<Subject<ComponentChange>>>,
 }
 
 impl<PluginType: MylifePlugin> fmt::Debug for ComponentImpl<PluginType> {
@@ -85,12 +95,17 @@ impl<PluginType: MylifePlugin> fmt::Debug for ComponentImpl<PluginType> {
 }
 
 impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
-    pub fn new(access: &Arc<PluginRuntimeAccess<PluginType>>, id: &str) -> Box<Self> {
+    pub fn new(
+        access: &Arc<PluginRuntimeAccess<PluginType>>,
+        id: &str,
+        plugin_metadata: &Arc<PluginMetadata>,
+    ) -> Box<Self> {
         let mut component = Box::new(ComponentImpl {
             access: access.clone(),
             component: PluginType::new(id),
             id: String::from(id),
-            state_handler: Arc::new(RefCell::new(None)),
+            plugin_metadata: plugin_metadata.clone(),
+            subject: Arc::new(RefCell::new(Subject::new())),
         });
 
         component.register_state_handlers();
@@ -102,52 +117,62 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
         for (name, state) in self.access.states.iter() {
             let id = self.id.clone();
             let name = name.clone();
-            let state_handler = self.state_handler.clone();
+            let subject = self.subject.clone();
             (state.register)(
                 &mut self.component,
                 Box::new(move |value: Value| {
                     trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{id}] state '{name}' changed to {value:?}");
-
-                    if let Some(handler) = state_handler.borrow().as_ref() {
-                        handler(&name, value);
-                    }
+                    subject.borrow().notify(&ComponentChange::State{name: name.clone(), value});
                 }),
             );
         }
     }
 }
 
-impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
+impl<PluginType: MylifePlugin> Component for ComponentImpl<PluginType> {
     fn id(&self) -> &str {
         &self.id
     }
 
-    fn set_on_state(&mut self, handler: Box<dyn Fn(/*name:*/ &str, /*value:*/ Value)>) {
-        *self.state_handler.borrow_mut() = Some(handler);
+    fn plugin(&self) -> Arc<PluginMetadata> {
+        self.plugin_metadata.clone()
     }
 
-    fn get_state(&self, name: &str) -> Result<Value, Box<dyn std::error::Error>> {
-        let state = self.access.states.get(name).ok_or_else(|| {
-            Box::new(NoSuchStateError {
-                name: String::from(name),
-            })
-        })?;
-
-        Ok((state.getter)(&self.component))
+    fn get_state(&self, name: &str) -> Option<Value> {
+        let state = self.access.states.get(name)?;
+        Some((state.getter)(&self.component))
     }
 
-    // TODO: better error type
-    fn configure(&mut self, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    fn execute_action(&mut self, name: &str, action: Value) -> anyhow::Result<()> {
+        let handler = self
+            .access
+            .actions
+            .get(name)
+            .with_context(|| format!("Action not found: {}", name))?;
+
+        trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{}] execute action '{name}' with {action:?}", self.id);
+        handler(&mut self.component, action)
+    }
+}
+
+impl<PluginType: MylifePlugin> Observable<ComponentChange> for ComponentImpl<PluginType> {
+    fn observe(&mut self, observer: Box<Observer<ComponentChange>>) -> ObserverId {
+        self.subject.borrow_mut().observe(observer)
+    }
+
+    fn unobserve(&mut self, id: ObserverId) -> bool {
+        self.subject.borrow_mut().unobserve(id)
+    }
+}
+
+impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
+    fn configure(&mut self, config: &Config) -> anyhow::Result<()> {
         trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{}] configure with {config:?}", self.id);
 
         for (name, setter) in self.access.configs.iter() {
             let value = config
                 .get(name)
-                .ok_or_else(|| {
-                    Box::new(ConfigNotSetError {
-                        name: String::from(name),
-                    })
-                })?
+                .context(format!("Config '{name}' not found"))?
                 .clone();
 
             setter(&mut self.component, value)?;
@@ -156,62 +181,7 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
         Ok(())
     }
 
-    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn init(&mut self) -> anyhow::Result<()> {
         self.component.init()
-    }
-
-    // TODO: better error type
-    fn execute_action(
-        &mut self,
-        name: &str,
-        action: Value,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let handler = self.access.actions.get(name).ok_or_else(|| {
-            Box::new(NoSuchActionError {
-                name: String::from(name),
-            })
-        })?;
-
-        trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{}] execute action '{name}' with {action:?}", self.id);
-        handler(&mut self.component, action)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ConfigNotSetError {
-    name: String,
-}
-
-impl std::error::Error for ConfigNotSetError {}
-
-impl fmt::Display for ConfigNotSetError {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmt, "Config key not set: '{}'", self.name)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct NoSuchActionError {
-    name: String,
-}
-
-impl std::error::Error for NoSuchActionError {}
-
-impl fmt::Display for NoSuchActionError {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmt, "No such action: '{}'", self.name)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct NoSuchStateError {
-    name: String,
-}
-
-impl std::error::Error for NoSuchStateError {}
-
-impl fmt::Display for NoSuchStateError {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmt, "No such state: '{}'", self.name)
     }
 }

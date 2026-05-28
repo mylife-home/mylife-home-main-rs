@@ -201,7 +201,7 @@ fn process_config(plugin_name: &syn::Ident, attr: &attributes::MylifeConfig) -> 
     let target_ident = &attr.ident;
 
     let setter = quote! {
-        |target: &mut #plugin_name, arg: plugin_runtime::runtime::ConfigValue| -> std::result::Result<(), Box<dyn std::error::Error>> {
+        |target: &mut #plugin_name, arg: plugin_runtime::runtime::ConfigValue| -> ::anyhow::Result<()> {
             target.#target_ident = arg.try_into()?;
 
             std::result::Result::Ok(())
@@ -297,7 +297,7 @@ fn process_action(
     };
 
     let executor = quote! {
-        |target: &mut #plugin_name, arg: plugin_runtime::runtime::Value| -> std::result::Result<(), Box<dyn std::error::Error>> {
+        |target: &mut #plugin_name, arg: plugin_runtime::runtime::Value| -> ::anyhow::Result<()> {
             use plugin_runtime::runtime::TypedTryInto;
 
             lazy_static::lazy_static! {

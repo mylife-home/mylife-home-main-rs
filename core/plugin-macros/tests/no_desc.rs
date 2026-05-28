@@ -24,7 +24,7 @@ impl MylifePluginHooks for TestPlugin {
         TestPlugin::default()
     }
 
-    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn init(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 }

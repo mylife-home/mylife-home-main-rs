@@ -1,18 +1,14 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use crate::components::{
+    Component,
     metadata::PluginMetadata,
-    observable::{Observable, ObserverId, Subject},
+    observable::{Observable, Observer, ObserverId, Subject},
 };
-
-/// Component represents a component that can be registered to the registry.
-pub trait Component {
-    fn id(&self) -> &str;
-}
 
 /// Registry is responsible for managing the plugins and components of all instances, and providing an observable interface for other modules to subscribe to registry events.
 pub struct Registry {
-    plugins: HashMap<String, Rc<PluginMetadata>>,
+    plugins: HashMap<String, Arc<PluginMetadata>>,
     components: HashMap<String, ComponentData>,
     instances: HashMap<String, RefCell<InstanceData>>,
     subject: Subject<RegistryEvent>,
@@ -30,7 +26,7 @@ impl Registry {
     }
 
     /// Add a plugin to the registry.
-    pub fn add_plugin(&mut self, instance_name: Option<&str>, plugin: Rc<PluginMetadata>) {
+    pub fn add_plugin(&mut self, instance_name: Option<&str>, plugin: Arc<PluginMetadata>) {
         let id = Self::build_plugin_id(instance_name, plugin.id());
         let instance_name = Self::build_instance_name(instance_name);
 
@@ -57,7 +53,7 @@ impl Registry {
     }
 
     /// Removes a plugin from the registry.
-    pub fn remove_plugin(&mut self, instance_name: Option<&str>, plugin: Rc<PluginMetadata>) {
+    pub fn remove_plugin(&mut self, instance_name: Option<&str>, plugin: Arc<PluginMetadata>) {
         let id = Self::build_plugin_id(instance_name, plugin.id());
         let instance_name = Self::build_instance_name(instance_name);
 
@@ -93,13 +89,13 @@ impl Registry {
         &self,
         instance_name: Option<&str>,
         plugin_id: &str,
-    ) -> Option<Rc<PluginMetadata>> {
+    ) -> Option<Arc<PluginMetadata>> {
         let id = Self::build_plugin_id(instance_name, plugin_id);
         self.plugins.get(&id).cloned()
     }
 
     /// Gets all plugins of an instance.
-    pub fn get_plugins(&self, instance_name: Option<&str>) -> Vec<Rc<PluginMetadata>> {
+    pub fn get_plugins(&self, instance_name: Option<&str>) -> Vec<Arc<PluginMetadata>> {
         let instance_name = Self::build_instance_name(instance_name);
 
         if let Some(instance_data) = self.instances.get(&instance_name) {
@@ -113,7 +109,7 @@ impl Registry {
     pub fn add_component(
         &mut self,
         instance_name: Option<&str>,
-        component: Rc<RefCell<dyn Component>>,
+        component: Arc<RefCell<dyn Component>>,
     ) {
         let component_id = component.borrow().id().to_owned();
         let instance_name = Self::build_instance_name(instance_name);
@@ -150,7 +146,7 @@ impl Registry {
     pub fn remove_component(
         &mut self,
         instance_name: Option<&str>,
-        component: Rc<RefCell<dyn Component>>,
+        component: Arc<RefCell<dyn Component>>,
     ) {
         let component_id = component.borrow().id().to_owned();
         let instance_name = Self::build_instance_name(instance_name);
@@ -190,7 +186,7 @@ impl Registry {
     }
 
     /// Gets a component by its unique identifier.
-    pub fn get_component(&self, component_id: &str) -> Option<Rc<RefCell<dyn Component>>> {
+    pub fn get_component(&self, component_id: &str) -> Option<Arc<RefCell<dyn Component>>> {
         self.components
             .get(component_id)
             .map(|data| data.component().clone())
@@ -199,14 +195,14 @@ impl Registry {
     pub fn get_component_data(
         &self,
         component_id: &str,
-    ) -> Option<(String, Rc<RefCell<dyn Component>>)> {
+    ) -> Option<(String, Arc<RefCell<dyn Component>>)> {
         self.components
             .get(component_id)
             .map(|data| (data.instance_name().to_owned(), data.component().clone()))
     }
 
     /// Gets all components.
-    pub fn get_components(&self) -> Vec<Rc<RefCell<dyn Component>>> {
+    pub fn get_components(&self) -> Vec<Arc<RefCell<dyn Component>>> {
         self.components
             .values()
             .map(|data| data.component().clone())
@@ -229,7 +225,7 @@ impl Registry {
 }
 
 impl Observable<RegistryEvent> for Registry {
-    fn observe(&mut self, observer: impl Fn(&RegistryEvent) + 'static) -> ObserverId {
+    fn observe(&mut self, observer: Box<Observer<RegistryEvent>>) -> ObserverId {
         self.subject.observe(observer)
     }
 
@@ -243,32 +239,32 @@ pub enum RegistryEvent {
     /// PluginAdded is emitted when a plugin is added to the registry, containing the instance name and the plugin metadata.
     PluginAdded {
         instance_name: String,
-        plugin: Rc<PluginMetadata>,
+        plugin: Arc<PluginMetadata>,
     },
 
     /// PluginRemoved is emitted when a plugin is removed from the registry, containing the instance name and the plugin metadata.
     PluginRemoved {
         instance_name: String,
-        plugin: Rc<PluginMetadata>,
+        plugin: Arc<PluginMetadata>,
     },
 
     /// ComponentAdded is emitted when a component is added to the registry, containing the instance name and the component.
     ComponentAdded {
         instance_name: String,
-        component: Rc<RefCell<dyn Component>>,
+        component: Arc<RefCell<dyn Component>>,
     },
 
     /// ComponentRemoved is emitted when a component is removed from the registry, containing the instance name and the component.
     ComponentRemoved {
         instance_name: String,
-        component: Rc<RefCell<dyn Component>>,
+        component: Arc<RefCell<dyn Component>>,
     },
 }
 
 struct InstanceData {
     name: String,
-    components: HashMap<String, Rc<RefCell<dyn Component>>>,
-    plugins: HashMap<String, Rc<PluginMetadata>>,
+    components: HashMap<String, Arc<RefCell<dyn Component>>>,
+    plugins: HashMap<String, Arc<PluginMetadata>>,
 }
 
 impl InstanceData {
@@ -288,31 +284,31 @@ impl InstanceData {
         self.components.is_empty() && self.plugins.is_empty()
     }
 
-    pub fn add_component(&mut self, component: Rc<RefCell<dyn Component>>) {
+    pub fn add_component(&mut self, component: Arc<RefCell<dyn Component>>) {
         let id = component.borrow().id().to_owned();
         self.components.insert(id, component);
     }
 
-    pub fn add_plugin(&mut self, plugin: Rc<PluginMetadata>) {
+    pub fn add_plugin(&mut self, plugin: Arc<PluginMetadata>) {
         self.plugins.insert(plugin.id().to_owned(), plugin);
     }
 
-    pub fn remove_component(&mut self, component: &Rc<RefCell<dyn Component>>) {
+    pub fn remove_component(&mut self, component: &Arc<RefCell<dyn Component>>) {
         self.components.remove(component.borrow().id());
     }
 
-    pub fn remove_plugin(&mut self, plugin: &Rc<PluginMetadata>) {
+    pub fn remove_plugin(&mut self, plugin: &Arc<PluginMetadata>) {
         self.plugins.remove(plugin.id());
     }
 }
 
 struct ComponentData {
     instance_name: String,
-    component: Rc<RefCell<dyn Component>>,
+    component: Arc<RefCell<dyn Component>>,
 }
 
 impl ComponentData {
-    pub fn new(instance_name: String, component: Rc<RefCell<dyn Component>>) -> Self {
+    pub fn new(instance_name: String, component: Arc<RefCell<dyn Component>>) -> Self {
         Self {
             instance_name,
             component,
@@ -323,7 +319,7 @@ impl ComponentData {
         &self.instance_name
     }
 
-    pub fn component(&self) -> Rc<RefCell<dyn Component>> {
+    pub fn component(&self) -> Arc<RefCell<dyn Component>> {
         self.component.clone()
     }
 }

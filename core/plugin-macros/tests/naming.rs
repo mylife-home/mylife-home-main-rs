@@ -25,7 +25,7 @@ impl MylifePluginHooks for PluginName {
         PluginName::default()
     }
 
-    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn init(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 }
