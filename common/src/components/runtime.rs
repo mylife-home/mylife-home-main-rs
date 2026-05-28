@@ -1,6 +1,9 @@
 use std::{cell::RefCell, sync::Mutex};
 
-use tokio::{sync::mpsc::{UnboundedReceiver, UnboundedSender}, task::JoinHandle};
+use tokio::{
+    sync::mpsc::{UnboundedReceiver, UnboundedSender},
+    task::JoinHandle,
+};
 
 /// A simple runtime that can execute tasks sequentially.
 pub type Task = Box<dyn FnOnce() + Send + 'static>;
@@ -55,7 +58,9 @@ static RUNTIME_HANDLE: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
 
 /// Initializes the runtime and returns a sender for tasks to be executed by the runtime.
 pub fn init() -> TaskSender {
-    let mut handle = RUNTIME_HANDLE.lock().expect("Failed to acquire runtime handle lock");
+    let mut handle = RUNTIME_HANDLE
+        .lock()
+        .expect("Failed to acquire runtime handle lock");
     if handle.is_some() {
         panic!("Runtime is already initialized");
     }
@@ -67,7 +72,11 @@ pub fn init() -> TaskSender {
 
 /// Waits for the runtime to finish executing all tasks.
 pub async fn wait_exit() {
-    let Some(handle) = RUNTIME_HANDLE.lock().expect("Failed to acquire runtime handle lock").take() else {
+    let Some(handle) = RUNTIME_HANDLE
+        .lock()
+        .expect("Failed to acquire runtime handle lock")
+        .take()
+    else {
         panic!("Runtime is not initialized");
     };
 
@@ -84,6 +93,7 @@ impl RuntimeGuard {
             }
             *flag.borrow_mut() = true;
         });
+
         Self
     }
 }
