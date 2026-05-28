@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fmt, ops::Sub, rc::Rc, sync::atomic::AtomicUsize};
+use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc, sync::atomic::AtomicUsize};
 
 /// A simple observable value that can be observed for changes.
 pub type Observer<T> = dyn Fn(&T) + 'static;
