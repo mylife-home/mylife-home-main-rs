@@ -9,7 +9,6 @@ mod modules_include {
     use plugin_logic_base::*;
 }
 
-// TODO: Error: anyhow pour plugins, thiserror pour core ?
 // TODO: try tokio with plugins (implement "minuterie")
 
 fn main() -> anyhow::Result<()> {
