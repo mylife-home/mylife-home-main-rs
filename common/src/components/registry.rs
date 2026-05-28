@@ -260,7 +260,6 @@ pub enum RegistryEvent {
         component: Arc<RefCell<dyn Component>>,
     },
 }
-
 struct InstanceData {
     name: String,
     components: HashMap<String, Arc<RefCell<dyn Component>>>,

@@ -2,4 +2,4 @@ mod config;
 mod value;
 
 pub use config::{Config, ConfigValue, ConfigValueConversionError};
-pub use value::{TypedInto, TypedTryInto, TypedFrom, TypedTryFrom, Value, ValueConversionError};
+pub use value::{TypedFrom, TypedInto, TypedTryFrom, TypedTryInto, Value, ValueConversionError};
