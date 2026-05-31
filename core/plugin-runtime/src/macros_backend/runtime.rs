@@ -187,4 +187,8 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
     fn init(&mut self) -> anyhow::Result<()> {
         self.component.init()
     }
+
+    fn async_handler(&mut self) {
+        self.component.async_handler();
+    }
 }
