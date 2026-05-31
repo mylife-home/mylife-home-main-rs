@@ -33,7 +33,7 @@ pub trait MylifePlugin: MylifePluginHooks + fmt::Debug + Send + Sync {
 /// Binding between a state field and the actor: the listener forwards changes
 /// out, and the type tells how to convert the typed value to a Value.
 struct StateRuntimeData {
-    listener: Box<dyn Fn(Value)>,
+    listener: Box<dyn Fn(Value) + Send + Sync>,
     r#type: metadata::Type,
 }
 
@@ -82,7 +82,7 @@ impl<T: Default + Clone + TypedInto<Value>> State<T> {
 
     /// Binds the state to the runtime, installing the listener and the type
     /// used to convert outgoing values. Called once during setup.
-    pub fn runtime_register(&mut self, listener: Box<dyn Fn(Value)>, r#type: metadata::Type) {
+    pub fn runtime_register(&mut self, listener: Box<dyn Fn(Value) + Send + Sync>, r#type: metadata::Type) {
         self.runtime = Some(StateRuntimeData { listener, r#type });
     }
 }

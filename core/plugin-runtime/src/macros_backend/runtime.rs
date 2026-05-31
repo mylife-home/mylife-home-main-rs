@@ -1,16 +1,13 @@
 use anyhow::Context;
 use log::trace;
-use std::{cell::RefCell, collections::HashMap, fmt, sync::Arc};
+use std::{collections::HashMap, fmt, sync::{Arc, Mutex}};
 
 use crate::{
     MylifePlugin,
     runtime::{MylifeComponent, MylifePluginRuntime},
 };
 use common::components::{
-    Component, ComponentChange,
-    metadata::PluginMetadata,
-    observable::{Observable, Observer, ObserverId, Subject},
-    types::{Config, ConfigValue, Value},
+    Component, ComponentChange, ComponentChangeEventType, metadata::PluginMetadata, observable::{Observable, Observer, ObserverId, Subject}, types::{Config, ConfigValue, Value}
 };
 
 #[derive(Debug)]
@@ -50,7 +47,7 @@ pub struct StateRuntime<PluginType> {
 pub type ConfigRuntimeSetter<PluginType> =
     fn(target: &mut PluginType, config: ConfigValue) -> anyhow::Result<()>;
 pub type StateRuntimeRegister<PluginType> =
-    fn(target: &mut PluginType, listener: Box<dyn Fn(Value)>) -> ();
+    fn(target: &mut PluginType, listener: Box<dyn Fn(Value) + Send + Sync>) -> ();
 pub type StateRuntimeGetter<PluginType> = fn(target: &PluginType) -> Value;
 pub type ActionRuntimeExecutor<PluginType> =
     fn(target: &mut PluginType, action: Value) -> anyhow::Result<()>;
@@ -76,12 +73,14 @@ impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
     }
 }
 
+// FIXME: remove Arc<Mutex<>>
+
 struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
     id: String,
     plugin_metadata: Arc<PluginMetadata>,
-    subject: Arc<RefCell<Subject<ComponentChange>>>,
+    subject: Arc<Mutex<Subject<ComponentChangeEventType>>>,
 }
 
 impl<PluginType: MylifePlugin> fmt::Debug for ComponentImpl<PluginType> {
@@ -105,7 +104,7 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
             component: PluginType::new(id),
             id: String::from(id),
             plugin_metadata: plugin_metadata.clone(),
-            subject: Arc::new(RefCell::new(Subject::new())),
+            subject: Arc::new(Mutex::new(Subject::new())),
         });
 
         component.register_state_handlers();
@@ -122,7 +121,7 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
                 &mut self.component,
                 Box::new(move |value: Value| {
                     trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{id}] state '{name}' changed to {value:?}");
-                    subject.borrow().notify(&ComponentChange::State {
+                    subject.lock().expect("cannot lock mutex").notify(&ComponentChange::State {
                         name: name.clone(),
                         value,
                     });
@@ -158,13 +157,13 @@ impl<PluginType: MylifePlugin> Component for ComponentImpl<PluginType> {
     }
 }
 
-impl<PluginType: MylifePlugin> Observable<ComponentChange> for ComponentImpl<PluginType> {
-    fn observe(&mut self, observer: Box<Observer<ComponentChange>>) -> ObserverId {
-        self.subject.borrow_mut().observe(observer)
+impl<PluginType: MylifePlugin> Observable<ComponentChangeEventType> for ComponentImpl<PluginType> {
+    fn observe(&mut self, observer: Box<Observer<ComponentChangeEventType>>) -> ObserverId {
+        self.subject.lock().expect("cannot lock mutex").observe(observer)
     }
 
     fn unobserve(&mut self, id: ObserverId) -> bool {
-        self.subject.borrow_mut().unobserve(id)
+        self.subject.lock().expect("cannot lock mutex").unobserve(id)
     }
 }
 

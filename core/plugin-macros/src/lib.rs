@@ -242,7 +242,7 @@ fn process_state(plugin_name: &syn::Ident, attr: &attributes::MylifeState) -> To
     let target_ident = &attr.ident;
 
     let register = quote! {
-        |target: &mut #plugin_name, listener: std::boxed::Box<dyn std::ops::Fn(plugin_runtime::runtime::Value)>| {
+        |target: &mut #plugin_name, listener: std::boxed::Box<dyn std::ops::Fn(plugin_runtime::runtime::Value) + std::marker::Send + std::marker::Sync>| {
             let runtime_type: plugin_runtime::metadata::Type = #r#type;
             target.#target_ident.runtime_register(listener, runtime_type);
         }
