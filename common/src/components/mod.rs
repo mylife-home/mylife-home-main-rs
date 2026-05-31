@@ -42,21 +42,27 @@ impl EventType for ComponentChangeEventType {
     type Event<'a> = ComponentChange;
 }
 
-//////
-
+/// Components is the actor that owns the registry and processes incoming
+/// messages sequentially, dispatching each to the registered handlers.
 pub struct Components {
     registry: Registry,
     mailbox: UnboundedReceiver<Box<dyn ComponentsMessage>>,
     handlers: Vec<Box<dyn ComponentsHandler>>,
 }
 
+/// ComponentsMessage is a data-only message processed by the Components actor.
+/// Implementors carry the payload; the behavior lives in the handlers.
 pub trait ComponentsMessage: Send + fmt::Debug {}
 
-pub trait ComponentsHandler : Send {
+/// ComponentsHandler processes messages with mutable access to the registry.
+/// Handlers are registered at init time and called in registration order.
+pub trait ComponentsHandler: Send {
+    /// Handles a single message, optionally mutating the registry.
     fn handle(&mut self, registry: &mut Registry, message: &dyn ComponentsMessage);
 }
 
 impl Components {
+    /// Creates a new Components actor reading from the given mailbox.
     pub fn new(mailbox: UnboundedReceiver<Box<dyn ComponentsMessage>>) -> Self {
         Self {
             registry: Registry::new(),
@@ -65,14 +71,18 @@ impl Components {
         }
     }
 
+    /// Registers a handler. Must be called before the actor is started.
     pub fn add_handler(&mut self, handler: impl ComponentsHandler + 'static) {
         self.handlers.push(Box::new(handler));
     }
 
+    /// Spawns the actor on the current runtime, consuming it.
     pub fn start(self) -> JoinHandle<()> {
         tokio::spawn(self.run())
     }
 
+    /// Runs the message loop until the mailbox is closed, dispatching each
+    /// message to every handler in turn.
     async fn run(mut self) {
         while let Some(message) = self.mailbox.recv().await {
             log::trace!("Dispatching message {:?}", message);
