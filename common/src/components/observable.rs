@@ -1,13 +1,23 @@
-use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc, sync::atomic::AtomicUsize};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    fmt,
+    marker::PhantomData,
+    sync::{Arc, atomic::AtomicUsize},
+};
 
 /// A simple observable value that can be observed for changes.
-pub type Observer<T> = dyn Fn(&T) + 'static;
+pub type Observer<T> = dyn for<'a> Fn(&<T as EventType>::Event<'a>) + Sync + Send;
 
 /// A unique identifier for an observer.
 pub type ObserverId = usize;
 
+pub trait EventType {
+    type Event<'a>;
+}
+
 /// A simple observable that can be observed for notifications.
-pub trait Observable<T> {
+pub trait Observable<T: EventType> {
     /// Adds an observer that will be called on subject notification.
     fn observe(&mut self, observer: Box<Observer<T>>) -> ObserverId;
 
@@ -16,12 +26,12 @@ pub trait Observable<T> {
 }
 
 /// A simple subject that can be observed for notifications.
-pub struct Subject<T> {
-    observers: RefCell<HashMap<ObserverId, Rc<Observer<T>>>>,
+pub struct Subject<T: EventType> {
+    observers: RefCell<HashMap<ObserverId, Arc<Observer<T>>>>,
     id_gen: AtomicUsize,
 }
 
-impl<T> fmt::Debug for Subject<T>
+impl<T: EventType> fmt::Debug for Subject<T>
 where
     T: fmt::Debug,
 {
@@ -32,7 +42,7 @@ where
     }
 }
 
-impl<T> Observable<T> for Subject<T> {
+impl<T: EventType> Observable<T> for Subject<T> {
     fn observe(&mut self, observer: Box<Observer<T>>) -> ObserverId {
         let id = self
             .id_gen
@@ -46,7 +56,7 @@ impl<T> Observable<T> for Subject<T> {
     }
 }
 
-impl<T> Subject<T> {
+impl<T: EventType> Subject<T> {
     /// Creates a new observable subject.
     pub fn new() -> Self {
         Self {
@@ -56,7 +66,7 @@ impl<T> Subject<T> {
     }
 
     /// Notifies all observers with the given value.
-    pub fn notify(&self, value: &T) {
+    pub fn notify(&self, value: &T::Event<'_>) {
         // Allow the observers to mutate the observers list while we are notifying them.
         let observers = self
             .observers
@@ -71,8 +81,15 @@ impl<T> Subject<T> {
     }
 }
 
+#[derive(Debug)]
+pub struct ObservableValueEventType<T>(PhantomData<T>);
+
+impl<T> EventType for ObservableValueEventType<T> {
+    type Event<'a> = T;
+}
+
 /// An observable value that can be observed for changes.
-pub trait ObservableValue<T>: Observable<T> {
+pub trait ObservableValue<T>: Observable<ObservableValueEventType<T>> {
     /// Gets a reference to the current value.
     fn get(&self) -> &T;
 }
@@ -80,10 +97,10 @@ pub trait ObservableValue<T>: Observable<T> {
 /// A simple value that can be observed for changes.
 pub struct SubjectValue<T> {
     value: T,
-    subject: Subject<T>,
+    subject: Subject<ObservableValueEventType<T>>,
 }
 
-impl<T> fmt::Debug for SubjectValue<T>
+impl<T> fmt::Debug for SubjectValue<ObservableValueEventType<T>>
 where
     T: fmt::Debug,
 {
@@ -95,8 +112,8 @@ where
     }
 }
 
-impl<T> Observable<T> for SubjectValue<T> {
-    fn observe(&mut self, observer: Box<Observer<T>>) -> ObserverId {
+impl<T> Observable<ObservableValueEventType<T>> for SubjectValue<T> {
+    fn observe(&mut self, observer: Box<Observer<ObservableValueEventType<T>>>) -> ObserverId {
         self.subject.observe(observer)
     }
 
