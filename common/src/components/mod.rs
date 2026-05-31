@@ -57,8 +57,17 @@ pub trait ComponentsMessage: Send + fmt::Debug {}
 /// ComponentsHandler processes messages with mutable access to the registry.
 /// Handlers are registered at init time and called in registration order.
 pub trait ComponentsHandler: Send {
+    /// Called once when the actor starts, before any message is processed.
+    /// Use it to seed the registry or set up handler state.
+    fn init(&mut self, registry: &mut Registry) {
+        let _ = registry;
+    }
+
     /// Handles a single message, optionally mutating the registry.
-    fn handle(&mut self, registry: &mut Registry, message: &dyn ComponentsMessage);
+    fn handle(&mut self, registry: &mut Registry, message: &dyn ComponentsMessage) {
+        let _ = registry;
+        let _ = message;
+    }
 }
 
 impl Components {
@@ -84,6 +93,14 @@ impl Components {
     /// Runs the message loop until the mailbox is closed, dispatching each
     /// message to every handler in turn.
     async fn run(mut self) {
+        log::trace!("Starting components");
+        
+        for handler in &mut self.handlers {
+            handler.init(&mut self.registry);
+        }
+
+        log::trace!("Components started");
+
         while let Some(message) = self.mailbox.recv().await {
             log::trace!("Dispatching message {:?}", message);
 
