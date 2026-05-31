@@ -10,6 +10,9 @@ use common::components::{
     Component, ComponentChange, ComponentChangeEventType, metadata::PluginMetadata, observable::{Observable, Observer, ObserverId, Subject}, types::{Config, ConfigValue, Value}
 };
 
+/// PluginRuntimeImpl is the concrete runtime for a given plugin type. It pairs
+/// the plugin metadata with the typed accessors used to drive instances, and
+/// acts as the factory that produces components.
 #[derive(Debug)]
 pub struct PluginRuntimeImpl<PluginType: MylifePlugin + 'static> {
     metadata: Arc<PluginMetadata>,
@@ -17,6 +20,7 @@ pub struct PluginRuntimeImpl<PluginType: MylifePlugin + 'static> {
 }
 
 impl<PluginType: MylifePlugin + 'static> PluginRuntimeImpl<PluginType> {
+    /// Creates a runtime from the plugin metadata and its typed accessors.
     pub fn new(
         metadata: PluginMetadata,
         access: Arc<PluginRuntimeAccess<PluginType>>,
@@ -38,20 +42,29 @@ impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginT
     }
 }
 
+/// StateRuntime holds the typed accessors for a single state member: how to
+/// register its change listener and how to read its current value.
 #[derive(Debug)]
 pub struct StateRuntime<PluginType> {
     pub(crate) register: StateRuntimeRegister<PluginType>,
     pub(crate) getter: StateRuntimeGetter<PluginType>,
 }
 
+/// Applies a config value to the plugin instance.
 pub type ConfigRuntimeSetter<PluginType> =
     fn(target: &mut PluginType, config: ConfigValue) -> anyhow::Result<()>;
+/// Installs the listener invoked whenever a state member changes.
 pub type StateRuntimeRegister<PluginType> =
     fn(target: &mut PluginType, listener: Box<dyn Fn(Value) + Send + Sync>) -> ();
+/// Reads the current value of a state member.
 pub type StateRuntimeGetter<PluginType> = fn(target: &PluginType) -> Value;
+/// Executes an action on the plugin instance.
 pub type ActionRuntimeExecutor<PluginType> =
     fn(target: &mut PluginType, action: Value) -> anyhow::Result<()>;
 
+/// PluginRuntimeAccess is the generated dispatch table for a plugin type: the
+/// typed setters, getters, and executors that bridge the erased Value world to
+/// the plugin's concrete fields and methods. Shared across all its instances.
 #[derive(Debug)]
 pub struct PluginRuntimeAccess<PluginType: MylifePlugin> {
     configs: HashMap<String, ConfigRuntimeSetter<PluginType>>,
@@ -60,6 +73,7 @@ pub struct PluginRuntimeAccess<PluginType: MylifePlugin> {
 }
 
 impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
+    /// Builds the access table from the per-member accessor maps.
     pub fn new(
         configs: HashMap<String, ConfigRuntimeSetter<PluginType>>,
         states: HashMap<String, StateRuntime<PluginType>>,
@@ -75,6 +89,9 @@ impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
 
 // FIXME: remove Arc<Mutex<>>
 
+/// ComponentImpl is a live plugin instance: it wraps the user plugin value,
+/// holds its id and metadata, and exposes the Component interface by routing
+/// through the shared access table. State changes are emitted via its subject.
 struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
@@ -94,6 +111,8 @@ impl<PluginType: MylifePlugin> fmt::Debug for ComponentImpl<PluginType> {
 }
 
 impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
+    /// Creates an instance, builds the plugin value, and wires its state
+    /// change listeners to the subject.
     pub fn new(
         access: &Arc<PluginRuntimeAccess<PluginType>>,
         id: &str,
@@ -112,6 +131,8 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
         component
     }
 
+    /// Installs, for each state member, a listener that forwards its changes
+    /// to the subject as a ComponentChange::State event.
     fn register_state_handlers(&mut self) {
         for (name, state) in self.access.states.iter() {
             let id = self.id.clone();
