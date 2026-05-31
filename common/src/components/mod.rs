@@ -31,15 +31,18 @@ pub trait Component: Observable<ComponentChangeEventType> + Send {
 
 /// ComponentChange represents the changes that can occur on a component.
 #[derive(Debug)]
-pub enum ComponentChange {
+pub enum ComponentChange<'a> {
     /// State is emitted when a state of the component changes, containing the state name and the new value.
-    State { name: String, value: Value },
+    State { 
+        name: &'a str,
+        value: &'a Value
+    },
 }
 
 pub struct ComponentChangeEventType;
 
 impl EventType for ComponentChangeEventType {
-    type Event<'a> = ComponentChange;
+    type Event<'a> = ComponentChange<'a>;
 }
 
 /// Components is the actor that owns the registry and processes incoming

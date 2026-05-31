@@ -122,8 +122,8 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
                 Box::new(move |value: Value| {
                     trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{id}] state '{name}' changed to {value:?}");
                     subject.lock().expect("cannot lock mutex").notify(&ComponentChange::State {
-                        name: name.clone(),
-                        value,
+                        name: &name,
+                        value: &value,
                     });
                 }),
             );
