@@ -68,7 +68,11 @@ impl<'a> Plugin<'a> {
         self.runtime.metadata()
     }
 
-    pub fn create_component(&self, id: &str, waker: Box<dyn Fn() + Send + Sync>) -> Box<dyn MylifeComponent> {
+    pub fn create_component(
+        &self,
+        id: &str,
+        waker: Box<dyn Fn() + Send + Sync>,
+    ) -> Box<dyn MylifeComponent> {
         self.runtime.create(id, waker)
     }
 }
