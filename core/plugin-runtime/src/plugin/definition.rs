@@ -82,7 +82,11 @@ impl<T: Default + Clone + TypedInto<Value>> State<T> {
 
     /// Binds the state to the runtime, installing the listener and the type
     /// used to convert outgoing values. Called once during setup.
-    pub fn runtime_register(&mut self, listener: Box<dyn Fn(Value) + Send + Sync>, r#type: metadata::Type) {
+    pub fn runtime_register(
+        &mut self,
+        listener: Box<dyn Fn(Value) + Send + Sync>,
+        r#type: metadata::Type,
+    ) {
         self.runtime = Some(StateRuntimeData { listener, r#type });
     }
 }

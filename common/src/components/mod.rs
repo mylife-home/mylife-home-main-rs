@@ -33,10 +33,7 @@ pub trait Component: Observable<ComponentChangeEventType> + Send {
 #[derive(Debug)]
 pub enum ComponentChange<'a> {
     /// State is emitted when a state of the component changes, containing the state name and the new value.
-    State { 
-        name: &'a str,
-        value: &'a Value
-    },
+    State { name: &'a str, value: &'a Value },
 }
 
 pub struct ComponentChangeEventType;

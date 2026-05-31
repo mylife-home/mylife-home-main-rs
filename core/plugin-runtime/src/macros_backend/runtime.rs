@@ -1,13 +1,23 @@
 use anyhow::Context;
 use log::trace;
-use std::{collections::HashMap, fmt, sync::{Arc, Mutex}};
+use std::{
+    cell::UnsafeCell,
+    collections::HashMap,
+    fmt,
+    marker::PhantomPinned,
+    pin::Pin,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     MylifePlugin,
     runtime::{MylifeComponent, MylifePluginRuntime},
 };
 use common::components::{
-    Component, ComponentChange, ComponentChangeEventType, metadata::PluginMetadata, observable::{Observable, Observer, ObserverId, Subject}, types::{Config, ConfigValue, Value}
+    Component, ComponentChange, ComponentChangeEventType,
+    metadata::PluginMetadata,
+    observable::{Observable, Observer, ObserverId, Subject},
+    types::{Config, ConfigValue, Value},
 };
 
 /// PluginRuntimeImpl is the concrete runtime for a given plugin type. It pairs
@@ -97,7 +107,7 @@ struct ComponentImpl<PluginType: MylifePlugin> {
     component: PluginType,
     id: String,
     plugin_metadata: Arc<PluginMetadata>,
-    subject: Arc<Mutex<Subject<ComponentChangeEventType>>>,
+    subject: SharedSubject,
 }
 
 impl<PluginType: MylifePlugin> fmt::Debug for ComponentImpl<PluginType> {
@@ -123,7 +133,7 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
             component: PluginType::new(id),
             id: String::from(id),
             plugin_metadata: plugin_metadata.clone(),
-            subject: Arc::new(Mutex::new(Subject::new())),
+            subject: SharedSubject::new(),
         });
 
         component.register_state_handlers();
@@ -137,12 +147,12 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
         for (name, state) in self.access.states.iter() {
             let id = self.id.clone();
             let name = name.clone();
-            let subject = self.subject.clone();
+            let subject_ref = self.subject.as_ref();
             (state.register)(
                 &mut self.component,
                 Box::new(move |value: Value| {
                     trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{id}] state '{name}' changed to {value:?}");
-                    subject.lock().expect("cannot lock mutex").notify(&ComponentChange::State {
+                    subject_ref.notify(&ComponentChange::State {
                         name: &name,
                         value: &value,
                     });
@@ -180,11 +190,11 @@ impl<PluginType: MylifePlugin> Component for ComponentImpl<PluginType> {
 
 impl<PluginType: MylifePlugin> Observable<ComponentChangeEventType> for ComponentImpl<PluginType> {
     fn observe(&mut self, observer: Box<Observer<ComponentChangeEventType>>) -> ObserverId {
-        self.subject.lock().expect("cannot lock mutex").observe(observer)
+        self.subject.get_mut().observe(observer)
     }
 
     fn unobserve(&mut self, id: ObserverId) -> bool {
-        self.subject.lock().expect("cannot lock mutex").unobserve(id)
+        self.subject.get_mut().unobserve(id)
     }
 }
 
@@ -210,5 +220,86 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
 
     fn async_handler(&mut self) {
         self.component.async_handler();
+    }
+}
+
+/// SharedSubject
+///
+/// A component's state listeners are stored INSIDE the plugin, which lives
+/// right next to the Subject inside ComponentImpl. A listener therefore cannot
+/// hold a normal &mut to the Subject: that would be a second borrow of a
+/// sibling field, and it must outlive the call that created it. So the listener
+/// holds a pointer instead. SharedSubject is what makes that pointer sound, by
+/// owning the two guarantees a raw pointer needs and nothing else:
+///
+///   1. Address stability. The Subject lives inside `Inner`, which is `!Unpin`
+///      (PhantomPinned) and only ever exists as `Pin<Box<Inner>>`. No safe API
+///      can move the value out of that box, so the Subject's address is fixed
+///      for the whole life of the SharedSubject. This does NOT depend on how
+///      ComponentImpl is built, moved, or stored: moving ComponentImpl moves
+///      the Pin<Box> pointer, while `Inner` stays put at its heap address.
+///
+///   2. Sound aliasing. The Subject sits in an `UnsafeCell`. Every reference,
+///      both the listener handle and the owner accessor, is derived from
+///      `UnsafeCell::get()`, so they share a single provenance and may each
+///      produce &mut. UnsafeCell is the one place the language allows this.
+///
+/// The obligation neither guarantee covers, that no two &mut are LIVE at the
+/// same instant, is met by the runtime: all access happens on the single actor
+/// task, synchronously, and never re-entrantly for one component.
+struct SharedSubject {
+    inner: Pin<Box<Inner>>,
+}
+
+struct Inner {
+    cell: UnsafeCell<Subject<ComponentChangeEventType>>,
+    // Makes Inner !Unpin so Pin<Box<Inner>> truly forbids moving it out.
+    _pin: PhantomPinned,
+}
+
+impl SharedSubject {
+    pub fn new() -> Self {
+        SharedSubject {
+            inner: Box::pin(Inner {
+                cell: UnsafeCell::new(Subject::new()),
+                _pin: PhantomPinned,
+            }),
+        }
+    }
+
+    /// A cheap Copy, Send + Sync handle for state listeners to capture.
+    /// Valid for the whole life of this SharedSubject thanks to the pin.
+    pub fn as_ref(&self) -> SharedSubjectRef {
+        SharedSubjectRef(self.inner.as_ref().get_ref().cell.get())
+    }
+
+    /// Owner access for the Observable impl. Same provenance as the handle
+    /// (both come from the cell). The returned &mut is short-lived and, on the
+    /// single task, never coexists with a listener's &mut.
+    pub fn get_mut(&self) -> &mut Subject<ComponentChangeEventType> {
+        // SAFETY: see SharedSubject. Address-stable; single synchronous task;
+        // non-reentrant per component, so no other &mut to the subject is live.
+        unsafe { &mut *self.inner.as_ref().get_ref().cell.get() }
+    }
+}
+
+/// A Copy, Send + Sync raw handle to a SharedSubject's Subject, captured by
+/// state listeners. The unsafe Send + Sync are sound because the pointer is
+/// only ever dereferenced on the single actor task (see SharedSubject); they
+/// exist so the listener box keeps its `Box<dyn Fn(Value) + Send + Sync>`
+/// type, which leaves the macro and plugin code untouched.
+#[derive(Clone, Copy)]
+struct SharedSubjectRef(*const Subject<ComponentChangeEventType>);
+
+unsafe impl Send for SharedSubjectRef {}
+unsafe impl Sync for SharedSubjectRef {}
+
+impl SharedSubjectRef {
+    /// Notify the shared subject. Must be called only on the actor task,
+    /// synchronously, and not re-entrantly with another access to the same
+    /// subject (the SharedSubject obligation).
+    pub fn notify(self, change: &ComponentChange) {
+        // SAFETY: see SharedSubject. No other &mut to the subject is live.
+        unsafe { &*self.0 }.notify(change);
     }
 }
