@@ -285,10 +285,6 @@ impl InstanceData {
         }
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
     pub fn is_empty(&self) -> bool {
         self.components.is_empty() && self.plugins.is_empty()
     }
@@ -325,10 +321,6 @@ impl ComponentData {
             instance_name,
             component,
         }
-    }
-
-    pub fn instance_name(&self) -> &str {
-        &self.instance_name
     }
 
     pub fn component(&self) -> &dyn Component {
