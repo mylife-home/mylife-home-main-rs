@@ -19,7 +19,7 @@ pub struct ValueBinary {
     _waker: WakeHandle,
 }
 
-// impl Drop si besoin de terminate
+// impl Drop if terminate needed
 impl MylifePluginHooks for ValueBinary {
     fn new(id: &str, waker: WakeHandle) -> Self {
         ValueBinary {
