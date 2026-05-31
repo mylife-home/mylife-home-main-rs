@@ -1,6 +1,6 @@
 use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{
-    MylifePlugin, MylifePluginHooks, State,
+    MylifePlugin, MylifePluginHooks, State, WakeHandle,
     metadata::{ConfigType, PluginUsage, Type},
     runtime::MylifePluginRuntime,
 };
@@ -35,7 +35,7 @@ struct ExamplePlugin {
 }
 
 impl MylifePluginHooks for ExamplePlugin {
-    fn new(id: &str) -> Self {
+    fn new(id: &str, _waker: WakeHandle) -> Self {
         ExamplePlugin {
             id: String::from(id),
             config_value: Default::default(),

@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{
-    MylifePlugin, MylifePluginHooks, State,
+    MylifePlugin, MylifePluginHooks, State, WakeHandle,
     runtime::{Config, ConfigValue, MylifePluginRuntime, Value},
 };
 
@@ -51,7 +51,7 @@ struct TestPlugin {
 }
 
 impl MylifePluginHooks for TestPlugin {
-    fn new(_id: &str) -> Self {
+    fn new(_id: &str, _waker: WakeHandle) -> Self {
         TestPlugin::default()
     }
 
@@ -78,7 +78,7 @@ impl TestPlugin {
 #[test]
 fn test_behavior() {
     let runtime: Box<dyn MylifePluginRuntime> = TestPlugin::runtime();
-    let mut component = runtime.create("comp-id");
+    let mut component = runtime.create("comp-id", Box::new(|| {}));
 
     HISTORY.clear();
 

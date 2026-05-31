@@ -16,5 +16,6 @@ convert_case = { workspace = true }
 proc-macro-error = { workspace = true }
 
 [dev-dependencies]
+anyhow = { workspace = true }
 inventory = { workspace = true }
 lazy_static = { workspace = true }
