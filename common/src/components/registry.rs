@@ -34,7 +34,7 @@ impl Registry {
         let instance_data = self
             .instances
             .entry(instance_name.to_owned())
-            .or_insert_with(|| InstanceData::new(instance_name.to_owned()));
+            .or_default();
 
         if instance_data.get_plugin(plugin.id()).is_some() {
             log::error!("plugin {}:{} already added", instance_name, plugin.id());
@@ -120,7 +120,7 @@ impl Registry {
         let instance_data = self
             .instances
             .entry(instance_name.to_owned())
-            .or_insert_with(|| InstanceData::new(instance_name.to_owned()));
+            .or_default();
 
         let component = self
             .components
@@ -270,21 +270,14 @@ pub enum RegistryEvent<'a> {
         component: &'a dyn Component,
     },
 }
+
+#[derive(Default)]
 struct InstanceData {
-    name: String,
     components: HashSet<String>,
     plugins: HashMap<String, Arc<PluginMetadata>>,
 }
 
 impl InstanceData {
-    pub fn new(name: String) -> Self {
-        Self {
-            name,
-            components: HashSet::new(),
-            plugins: HashMap::new(),
-        }
-    }
-
     pub fn is_empty(&self) -> bool {
         self.components.is_empty() && self.plugins.is_empty()
     }
