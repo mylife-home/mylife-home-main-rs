@@ -94,7 +94,7 @@ impl Components {
     /// message to every handler in turn.
     async fn run(mut self) {
         log::trace!("Starting components");
-        
+
         for handler in &mut self.handlers {
             handler.init(&mut self.registry);
         }

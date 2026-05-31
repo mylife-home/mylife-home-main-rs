@@ -31,10 +31,7 @@ impl Registry {
     pub fn add_plugin(&mut self, instance_name: Option<&str>, plugin: Arc<PluginMetadata>) {
         let instance_name = Self::build_instance_name(instance_name);
 
-        let instance_data = self
-            .instances
-            .entry(instance_name.to_owned())
-            .or_default();
+        let instance_data = self.instances.entry(instance_name.to_owned()).or_default();
 
         if instance_data.get_plugin(plugin.id()).is_some() {
             log::error!("plugin {}:{} already added", instance_name, plugin.id());
@@ -117,10 +114,7 @@ impl Registry {
             ComponentData::new(instance_name.to_owned(), Box::new(component)),
         );
 
-        let instance_data = self
-            .instances
-            .entry(instance_name.to_owned())
-            .or_default();
+        let instance_data = self.instances.entry(instance_name.to_owned()).or_default();
 
         let component = self
             .components
