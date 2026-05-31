@@ -19,7 +19,9 @@ fn main() -> anyhow::Result<()> {
     let mut component = modules::registry()
         .plugin("logic-base.value-binary")
         .unwrap()
-        .create_component("comp-id");
+        .create_component("comp-id", Box::new(|| {
+            println!("WAKE ASKED");    
+        }));
 
     component.observe(Box::new(|event: &ComponentChange| {
         println!("EVENT: {:?}", event);

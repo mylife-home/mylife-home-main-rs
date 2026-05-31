@@ -1,7 +1,7 @@
 use log::debug;
 
 use plugin_macros::{MylifePlugin, mylife_actions};
-use plugin_runtime::{MylifePluginHooks, State};
+use plugin_runtime::{MylifePluginHooks, State, WakeHandle};
 
 const LOG_TARGET: &str = "mylife:home:core:plugins:logic-base:value-binary";
 
@@ -15,15 +15,18 @@ pub struct ValueBinary {
 
     #[mylife_state(description = "actual value")] // type=, name=
     state: State<bool>,
+
+    _waker: WakeHandle,
 }
 
 // impl Drop si besoin de terminate
 impl MylifePluginHooks for ValueBinary {
-    fn new(id: &str) -> Self {
+    fn new(id: &str, waker: WakeHandle) -> Self {
         ValueBinary {
             id: String::from(id),
             config: Default::default(),
             state: Default::default(),
+            _waker: waker,
         }
     }
 

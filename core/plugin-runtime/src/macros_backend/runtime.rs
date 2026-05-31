@@ -1,16 +1,11 @@
 use anyhow::Context;
 use log::trace;
 use std::{
-    cell::UnsafeCell,
-    collections::HashMap,
-    fmt,
-    marker::PhantomPinned,
-    pin::Pin,
-    sync::{Arc, Mutex},
+    cell::UnsafeCell, collections::HashMap, fmt, marker::PhantomPinned, pin::Pin, sync::Arc,
 };
 
 use crate::{
-    MylifePlugin,
+    MylifePlugin, WakeHandle,
     runtime::{MylifeComponent, MylifePluginRuntime},
 };
 use common::components::{
@@ -47,8 +42,8 @@ impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginT
         &self.metadata
     }
 
-    fn create(&self, id: &str) -> Box<dyn MylifeComponent> {
-        ComponentImpl::<PluginType>::new(&self.access, id, &self.metadata)
+    fn create(&self, id: &str, waker: Box<dyn Fn() + Send + Sync>) -> Box<dyn MylifeComponent> {
+        ComponentImpl::<PluginType>::new(&self.access, id, waker, &self.metadata)
     }
 }
 
@@ -126,11 +121,12 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
     pub fn new(
         access: &Arc<PluginRuntimeAccess<PluginType>>,
         id: &str,
+        waker: Box<dyn Fn() + Send + Sync>,
         plugin_metadata: &Arc<PluginMetadata>,
     ) -> Box<Self> {
         let mut component = Box::new(ComponentImpl {
             access: access.clone(),
-            component: PluginType::new(id),
+            component: PluginType::new(id, WakeHandle::new(waker)),
             id: String::from(id),
             plugin_metadata: plugin_metadata.clone(),
             subject: SharedSubject::new(),

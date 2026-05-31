@@ -12,7 +12,7 @@ pub trait MylifePluginRuntime: Send + Sync + Debug {
     fn metadata(&self) -> &metadata::PluginMetadata;
 
     /// Creates a new component instance of this plugin with the given id.
-    fn create(&self, id: &str) -> Box<dyn MylifeComponent>;
+    fn create(&self, id: &str, waker: Box<dyn Fn() + Send + Sync>) -> Box<dyn MylifeComponent>;
 }
 
 /// MylifeComponent is a component instance produced by a plugin, with the
