@@ -33,11 +33,11 @@ impl<'a> Module<'a> {
         &self.version
     }
 
-    pub fn plugin(&self, id: &str) -> Option<&'a Plugin> {
+    pub fn plugin(&self, id: &str) -> Option<&'a Plugin<'_>> {
         self.plugins.get(id).copied()
     }
 
-    pub fn plugins(&self) -> Vec<&'a Plugin> {
+    pub fn plugins(&self) -> Vec<&'a Plugin<'_>> {
         self.plugins.values().copied().collect()
     }
 }
@@ -87,19 +87,19 @@ impl<'a> Registry<'a> {
         }
     }
 
-    pub fn plugins(&self) -> Vec<&'a Plugin> {
+    pub fn plugins(&self) -> Vec<&'a Plugin<'_>> {
         self.plugins.values().map(Self::mapper).collect()
     }
 
-    pub fn plugin(&self, id: &str) -> Option<&'a Plugin> {
+    pub fn plugin(&self, id: &str) -> Option<&'a Plugin<'_>> {
         self.plugins.get(id).map(Self::mapper)
     }
 
-    pub fn modules(&self) -> Vec<&'a Module> {
+    pub fn modules(&self) -> Vec<&'a Module<'_>> {
         self.modules.values().map(Self::mapper).collect()
     }
 
-    pub fn module(&self, id: &str) -> Option<&'a Module> {
+    pub fn module(&self, id: &str) -> Option<&'a Module<'_>> {
         self.modules.get(id).map(Self::mapper)
     }
 
