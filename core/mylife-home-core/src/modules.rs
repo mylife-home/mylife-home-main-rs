@@ -1,6 +1,10 @@
 use log::debug;
 use plugin_runtime::{PluginRegistration, metadata::PluginMetadata, runtime::MylifeComponent};
-use std::{collections::HashMap, pin::Pin, sync::OnceLock};
+use std::{
+    collections::HashMap,
+    pin::Pin,
+    sync::{Arc, OnceLock},
+};
 
 const LOG_TARGET: &str = "mylife:home:core:modules";
 
@@ -64,7 +68,7 @@ impl<'a> Plugin<'a> {
         &self.metadata().version()
     }
 
-    pub fn metadata(&self) -> &PluginMetadata {
+    pub fn metadata(&self) -> &Arc<PluginMetadata> {
         self.runtime.metadata()
     }
 

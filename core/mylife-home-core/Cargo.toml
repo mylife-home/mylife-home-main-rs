@@ -16,3 +16,4 @@ plugin_runtime = { path = "../plugin-runtime" }
 plugin_logic_base = { path = "../plugins/logic-base" }
 log = { workspace = true }
 pretty_env_logger = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }

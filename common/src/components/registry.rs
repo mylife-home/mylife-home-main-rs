@@ -99,7 +99,7 @@ impl Registry {
     pub fn add_component(
         &mut self,
         instance_name: Option<&str>,
-        component: impl Component + 'static,
+        component: Box<dyn Component>,
     ) {
         let component_id = component.id().to_owned();
         let instance_name = Self::build_instance_name(instance_name);
@@ -111,7 +111,7 @@ impl Registry {
 
         self.components.insert(
             component_id.clone(),
-            ComponentData::new(instance_name.to_owned(), Box::new(component)),
+            ComponentData::new(instance_name.to_owned(), component),
         );
 
         let instance_data = self.instances.entry(instance_name.to_owned()).or_default();

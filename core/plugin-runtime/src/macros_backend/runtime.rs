@@ -38,7 +38,7 @@ impl<PluginType: MylifePlugin + 'static> PluginRuntimeImpl<PluginType> {
 }
 
 impl<PluginType: MylifePlugin> MylifePluginRuntime for PluginRuntimeImpl<PluginType> {
-    fn metadata(&self) -> &PluginMetadata {
+    fn metadata(&self) -> &Arc<PluginMetadata> {
         &self.metadata
     }
 

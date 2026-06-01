@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, sync::Arc};
 
 use common::components::{Component, metadata};
 
@@ -9,7 +9,7 @@ pub use common::components::types::*;
 /// metadata and acts as a factory for component instances.
 pub trait MylifePluginRuntime: Send + Sync + Debug {
     /// Returns the metadata describing this plugin (its members, config, ...).
-    fn metadata(&self) -> &metadata::PluginMetadata;
+    fn metadata(&self) -> &Arc<metadata::PluginMetadata>;
 
     /// Creates a new component instance of this plugin with the given id.
     fn create(&self, id: &str, waker: Box<dyn Fn() + Send + Sync>) -> Box<dyn MylifeComponent>;

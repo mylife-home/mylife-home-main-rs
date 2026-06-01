@@ -1,6 +1,13 @@
-use common::components::ComponentChange;
+use std::time::Duration;
+
+use tokio::{sync::mpsc, time::sleep};
+
+use common::components::{ComponentChange, Components};
 use plugin_runtime::runtime::{Config, ConfigValue, Value};
 
+use crate::components::Extension;
+
+mod components;
 mod modules;
 
 mod modules_include {
@@ -9,9 +16,25 @@ mod modules_include {
     use plugin_logic_base::*;
 }
 
-// TODO: try tokio with plugins (implement "minuterie")
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    pretty_env_logger::init();
 
-fn main() -> anyhow::Result<()> {
+    modules::init();
+
+    let (component_sender, components_mailbox) = mpsc::unbounded_channel();
+    let mut components = Components::new(components_mailbox);
+    components.add_handler(Extension::new());
+    components.start();
+
+    sleep(Duration::from_secs(10)).await;
+
+    let _ = component_sender;
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn old_main() -> anyhow::Result<()> {
     pretty_env_logger::init();
 
     modules::init();

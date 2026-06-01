@@ -5,7 +5,6 @@ use tokio::{sync::mpsc::UnboundedReceiver, task::JoinHandle};
 use crate::components::{
     metadata::PluginMetadata,
     observable::{EventType, Observable},
-    registry::Registry,
     types::Value,
 };
 
@@ -14,6 +13,7 @@ pub mod observable;
 mod registry;
 pub mod types;
 
+pub use registry::Registry;
 /// Component represents a component that can be registered to the registry.
 pub trait Component: Observable<ComponentChangeEventType> + Send {
     /// Returns the unique identifier of the component.
