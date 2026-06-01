@@ -8,11 +8,13 @@ use crate::{
     MylifePlugin, WakeHandle,
     runtime::{MylifeComponent, MylifePluginRuntime},
 };
-use common::components::{
-    Component, ComponentChange, ComponentChangeEventType,
-    metadata::PluginMetadata,
-    observable::{Observable, Observer, ObserverId, Subject},
-    types::{Config, ConfigValue, Value},
+use common::{
+    components::{
+        Component, ComponentChange, ComponentChangeEventType,
+        metadata::PluginMetadata,
+        types::{Config, ConfigValue, Value},
+    },
+    utils::observable::{Observable, Observer, ObserverId, Subject},
 };
 
 /// PluginRuntimeImpl is the concrete runtime for a given plugin type. It pairs
