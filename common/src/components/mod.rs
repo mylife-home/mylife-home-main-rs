@@ -2,14 +2,12 @@ use std::{fmt, sync::Arc};
 
 use tokio::{sync::mpsc::UnboundedReceiver, task::JoinHandle};
 
-use crate::components::{
+use crate::{components::{
     metadata::PluginMetadata,
-    observable::{EventType, Observable},
     types::Value,
-};
+}, utils::observable::{EventType, Observable}};
 
 pub mod metadata;
-pub mod observable;
 mod registry;
 pub mod types;
 

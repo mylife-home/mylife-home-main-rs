@@ -4,10 +4,9 @@ use std::{
     sync::Arc,
 };
 
-use crate::components::{
-    Component,
-    metadata::PluginMetadata,
-    observable::{EventType, Observable, Observer, ObserverId, Subject},
+use crate::{
+    components::{Component, metadata::PluginMetadata },
+    utils::observable::{EventType, Observable, Observer, ObserverId, Subject}
 };
 
 /// Registry is responsible for managing the plugins and components of all instances, and providing an observable interface for other modules to subscribe to registry events.
