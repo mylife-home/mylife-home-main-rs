@@ -2,10 +2,10 @@ use std::{fmt, sync::Arc};
 
 use tokio::{sync::mpsc::UnboundedReceiver, task::JoinHandle};
 
-use crate::{components::{
-    metadata::PluginMetadata,
-    types::Value,
-}, utils::observable::{EventType, Observable}};
+use crate::{
+    components::{metadata::PluginMetadata, types::Value},
+    utils::observable::{EventType, Observable},
+};
 
 pub mod metadata;
 mod registry;

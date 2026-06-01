@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::{
-    components::{Component, metadata::PluginMetadata },
-    utils::observable::{EventType, Observable, Observer, ObserverId, Subject}
+    components::{Component, metadata::PluginMetadata},
+    utils::observable::{EventType, Observable, Observer, ObserverId, Subject},
 };
 
 /// Registry is responsible for managing the plugins and components of all instances, and providing an observable interface for other modules to subscribe to registry events.
@@ -95,11 +95,7 @@ impl Registry {
     }
 
     /// Adds a component to the registry.
-    pub fn add_component(
-        &mut self,
-        instance_name: Option<&str>,
-        component: Box<dyn Component>,
-    ) {
+    pub fn add_component(&mut self, instance_name: Option<&str>, component: Box<dyn Component>) {
         let component_id = component.id().to_owned();
         let instance_name = Self::build_instance_name(instance_name);
 
