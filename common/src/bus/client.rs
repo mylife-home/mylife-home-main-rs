@@ -51,13 +51,13 @@ impl MqttMessage {
         self.retain
     }
 
-    /// Get the domain part of the topic, which is the first segment.
-    pub fn domain(&self) -> Option<&str> {
+    /// Get the instance part of the topic, which is the first segment.
+    pub fn instance(&self) -> Option<&str> {
         self.topic.split('/').nth(0)
     }
 
-    /// Get the instance part of the topic, which is the second segment.
-    pub fn instance(&self) -> Option<&str> {
+    /// Get the domain part of the topic, which is the second segment.
+    pub fn domain(&self) -> Option<&str> {
         self.topic.split('/').nth(1)
     }
 }

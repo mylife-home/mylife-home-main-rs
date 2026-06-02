@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    bus::{BusData, client::MqttEvent},
+    bus::{BusData, client::MqttEvent, encoding},
     utils::observable::{EventType, Observable, Subject},
 };
 
@@ -99,7 +99,31 @@ impl BusHandler for PresenceHandler {
                 data.presence.clear_status();
             }
 
-            MqttEvent::Message(message) => {}
+            MqttEvent::Message(message) => {
+                let (Some(domain), Some(instance_name)) = (message.domain(), message.instance())
+                else {
+                    return;
+                };
+
+                if domain != "online" || instance_name == data.client().instance_name() {
+                    return;
+                }
+
+                let online = match encoding::read_bool(message.payload()) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        log::error!(
+                            "Error reading online value ({:?}): {}",
+                            message.payload(),
+                            e
+                        );
+                        return;
+                    }
+                };
+
+                data.presence_mut()
+                    .update_instance_status(instance_name, online);
+            }
 
             _ => {}
         }
