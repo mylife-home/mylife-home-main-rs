@@ -162,6 +162,18 @@ impl Client {
                 );
 
                 self.online = true;
+
+                if let Err(e) = self
+                    .mqtt_client
+                    .subscribe(self.subscriptions.iter().cloned().collect())
+                {
+                    log::error!(
+                        "failed to subscribe to topics {:?}: {}",
+                        self.subscriptions,
+                        e
+                    );
+                }
+
                 log::info!("MQTT client connected");
             }
 
@@ -256,6 +268,11 @@ impl Client {
     /// Clear the retained message of a topic.
     pub fn clear_retain(&self, topic: &str) {
         self.publish(topic, Bytes::new(), true);
+    }
+
+    /// Get the instance name
+    pub fn instance_name(&self) -> &str {
+        &self.instance_name
     }
 }
 
