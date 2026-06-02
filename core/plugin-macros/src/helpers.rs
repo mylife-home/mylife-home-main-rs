@@ -13,13 +13,13 @@ pub fn get_type(
 
     if let Some(provided_type) = provided_type {
         match provided_type.value() {
-            metadata::Type::Range(min, max) => {
+            metadata::Type::Range(range) => {
                 if native_type_name != "i64" {
                     abort_call_site!("Expected i64, got '{}'", native_type_name);
                 }
 
-                if min >= max {
-                    abort_call_site!("Expected min ({}) < max ({})", min, max);
+                if range.start() >= range.end() {
+                    abort_call_site!("Expected min ({}) < max ({})", range.start(), range.end());
                 }
             }
             metadata::Type::Text => {

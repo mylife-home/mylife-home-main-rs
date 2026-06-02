@@ -62,8 +62,10 @@ impl FromMeta for Type {
 impl ToTokens for Type {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let generated = match self.value() {
-            metadata::Type::Range(min, max) => {
-                quote! { plugin_runtime::metadata::Type::Range(#min, #max) }
+            metadata::Type::Range(range) => {
+                let min = range.start();
+                let max = range.end();
+                quote! { plugin_runtime::metadata::Type::Range((#min..=#max)) }
             }
             metadata::Type::Text => quote! { plugin_runtime::metadata::Type::Text },
             metadata::Type::Float => quote! { plugin_runtime::metadata::Type::Float },
