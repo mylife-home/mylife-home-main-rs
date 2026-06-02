@@ -12,6 +12,7 @@ async fn main() {
         MqttClient::create(
             "common-demo-client".to_owned(),
             "rpi-dev-home-main:1883".to_owned(),
+            None,
         )
         .expect("failed to start mqtt client"),
     );

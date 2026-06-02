@@ -138,6 +138,14 @@ enum MqttCommand {
     Shutdown,
 }
 
+/// Last will message to be published by the broker on behalf of the client if the connection is lost unexpectedly. This allows other clients to be notified of the client's offline status.
+#[derive(Debug)]
+pub struct LastWill {
+    pub topic: String,
+    pub payload: Bytes,
+    pub retain: bool,
+}
+
 /// MQTT client for publishing messages, subscribing to topics, and tracking
 /// broker connection state. The client runs an internal worker task that owns
 /// the TCP connection and automatically reconnects when the broker becomes
@@ -155,7 +163,11 @@ impl MqttClient {
     /// The worker will attempt to connect to the broker at `server_address`,
     /// publish connection state through `events()`, and automatically reconnect
     /// with exponential backoff if the connection is lost.
-    pub fn create(instance_name: String, server_address: String) -> Result<Self, MqttError> {
+    pub fn create(
+        instance_name: String,
+        server_address: String,
+        last_will: Option<LastWill>,
+    ) -> Result<Self, MqttError> {
         if instance_name.trim().is_empty() {
             return Err(MqttError::InvalidConfig {
                 message: String::from("instance_name must not be empty"),
@@ -173,8 +185,13 @@ impl MqttClient {
         let worker_events = events_tx.clone();
 
         let worker_handle = tokio::spawn(async move {
-            let mut worker =
-                IoWorker::new(instance_name, server_address, command_rx, worker_events);
+            let mut worker = IoWorker::new(
+                instance_name,
+                server_address,
+                last_will,
+                command_rx,
+                worker_events,
+            );
             worker.run().await;
         });
 
@@ -244,6 +261,7 @@ impl MqttClient {
 struct IoWorker {
     instance_name: String,
     server_address: String,
+    last_will: Option<LastWill>,
     command_rx: mpsc::Receiver<MqttCommand>,
     events_tx: broadcast::Sender<MqttEvent>,
     pending_subscription_paths: Option<Vec<String>>,
@@ -256,12 +274,14 @@ impl IoWorker {
     fn new(
         instance_name: String,
         server_address: String,
+        last_will: Option<LastWill>,
         command_rx: mpsc::Receiver<MqttCommand>,
         events_tx: broadcast::Sender<MqttEvent>,
     ) -> Self {
         Self {
             instance_name,
             server_address,
+            last_will,
             command_rx,
             events_tx,
             pending_subscription_paths: None,
@@ -501,6 +521,7 @@ impl IoWorker {
                     return Err(MqttError::SubscriptionFailed { paths });
                 }
             }
+            Packet::UnsubAck(_) => {}
             Packet::PingResp => {}
             Packet::Disconnect => {
                 self.connected = false;
@@ -522,7 +543,12 @@ impl IoWorker {
             keep_alive: KEEP_ALIVE.as_secs() as u16,
             client_id: self.instance_name.clone(),
             clean_session: true,
-            last_will: None,
+            last_will: self.last_will.as_ref().map(|will| mqttbytes::v4::LastWill {
+                topic: will.topic.clone(),
+                message: will.payload.clone(),
+                qos: QoS::AtMostOnce,
+                retain: will.retain,
+            }),
             login: None,
         })
     }

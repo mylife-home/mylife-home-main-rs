@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    bus::{BusData, BusMessage, Transport},
+    bus::{BusData, client::MqttEvent},
     utils::observable::{EventType, Observable, Subject},
 };
 
@@ -64,6 +64,13 @@ impl Presence {
             }
         }
     }
+
+    /// Clear all presence status, marking all instances as offline and emitting events for each.
+    ///
+    /// Note: reserved for PresenceHandler
+    fn clear_status(&mut self) {
+        self.instances.clear();
+    }
 }
 
 impl Observable<PresenceEventType> for Presence {
@@ -82,8 +89,19 @@ impl Observable<PresenceEventType> for Presence {
 pub struct PresenceHandler;
 
 impl BusHandler for PresenceHandler {
-    fn handle(&mut self, data: &mut BusData, message: &dyn BusMessage) {
-        let _ = data;
-        let _ = message;
+    fn init(&mut self, data: &mut BusData) {
+        data.client_mut().subscribe("+/online");
+    }
+
+    fn handle_mqtt(&mut self, data: &mut BusData, event: &MqttEvent) {
+        match event {
+            MqttEvent::Disconnected { .. } => {
+                data.presence.clear_status();
+            }
+
+            MqttEvent::Message(message) => {}
+
+            _ => {}
+        }
     }
 }

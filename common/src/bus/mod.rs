@@ -1,12 +1,11 @@
 use std::fmt;
 
-use tokio::{
-    select,
-    sync::{broadcast, mpsc::UnboundedReceiver},
-    task::JoinHandle,
-};
+use tokio::{select, sync::mpsc::UnboundedReceiver, task::JoinHandle};
 
-use crate::bus::{client::Client, mqtt::MqttEvent, presence::Presence};
+use crate::bus::{
+    client::{Client, MqttEvent},
+    presence::{Presence, PresenceHandler},
+};
 
 pub mod client;
 mod encoding;
@@ -38,7 +37,6 @@ pub trait BusHandler: Send {
 pub struct Transport {
     data: BusData,
     mailbox: UnboundedReceiver<Box<dyn BusMessage>>,
-    mqtt_events: broadcast::Receiver<MqttEvent>,
     handlers: Vec<Box<dyn BusHandler>>,
 }
 
@@ -80,13 +78,13 @@ impl Transport {
         server_address: String,
     ) -> anyhow::Result<Self> {
         let client = Client::create(instance_name, server_address)?;
-        let mqtt_events = client.events();
+        let data = BusData::new(client);
+        let handlers: Vec<Box<dyn BusHandler>> = vec![Box::new(PresenceHandler)];
 
         Ok(Self {
-            data: BusData::new(client),
+            data,
             mailbox,
-            mqtt_events,
-            handlers: Vec::new(),
+            handlers,
         })
     }
 
@@ -107,7 +105,7 @@ impl Transport {
 
         loop {
             select! {
-                Ok(event) = self.mqtt_events.recv() => {
+                Some(event) = self.data.client.next_event() => {
                     log::trace!("Received MQTT event {:?}", event);
                     for handler in &mut self.handlers {
                         handler.handle_mqtt(&mut self.data, &event);

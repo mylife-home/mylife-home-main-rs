@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use tokio::{sync::mpsc, time::sleep};
 
-use common::components::{ComponentChange, Components};
+use common::{
+    bus::Transport,
+    components::{ComponentChange, Components},
+};
 use plugin_runtime::runtime::{Config, ConfigValue, Value};
 
 use crate::components::Extension;
@@ -16,6 +19,9 @@ mod modules_include {
     use plugin_logic_base::*;
 }
 
+const INSTANCE_NAME: &str = "core-test-instance";
+const SERVER_ADDRESS: &str = "rpi-dev-home-main:1883";
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
@@ -26,6 +32,14 @@ async fn main() -> anyhow::Result<()> {
     let mut components = Components::new(components_mailbox);
     components.add_handler(Extension::new());
     components.start();
+
+    let (bus_sender, bus_mailbox) = mpsc::unbounded_channel();
+    let mut transport = Transport::new(
+        bus_mailbox,
+        INSTANCE_NAME.to_owned(),
+        SERVER_ADDRESS.to_owned(),
+    )?;
+    transport.start();
 
     sleep(Duration::from_secs(10)).await;
 
