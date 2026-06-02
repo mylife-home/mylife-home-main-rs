@@ -101,6 +101,12 @@ impl Transport {
     /// Runs the message loop until the mailbox is closed, dispatching each
     /// message to every handler in turn.
     async fn run(mut self) {
+        log::trace!("Starting bus");
+
+        for handler in &mut self.handlers {
+            handler.init(&mut self.data);
+        }
+
         log::trace!("Bus started");
 
         loop {
