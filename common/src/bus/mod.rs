@@ -9,6 +9,7 @@ use tokio::{
 use crate::bus::{client::Client, mqtt::MqttEvent, presence::Presence};
 
 pub mod client;
+mod encoding;
 pub mod mqtt;
 mod presence;
 
