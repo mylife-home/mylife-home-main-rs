@@ -1,11 +1,11 @@
 use regex::Regex;
-use std::{fmt, num::ParseIntError, str};
+use std::{fmt, num::ParseIntError, ops::RangeInclusive, str};
 
 /// Type represents the type of a member, which can be Range, Text, Float, Bool, Enum or Complex.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     /// Range represents a type that accepts an integer value within a specified range, defined by a minimum and maximum value.
-    Range(i64, i64),
+    Range(RangeInclusive<i64>),
 
     /// Text represents a type that accepts a string value, which can be used for textual data such as names, descriptions or messages.
     Text,
@@ -78,7 +78,7 @@ impl str::FromStr for Type {
                     return Err(TypeParseError::new(input, TypeParseErrorReason::MinMax));
                 }
 
-                return Ok(Type::Range(min, max));
+                return Ok(Type::Range(min..=max));
             }
             "text" => {
                 if args != "" {
@@ -144,7 +144,7 @@ impl str::FromStr for Type {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Type::Range(min, max) => write!(f, "range[{};{}]", min, max),
+            Type::Range(range) => write!(f, "range[{};{}]", range.start(), range.end()),
             Type::Text => write!(f, "text"),
             Type::Float => write!(f, "float"),
             Type::Bool => write!(f, "bool"),

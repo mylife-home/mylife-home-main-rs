@@ -12,6 +12,53 @@ pub enum Value {
     Complex, // unsupported for now
 }
 
+impl Value {
+    /// If the value is a Range, return its inner i64 value. Otherwise, return None.
+    pub fn as_range(&self) -> Option<i64> {
+        if let Value::Range(value) = self {
+            Some(*value)
+        } else {
+            None
+        }
+    }
+
+    /// If the value is a Text, return its inner String value. Otherwise, return None.
+    pub fn as_text(&self) -> Option<&str> {
+        if let Value::Text(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    /// If the value is a Float, return its inner f64 value. Otherwise, return None.
+    pub fn as_float(&self) -> Option<f64> {
+        if let Value::Float(value) = self {
+            Some(*value)
+        } else {
+            None
+        }
+    }
+
+    /// If the value is a Bool, return its inner bool value. Otherwise, return None.
+    pub fn as_bool(&self) -> Option<bool> {
+        if let Value::Bool(value) = self {
+            Some(*value)
+        } else {
+            None
+        }
+    }
+
+    /// If the value is an Enum, return its inner String value. Otherwise, return None.
+    pub fn as_enum(&self) -> Option<&str> {
+        if let Value::Enum(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+}
+
 pub trait TypedFrom<T>: Sized {
     fn typed_from(value: T, ty: &metadata::Type) -> Self;
 }
@@ -54,8 +101,8 @@ where
 
 impl TypedFrom<i64> for Value {
     fn typed_from(value: i64, ty: &metadata::Type) -> Self {
-        if let metadata::Type::Range(min, max) = ty {
-            if *min <= value && value <= *max {
+        if let metadata::Type::Range(range) = ty {
+            if *range.start() <= value && value <= *range.end() {
                 return Value::Range(value);
             }
         }
