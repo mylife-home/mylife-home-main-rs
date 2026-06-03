@@ -3,8 +3,8 @@ use std::time::Duration;
 use tokio::{sync::mpsc, time::sleep};
 
 use common::{
-    bus::Transport,
-    components::{ComponentChange, Components},
+    bus::{self, Transport},
+    components::{ComponentChange, Components, ShutdownMessage},
 };
 use plugin_runtime::runtime::{Config, ConfigValue, Value};
 
@@ -28,10 +28,10 @@ async fn main() -> anyhow::Result<()> {
 
     modules::init();
 
-    let (component_sender, components_mailbox) = mpsc::unbounded_channel();
+    let (components_sender, components_mailbox) = mpsc::unbounded_channel();
     let mut components = Components::new(components_mailbox);
     components.add_handler(Extension::new());
-    components.start();
+    let components_handle = components.start();
 
     let (bus_sender, bus_mailbox) = mpsc::unbounded_channel();
     let mut transport = Transport::new(
@@ -39,11 +39,26 @@ async fn main() -> anyhow::Result<()> {
         INSTANCE_NAME.to_owned(),
         SERVER_ADDRESS.to_owned(),
     )?;
-    transport.start();
+    let transport_handle = transport.start();
 
     sleep(Duration::from_secs(10)).await;
+    println!("Will shutdown");
 
-    let _ = component_sender;
+    bus_sender
+        .send(Box::new(bus::ShutdownMessage))
+        .expect("could not send to bus");
+
+    components_sender
+        .send(Box::new(ShutdownMessage))
+        .expect("could not send to components");
+
+    let (components_res, transport_res) = tokio::join!(components_handle, transport_handle);
+    components_res.expect("failed to join components");
+    transport_res.expect("failed to join transport");
+
+    let _ = components_sender;
+    let _ = bus_sender;
+
     Ok(())
 }
 

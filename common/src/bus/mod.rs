@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{any::Any, fmt};
 
 use tokio::{select, sync::mpsc::UnboundedReceiver, task::JoinHandle};
 
@@ -12,7 +12,9 @@ mod encoding;
 pub mod mqtt;
 mod presence;
 
-pub trait BusMessage: Send + fmt::Debug {}
+pub trait BusMessage: Any + Send + fmt::Debug {
+    fn as_any(&self) -> &dyn Any;
+}
 
 pub trait BusHandler: Send {
     /// Called once when the actor starts, before any message is processed.
@@ -41,6 +43,7 @@ pub struct Transport {
 }
 
 pub struct BusData {
+    shutdown: bool,
     client: Client,
     presence: Presence,
 }
@@ -48,9 +51,18 @@ pub struct BusData {
 impl BusData {
     fn new(client: Client) -> Self {
         Self {
+            shutdown: false,
             client,
             presence: Presence::new(),
         }
+    }
+
+    pub fn set_shutdown(&mut self) {
+        self.shutdown = true;
+    }
+
+    pub fn is_shutdown(&self) -> bool {
+        self.shutdown
     }
 
     pub fn client(&self) -> &Client {
@@ -79,7 +91,8 @@ impl Transport {
     ) -> anyhow::Result<Self> {
         let client = Client::create(instance_name, server_address)?;
         let data = BusData::new(client);
-        let handlers: Vec<Box<dyn BusHandler>> = vec![Box::new(PresenceHandler)];
+        let handlers: Vec<Box<dyn BusHandler>> =
+            vec![Box::new(ShutdownHandler), Box::new(PresenceHandler)];
 
         Ok(Self {
             data,
@@ -112,21 +125,50 @@ impl Transport {
         loop {
             select! {
                 Some(event) = self.data.client.next_event() => {
-                    log::trace!("Received MQTT event {:?}", event);
+                    log::trace!("Dispatching MQTT event {:?}", event);
+
                     for handler in &mut self.handlers {
                         handler.handle_mqtt(&mut self.data, &event);
                     }
                 }
 
                 Some(message) = self.mailbox.recv() => {
-                    log::trace!("Received message {:?}", message);
+                    log::trace!("Dispatching message {:?}", message);
+
                     for handler in &mut self.handlers {
                         handler.handle(&mut self.data, message.as_ref());
                     }
                 }
+            }
 
-                else => break,
+            if self.data.is_shutdown() {
+                break;
             }
         }
+
+        self.data.client.shutdown().await;
+
+        log::trace!("Bus terminated");
+    }
+}
+
+#[derive(Debug)]
+pub struct ShutdownMessage;
+
+impl BusMessage for ShutdownMessage {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+struct ShutdownHandler;
+
+impl BusHandler for ShutdownHandler {
+    fn handle(&mut self, data: &mut BusData, message: &dyn BusMessage) {
+        let Some(message) = message.as_any().downcast_ref::<ShutdownMessage>() else {
+            return;
+        };
+
+        data.set_shutdown();
     }
 }

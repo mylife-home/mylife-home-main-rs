@@ -1,5 +1,5 @@
 use crate::modules;
-use common::components::{Components, ComponentsHandler, Registry};
+use common::components::{ComponentsData, ComponentsHandler};
 
 pub struct Extension {}
 
@@ -10,7 +10,9 @@ impl Extension {
 }
 
 impl ComponentsHandler for Extension {
-    fn init(&mut self, registry: &mut Registry) {
+    fn init(&mut self, data: &mut ComponentsData) {
+        let registry = data.registry_mut();
+
         for plugin in modules::registry().plugins() {
             registry.add_plugin(None, plugin.metadata().clone());
         }
