@@ -28,36 +28,24 @@ async fn main() -> anyhow::Result<()> {
 
     modules::init();
 
-    let (components_sender, components_mailbox) = mpsc::unbounded_channel();
-    let mut components = Components::new(components_mailbox);
+    let mut components = Components::new();
+    let components_sender = components.get_mailbox_handle();
     components.add_handler(Extension::new());
     let components_handle = components.start();
 
-    let (bus_sender, bus_mailbox) = mpsc::unbounded_channel();
-    let mut transport = Transport::new(
-        bus_mailbox,
-        INSTANCE_NAME.to_owned(),
-        SERVER_ADDRESS.to_owned(),
-    )?;
+    let mut transport = Transport::new(INSTANCE_NAME.to_owned(), SERVER_ADDRESS.to_owned())?;
+    let bus_sender = transport.get_mailbox_handle();
     let transport_handle = transport.start();
 
     sleep(Duration::from_secs(10)).await;
     println!("Will shutdown");
 
-    bus_sender
-        .send(Box::new(bus::ShutdownMessage))
-        .expect("could not send to bus");
-
-    components_sender
-        .send(Box::new(ShutdownMessage))
-        .expect("could not send to components");
+    bus_sender.send(Box::new(bus::ShutdownMessage));
+    components_sender.send(Box::new(ShutdownMessage));
 
     let (components_res, transport_res) = tokio::join!(components_handle, transport_handle);
     components_res.expect("failed to join components");
     transport_res.expect("failed to join transport");
-
-    let _ = components_sender;
-    let _ = bus_sender;
 
     Ok(())
 }

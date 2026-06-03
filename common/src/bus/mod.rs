@@ -1,10 +1,13 @@
 use std::{any::Any, fmt};
 
-use tokio::{select, sync::mpsc::UnboundedReceiver, task::JoinHandle};
+use tokio::{select, task::JoinHandle};
 
-use crate::bus::{
-    client::{Client, MqttEvent},
-    presence::{Presence, PresenceHandler},
+use crate::{
+    bus::{
+        client::{Client, MqttEvent},
+        presence::{Presence, PresenceHandler},
+    },
+    utils::mailbox::{Mailbox, MailboxHandle},
 };
 
 pub mod client;
@@ -38,7 +41,7 @@ pub trait BusHandler: Send {
 
 pub struct Transport {
     data: BusData,
-    mailbox: UnboundedReceiver<Box<dyn BusMessage>>,
+    mailbox: Mailbox<Box<dyn BusMessage>>,
     handlers: Vec<Box<dyn BusHandler>>,
 }
 
@@ -84,21 +87,20 @@ impl BusData {
 
 impl Transport {
     /// Creates a new Transport actor reading from the given mailbox.
-    pub fn new(
-        mailbox: UnboundedReceiver<Box<dyn BusMessage>>,
-        instance_name: String,
-        server_address: String,
-    ) -> anyhow::Result<Self> {
-        let client = Client::create(instance_name, server_address)?;
-        let data = BusData::new(client);
+    pub fn new(instance_name: String, server_address: String) -> anyhow::Result<Self> {
         let handlers: Vec<Box<dyn BusHandler>> =
             vec![Box::new(ShutdownHandler), Box::new(PresenceHandler)];
 
         Ok(Self {
-            data,
-            mailbox,
+            data: BusData::new(Client::create(instance_name, server_address)?),
+            mailbox: Mailbox::new(),
             handlers,
         })
+    }
+
+    /// Get a handle to the mailbox
+    pub fn get_mailbox_handle(&self) -> MailboxHandle<Box<dyn BusMessage>> {
+        self.mailbox.handle()
     }
 
     /// Registers a handler. Must be called before the actor is started.
@@ -132,7 +134,7 @@ impl Transport {
                     }
                 }
 
-                Some(message) = self.mailbox.recv() => {
+                message = self.mailbox.recv() => {
                     log::trace!("Dispatching message {:?}", message);
 
                     for handler in &mut self.handlers {

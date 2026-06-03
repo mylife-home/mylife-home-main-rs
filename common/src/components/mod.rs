@@ -10,6 +10,8 @@ pub mod types;
 pub use component::*;
 pub use registry::*;
 
+use crate::utils::mailbox::{Mailbox, MailboxHandle};
+
 /// ComponentsMessage is a data-only message processed by the Components actor.
 /// Implementors carry the payload; the behavior lives in the handlers.
 pub trait ComponentsMessage: Send + fmt::Debug {
@@ -36,7 +38,7 @@ pub trait ComponentsHandler: Send {
 /// messages sequentially, dispatching each to the registered handlers.
 pub struct Components {
     data: ComponentsData,
-    mailbox: UnboundedReceiver<Box<dyn ComponentsMessage>>,
+    mailbox: Mailbox<Box<dyn ComponentsMessage>>,
     handlers: Vec<Box<dyn ComponentsHandler>>,
 }
 
@@ -72,14 +74,19 @@ impl ComponentsData {
 
 impl Components {
     /// Creates a new Components actor reading from the given mailbox.
-    pub fn new(mailbox: UnboundedReceiver<Box<dyn ComponentsMessage>>) -> Self {
+    pub fn new() -> Self {
         let handlers: Vec<Box<dyn ComponentsHandler>> = vec![Box::new(ShutdownHandler)];
 
         Self {
             data: ComponentsData::new(),
-            mailbox,
+            mailbox: Mailbox::new(),
             handlers,
         }
+    }
+
+    /// Get a handle to the mailbox
+    pub fn get_mailbox_handle(&self) -> MailboxHandle<Box<dyn ComponentsMessage>> {
+        self.mailbox.handle()
     }
 
     /// Registers a handler. Must be called before the actor is started.
@@ -104,12 +111,11 @@ impl Components {
         log::trace!("Components started");
 
         loop {
-            if let Some(message) = self.mailbox.recv().await {
-                log::trace!("Dispatching message {:?}", message);
+            let message = self.mailbox.recv().await;
+            log::trace!("Dispatching message {:?}", message);
 
-                for handler in &mut self.handlers {
-                    handler.handle(&mut self.data, message.as_ref());
-                }
+            for handler in &mut self.handlers {
+                handler.handle(&mut self.data, message.as_ref());
             }
 
             if self.data.is_shutdown() {
