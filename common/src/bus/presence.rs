@@ -1,7 +1,11 @@
 use std::collections::HashSet;
 
 use crate::{
-    bus::{BusData, client::MqttEvent, encoding},
+    bus::{
+        BusData,
+        client::{MqttEvent, TopicBuilder},
+        encoding,
+    },
     utils::observable::{EventType, Observable, Subject},
 };
 
@@ -90,7 +94,8 @@ pub struct PresenceHandler;
 
 impl BusHandler for PresenceHandler {
     fn init(&mut self, data: &mut BusData) {
-        data.client_mut().subscribe("+/online");
+        data.client_mut()
+            .subscribe(TopicBuilder::any_instance("online").build());
     }
 
     fn handle_mqtt(&mut self, data: &mut BusData, event: &MqttEvent) {
