@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use tokio::{sync::mpsc, time::sleep};
+use tokio::time::sleep;
 
 use common::{
     bus::{self, Transport},
@@ -59,7 +59,7 @@ fn old_main() -> anyhow::Result<()> {
     let mut component = modules::registry()
         .plugin("logic-base.value-binary")
         .unwrap()
-        .create_component(
+        .create(
             "comp-id",
             Box::new(|| {
                 println!("WAKE ASKED");

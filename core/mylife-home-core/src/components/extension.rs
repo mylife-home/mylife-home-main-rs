@@ -21,7 +21,7 @@ impl ComponentsHandler for Extension {
         let component = modules::registry()
             .plugin("logic-base.value-binary")
             .unwrap()
-            .create_component(
+            .create(
                 "comp-id",
                 Box::new(|| {
                     println!("WAKE ASKED");
