@@ -167,7 +167,7 @@ struct ShutdownHandler;
 
 impl BusHandler for ShutdownHandler {
     fn handle(&mut self, data: &mut BusData, message: &dyn BusMessage) {
-        let Some(message) = message.as_any().downcast_ref::<ShutdownMessage>() else {
+        let Some(_message) = message.as_any().downcast_ref::<ShutdownMessage>() else {
             return;
         };
 
