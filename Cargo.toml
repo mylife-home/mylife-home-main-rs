@@ -10,6 +10,7 @@ resolver = "2"
 
 [workspace.dependencies]
 anyhow = "1.0.102"
+async-trait = "0.1.89"
 bytes = "1.11.1"
 convert_case = "0.8.0"
 darling = "0.20.11"
