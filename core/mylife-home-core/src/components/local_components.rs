@@ -15,7 +15,7 @@ use common::{
 use log::{error, warn};
 use plugin_runtime::{
     metadata::PluginMetadata,
-    runtime::{Config, MylifeComponent, MylifePluginRuntime, Value},
+    runtime::{Config, ConfigValue, MylifeComponent, MylifePluginRuntime, Value},
 };
 
 #[derive(Debug)]
@@ -74,6 +74,9 @@ impl ComponentsHandler for LocalComponents {
         let registry = data.registry_mut();
 
         // TODO: load components
+        let mut config = Config::new();
+        config.insert("config".to_string(), ConfigValue::Bool(false));
+
         let component = self
             .create_component(
                 "comp-id",
@@ -81,7 +84,7 @@ impl ComponentsHandler for LocalComponents {
                     .plugin("logic-base.value-binary")
                     .unwrap()
                     .metadata(),
-                &Config::new(),
+                &config,
             )
             .expect("failed to create component");
 
