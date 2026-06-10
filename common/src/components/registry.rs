@@ -16,37 +16,6 @@ pub struct Registry {
     subject: Subject<RegistryEventType>,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-struct InstanceName(Option<String>);
-
-impl From<Option<&str>> for InstanceName {
-    fn from(value: Option<&str>) -> Self {
-        Self(value.map(|s| s.to_owned()))
-    }
-}
-
-impl<'a> From<&'a InstanceName> for Option<&'a str> {
-    fn from(value: &'a InstanceName) -> Self {
-        value.0.as_deref()
-    }
-}
-
-impl<'a> From<InstanceName> for Option<String> {
-    fn from(value: InstanceName) -> Self {
-        value.0
-    }
-}
-
-impl fmt::Display for InstanceName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(value) = &self.0 {
-            f.write_str(value)
-        } else {
-            f.write_str("local")
-        }
-    }
-}
-
 impl Registry {
     /// Creates a new Registry instance.
     pub fn new() -> Self {
@@ -280,6 +249,37 @@ pub enum RegistryEvent<'a> {
         instance_name: Option<&'a str>,
         component: &'a dyn Component,
     },
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct InstanceName(Option<String>);
+
+impl From<Option<&str>> for InstanceName {
+    fn from(value: Option<&str>) -> Self {
+        Self(value.map(|s| s.to_owned()))
+    }
+}
+
+impl<'a> From<&'a InstanceName> for Option<&'a str> {
+    fn from(value: &'a InstanceName) -> Self {
+        value.0.as_deref()
+    }
+}
+
+impl<'a> From<InstanceName> for Option<String> {
+    fn from(value: InstanceName) -> Self {
+        value.0
+    }
+}
+
+impl fmt::Display for InstanceName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(value) = &self.0 {
+            f.write_str(value)
+        } else {
+            f.write_str("local")
+        }
+    }
 }
 
 #[derive(Default)]
