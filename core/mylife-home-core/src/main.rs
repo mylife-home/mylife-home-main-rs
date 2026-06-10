@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
     let mut components = Components::new();
     let components_sender = components.get_mailbox_handle();
     components.add_handler(LocalPlugins::new());
-    components.add_handler(LocalComponents::new(components_sender.clone()));
+    components.add_handler(LocalComponents::new());
     let components_handle = components.start();
 
     let mut transport = Transport::new(INSTANCE_NAME.to_owned(), SERVER_ADDRESS.to_owned())?;

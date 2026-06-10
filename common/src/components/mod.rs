@@ -23,8 +23,13 @@ pub trait ComponentsMessage: Send + fmt::Debug {
 pub trait ComponentsHandler: Send {
     /// Called once when the actor starts, before any message is processed.
     /// Use it to seed the registry or set up handler state.
-    fn init(&mut self, data: &mut ComponentsData) {
+    fn init(
+        &mut self,
+        data: &mut ComponentsData,
+        mailbox_sender: &MailboxHandle<Box<dyn ComponentsMessage>>,
+    ) {
         let _ = data;
+        let _ = mailbox_sender;
     }
 
     /// Handles a single message, optionally mutating the registry.
@@ -104,8 +109,9 @@ impl Components {
     async fn run(mut self) {
         log::trace!("Starting components");
 
+        let mailbox_sender = self.mailbox.handle();
         for handler in &mut self.handlers {
-            handler.init(&mut self.data);
+            handler.init(&mut self.data, &mailbox_sender);
         }
 
         log::trace!("Components started");

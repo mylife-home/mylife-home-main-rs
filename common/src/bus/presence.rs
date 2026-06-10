@@ -2,11 +2,14 @@ use std::collections::HashSet;
 
 use crate::{
     bus::{
-        BusData,
+        BusData, BusMessage,
         client::{MqttEvent, TopicBuilder},
         encoding,
     },
-    utils::observable::{EventType, Observable, Subject},
+    utils::{
+        mailbox::MailboxHandle,
+        observable::{EventType, Observable, Subject},
+    },
 };
 
 use super::BusHandler;
@@ -93,7 +96,7 @@ impl Observable<PresenceEventType> for Presence {
 pub struct PresenceHandler;
 
 impl BusHandler for PresenceHandler {
-    fn init(&mut self, data: &mut BusData) {
+    fn init(&mut self, data: &mut BusData, _: &MailboxHandle<Box<dyn BusMessage>>) {
         data.client_mut()
             .subscribe(TopicBuilder::any_instance("online").build());
     }

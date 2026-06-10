@@ -22,8 +22,9 @@ pub trait BusMessage: Any + Send + fmt::Debug {
 pub trait BusHandler: Send {
     /// Called once when the actor starts, before any message is processed.
     /// Use it to seed the state or set up handler state.
-    fn init(&mut self, data: &mut BusData) {
+    fn init(&mut self, data: &mut BusData, mailbox_sender: &MailboxHandle<Box<dyn BusMessage>>) {
         let _ = data;
+        let _ = mailbox_sender;
     }
 
     /// Handles a single message, optionally mutating the state.
@@ -118,8 +119,9 @@ impl Transport {
     async fn run(mut self) {
         log::trace!("Starting bus");
 
+        let mailbox_sender = self.mailbox.handle();
         for handler in &mut self.handlers {
-            handler.init(&mut self.data);
+            handler.init(&mut self.data, &mailbox_sender);
         }
 
         log::trace!("Bus started");

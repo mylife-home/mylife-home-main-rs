@@ -30,12 +30,14 @@ impl ComponentsMessage for ComponentWakeMessage {
 }
 
 pub struct LocalComponents {
-    mailbox_sender: MailboxHandle<Box<dyn ComponentsMessage + 'static>>,
+    mailbox_sender: Option<MailboxHandle<Box<dyn ComponentsMessage>>>,
 }
 
 impl LocalComponents {
-    pub fn new(mailbox_sender: MailboxHandle<Box<dyn ComponentsMessage + 'static>>) -> Self {
-        Self { mailbox_sender }
+    pub fn new() -> Self {
+        Self {
+            mailbox_sender: None,
+        }
     }
 
     fn create_component(
@@ -48,14 +50,27 @@ impl LocalComponents {
             .plugin(plugin.id())
             .unwrap_or_else(|| panic!("could not find plugin {}", plugin.id()));
 
-        let component = LocalComponent::new(self.mailbox_sender.clone(), id, plugin, config)?;
+        let component = LocalComponent::new(
+            self.mailbox_sender
+                .as_ref()
+                .expect("no mailbox sender")
+                .clone(),
+            id,
+            plugin,
+            config,
+        )?;
 
         Ok(Box::new(component))
     }
 }
 
 impl ComponentsHandler for LocalComponents {
-    fn init(&mut self, data: &mut ComponentsData) {
+    fn init(
+        &mut self,
+        data: &mut ComponentsData,
+        mailbox_sender: &MailboxHandle<Box<dyn ComponentsMessage>>,
+    ) {
+        self.mailbox_sender = Some(mailbox_sender.clone());
         let registry = data.registry_mut();
 
         // TODO: load components
