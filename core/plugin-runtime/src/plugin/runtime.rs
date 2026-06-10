@@ -22,7 +22,7 @@ pub trait MylifePluginRuntime: Send + Sync + Debug {
 
 /// MylifeComponent is a component instance produced by a plugin, with the
 /// lifecycle hooks the actor calls to configure, start, and drive it.
-pub trait MylifeComponent {
+pub trait MylifeComponent: Send {
     /// Returns the unique identifier of the component.
     fn id(&self) -> &str;
 
@@ -43,5 +43,5 @@ pub trait MylifeComponent {
     fn get_state(&self, name: &str) -> Value;
 
     /// Executes an action on the component.
-    fn execute_action(&mut self, name: &str, action: Value) -> anyhow::Result<()>;
+    fn execute_action(&mut self, name: &str, value: Value) -> anyhow::Result<()>;
 }
