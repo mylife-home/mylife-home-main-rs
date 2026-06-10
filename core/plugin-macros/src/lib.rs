@@ -304,7 +304,7 @@ fn process_action(
                 static ref RUNTIME_TYPE: plugin_runtime::metadata::Type = #r#type;
             }
 
-            let value: #var_type = arg.clone().typed_try_into(&RUNTIME_TYPE)?;
+            let value: #var_type = arg.typed_try_into(&RUNTIME_TYPE)?;
             target.#target_ident(value)#end_ident;
 
             std::result::Result::Ok(())

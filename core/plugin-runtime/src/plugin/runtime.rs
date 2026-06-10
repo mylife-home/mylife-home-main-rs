@@ -1,6 +1,6 @@
 use std::{fmt::Debug, sync::Arc};
 
-use common::components::{Component, metadata};
+use common::components::metadata;
 
 // re-exports for plugins
 pub use common::components::types::*;
@@ -12,12 +12,23 @@ pub trait MylifePluginRuntime: Send + Sync + Debug {
     fn metadata(&self) -> &Arc<metadata::PluginMetadata>;
 
     /// Creates a new component instance of this plugin with the given id.
-    fn create(&self, id: &str, waker: Box<dyn Fn() + Send + Sync>) -> Box<dyn MylifeComponent>;
+    fn create(
+        &self,
+        id: &str,
+        waker: Box<dyn Fn() + Send + Sync>,
+        state_change: Box<dyn Fn(/*name:*/ &str, /*value:*/ &Value) + Send + Sync>,
+    ) -> Box<dyn MylifeComponent>;
 }
 
 /// MylifeComponent is a component instance produced by a plugin, with the
 /// lifecycle hooks the actor calls to configure, start, and drive it.
-pub trait MylifeComponent: Component {
+pub trait MylifeComponent {
+    /// Returns the unique identifier of the component.
+    fn id(&self) -> &str;
+
+    /// Returns the plugin metadata of the component.
+    fn plugin(&self) -> &Arc<metadata::PluginMetadata>;
+
     /// Applies the instance configuration. Called once before init.
     fn configure(&mut self, config: &Config) -> anyhow::Result<()>;
 
@@ -27,4 +38,10 @@ pub trait MylifeComponent: Component {
     /// Hook invoked by the actor to let the component drive its asynchronous
     /// work (network, timers, ...) outside of synchronous action handling.
     fn async_handler(&mut self);
+
+    /// Gets the state of the component by its name.
+    fn get_state(&self, name: &str) -> Value;
+
+    /// Executes an action on the component.
+    fn execute_action(&mut self, name: &str, action: Value) -> anyhow::Result<()>;
 }
