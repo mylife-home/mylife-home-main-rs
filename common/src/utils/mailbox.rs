@@ -39,9 +39,16 @@ impl<Message: fmt::Debug> Mailbox<Message> {
 
 /// A cheap, cloneable sender into a [`Mailbox`]. Obtained via
 /// [`Mailbox::handle`] and shared freely with any producer.
-#[derive(Clone)]
 pub struct MailboxHandle<Message: fmt::Debug> {
     sender: UnboundedSender<Message>,
+}
+
+impl<T: fmt::Debug> Clone for MailboxHandle<T> {
+    fn clone(&self) -> Self {
+        MailboxHandle {
+            sender: self.sender.clone(),
+        }
+    }
 }
 
 impl<Message: fmt::Debug> MailboxHandle<Message> {
