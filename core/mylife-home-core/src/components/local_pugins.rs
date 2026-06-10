@@ -1,5 +1,8 @@
 use crate::modules;
-use common::{components::{ComponentsData, ComponentsHandler, ComponentsMessage}, utils::mailbox::MailboxHandle};
+use common::{
+    components::{ComponentsData, ComponentsHandler, ComponentsMessage},
+    utils::mailbox::MailboxHandle,
+};
 
 pub struct LocalPlugins {}
 
