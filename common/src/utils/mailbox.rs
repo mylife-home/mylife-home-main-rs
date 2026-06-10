@@ -1,6 +1,13 @@
-use std::fmt;
+use std::{
+    fmt,
+    sync::{Arc, Mutex},
+};
 
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use log::warn;
+use tokio::sync::{
+    mpsc::{self, UnboundedReceiver, UnboundedSender},
+    oneshot,
+};
 
 /// An unbounded, single-consumer mailbox for messages of type `Message`.
 ///
@@ -60,5 +67,38 @@ impl<Message: fmt::Debug> MailboxHandle<Message> {
         if let Err(e) = self.sender.send(msg) {
             log::error!("could not send message {:?} to mailbox: {}", e.0, e);
         }
+    }
+}
+
+/// Shareable reply handle for actor RPC messages.
+///
+/// Unlike a raw [`oneshot::Sender`], this can be cloned and passed to multiple handlers by
+/// reference — whichever handler calls [`send`](ReplySender::send) first delivers the reply.
+#[derive(Debug, Clone)]
+pub struct ReplySender<Reply: fmt::Debug>(Arc<Mutex<Option<oneshot::Sender<Reply>>>>);
+
+impl<Reply: fmt::Debug> ReplySender<Reply> {
+    /// Creates a new `ReplySender` and its paired [`oneshot::Receiver`] for the caller to await.
+    pub fn create_channel() -> (Self, oneshot::Receiver<Reply>) {
+        let (sender, receiver) = oneshot::channel();
+        let reply = Self(Arc::new(Mutex::new(Some(sender))));
+
+        (reply, receiver)
+    }
+
+    /// Sends the reply. Only the first call has any effect; subsequent calls are ignored with a warning.
+    pub fn send(&self, msg: Reply) {
+        if let Some(sender) = self.0.lock().expect("could not lock mutex").take() {
+            if let Err(msg) = sender.send(msg) {
+                warn!("Could not send reply '{:?}'", msg);
+            }
+        } else {
+            warn!("Tried to send multiple reply '{:?}', ignored", msg);
+        }
+    }
+
+    /// Returns `true` if the reply has already been sent.
+    pub fn is_sent(&self) -> bool {
+        self.0.lock().expect("could not lock mutex").is_none()
     }
 }
