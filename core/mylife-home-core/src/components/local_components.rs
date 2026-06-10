@@ -2,20 +2,21 @@ use std::{any::Any, sync::Arc};
 
 use crate::modules;
 use anyhow::Context;
+use async_trait::async_trait;
 use common::{
     components::{
         Component, ComponentChange, ComponentChangeEventType, ComponentsData, ComponentsHandler,
         ComponentsMessage,
     },
     utils::{
-        mailbox::MailboxHandle,
+        mailbox::{MailboxHandle, ReplySender},
         observable::{Observable, Observer, ObserverId, Subject},
     },
 };
 use log::{error, warn};
 use plugin_runtime::{
     metadata::PluginMetadata,
-    runtime::{Config, ConfigValue, MylifeComponent, MylifePluginRuntime, Value},
+    runtime::{Config, MylifeComponent, MylifePluginRuntime, Value},
 };
 
 #[derive(Debug)]
@@ -26,6 +27,75 @@ struct ComponentWakeMessage {
 impl ComponentsMessage for ComponentWakeMessage {
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+#[derive(Debug)]
+struct ComponentCreateMessage {
+    component_id: String,
+    plugin_id: String,
+    config: Config,
+    reply: ReplySender<anyhow::Result<()>>,
+}
+
+impl ComponentsMessage for ComponentCreateMessage {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[derive(Debug)]
+struct ComponentRemoveMessage {
+    component_id: String,
+    reply: ReplySender<anyhow::Result<()>>,
+}
+
+impl ComponentsMessage for ComponentRemoveMessage {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[async_trait]
+pub trait LocalComponentsMailboxHandleExt {
+    async fn component_create(
+        &self,
+        component_id: String,
+        plugin_id: String,
+        config: Config,
+    ) -> anyhow::Result<()>;
+    async fn component_remove(&self, component_id: String) -> anyhow::Result<()>;
+}
+
+#[async_trait]
+impl LocalComponentsMailboxHandleExt for MailboxHandle<Box<dyn ComponentsMessage>> {
+    async fn component_create(
+        &self,
+        component_id: String,
+        plugin_id: String,
+        config: Config,
+    ) -> anyhow::Result<()> {
+        let (reply, receiver) = ReplySender::create_channel();
+
+        self.send(Box::new(ComponentCreateMessage {
+            component_id,
+            plugin_id,
+            config,
+            reply,
+        }));
+
+        receiver.await?
+    }
+
+    async fn component_remove(&self, component_id: String) -> anyhow::Result<()> {
+        let (reply, receiver) = ReplySender::create_channel();
+
+        self.send(Box::new(ComponentRemoveMessage {
+            component_id,
+            reply,
+        }));
+
+        receiver.await?
     }
 }
 
@@ -42,13 +112,20 @@ impl LocalComponents {
 
     fn create_component(
         &self,
+        data: &mut ComponentsData,
         id: &str,
-        plugin: &PluginMetadata,
+        plugin: &str,
         config: &Config,
-    ) -> anyhow::Result<Box<dyn Component>> {
+    ) -> anyhow::Result<()> {
+        let registry = data.registry_mut();
+
+        if registry.get_component(id).is_some() {
+            anyhow::bail!("component '{}' already exists", id);
+        }
+
         let plugin = modules::registry()
-            .plugin(plugin.id())
-            .unwrap_or_else(|| panic!("could not find plugin {}", plugin.id()));
+            .plugin(plugin)
+            .unwrap_or_else(|| panic!("could not find plugin {}", plugin));
 
         let component = LocalComponent::new(
             self.mailbox_sender
@@ -60,55 +137,78 @@ impl LocalComponents {
             config,
         )?;
 
-        Ok(Box::new(component))
+        registry.add_component(None, Box::new(component));
+
+        Ok(())
+    }
+
+    fn remove_component(&self, data: &mut ComponentsData, id: &str) -> anyhow::Result<()> {
+        let registry = data.registry_mut();
+
+        if let Some((instance_name, component)) = registry.get_component_data(id) {
+            if instance_name.is_some()
+                || component
+                    .as_any()
+                    .downcast_ref::<LocalComponent>()
+                    .is_none()
+            {
+                anyhow::bail!("component '{}' is not local", id);
+            }
+        } else {
+            anyhow::bail!("component '{}' does not exist", id);
+        }
+
+        registry.remove_component(None, id);
+
+        Ok(())
+    }
+
+    fn wake_component(&self, data: &mut ComponentsData, id: &str) {
+        let Some(component) = data.registry_mut().get_component_mut(id) else {
+            warn!("Got wake for non existant component '{}', ignored", id);
+            return;
+        };
+
+        let component = component
+            .as_any_mut()
+            .downcast_mut::<LocalComponent>()
+            .unwrap_or_else(|| panic!("component '{}' is not local", id));
+
+        component.async_handler();
     }
 }
 
 impl ComponentsHandler for LocalComponents {
     fn init(
         &mut self,
-        data: &mut ComponentsData,
+        _data: &mut ComponentsData,
         mailbox_sender: &MailboxHandle<Box<dyn ComponentsMessage>>,
     ) {
         self.mailbox_sender = Some(mailbox_sender.clone());
-        let registry = data.registry_mut();
-
-        // TODO: load components
-        let mut config = Config::new();
-        config.insert("config".to_string(), ConfigValue::Bool(false));
-
-        let component = self
-            .create_component(
-                "comp-id",
-                modules::registry()
-                    .plugin("logic-base.value-binary")
-                    .unwrap()
-                    .metadata(),
-                &config,
-            )
-            .expect("failed to create component");
-
-        registry.add_component(None, component);
     }
 
     fn handle(&mut self, data: &mut ComponentsData, message: &dyn ComponentsMessage) {
-        let Some(message) = message.as_any().downcast_ref::<ComponentWakeMessage>() else {
+        if let Some(message) = message.as_any().downcast_ref::<ComponentWakeMessage>() {
+            self.wake_component(data, &message.component_id);
             return;
-        };
+        }
 
-        let Some(component) = data.registry_mut().get_component_mut(&message.component_id) else {
-            warn!(
-                "Got wake for non existant component '{}', ignored",
-                message.component_id
-            );
+        if let Some(message) = message.as_any().downcast_ref::<ComponentCreateMessage>() {
+            message.reply.send(self.create_component(
+                data,
+                &message.component_id,
+                &message.plugin_id,
+                &message.config,
+            ));
             return;
-        };
+        }
 
-        let Some(component) = component.as_any_mut().downcast_mut::<LocalComponent>() else {
-            panic!("component '{}' is not local", component.id());
-        };
-
-        component.async_handler();
+        if let Some(message) = message.as_any().downcast_ref::<ComponentRemoveMessage>() {
+            message
+                .reply
+                .send(self.remove_component(data, &message.component_id));
+            return;
+        }
     }
 }
 

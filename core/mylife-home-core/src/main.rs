@@ -4,11 +4,12 @@ use tokio::time::sleep;
 
 use common::{
     bus::{self, Transport},
-    components::{Components, ShutdownMessage},
+    components::{Components, ComponentsMessage, ShutdownMessage},
+    utils::mailbox::MailboxHandle,
 };
 use plugin_runtime::runtime::{Config, ConfigValue, Value};
 
-use crate::components::{LocalComponents, LocalPlugins};
+use crate::components::{LocalComponents, LocalComponentsMailboxHandleExt, LocalPlugins};
 
 mod components;
 mod modules;
@@ -38,6 +39,8 @@ async fn main() -> anyhow::Result<()> {
     let bus_sender = transport.get_mailbox_handle();
     let transport_handle = transport.start();
 
+    create_component(&components_sender).await;
+
     sleep(Duration::from_secs(10)).await;
     println!("Will shutdown");
 
@@ -49,6 +52,20 @@ async fn main() -> anyhow::Result<()> {
     transport_res.expect("failed to join transport");
 
     Ok(())
+}
+
+async fn create_component(mailbox_sender: &MailboxHandle<Box<dyn ComponentsMessage>>) {
+    let mut config = Config::new();
+    config.insert("config".to_string(), ConfigValue::Bool(false));
+
+    mailbox_sender
+        .component_create(
+            "comp-id".to_owned(),
+            "logic-base.value-binary".to_owned(),
+            config,
+        )
+        .await
+        .expect("could not create component");
 }
 
 #[allow(dead_code)]
