@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
 use crate::{
     components::{metadata::PluginMetadata, types::Value},
@@ -14,10 +14,13 @@ pub trait Component: Observable<ComponentChangeEventType> + Send {
     fn plugin(&self) -> Arc<PluginMetadata>;
 
     /// Gets the state of the component by its name.
-    fn get_state(&self, name: &str) -> Option<Value>;
+    fn get_state(&self, name: &str) -> Value;
 
     /// Executes an action on the component.
-    fn execute_action(&mut self, name: &str, action: Value) -> anyhow::Result<()>;
+    fn execute_action(&mut self, name: &str, value: Value);
+
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 /// ComponentChange represents the changes that can occur on a component.

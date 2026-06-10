@@ -8,7 +8,7 @@ use common::{
 };
 use plugin_runtime::runtime::{Config, ConfigValue, Value};
 
-use crate::components::Extension;
+use crate::components::{LocalComponents, LocalPlugins};
 
 mod components;
 mod modules;
@@ -30,7 +30,8 @@ async fn main() -> anyhow::Result<()> {
 
     let mut components = Components::new();
     let components_sender = components.get_mailbox_handle();
-    components.add_handler(Extension::new());
+    components.add_handler(LocalPlugins::new());
+    components.add_handler(LocalComponents::new(components_sender.clone()));
     let components_handle = components.start();
 
     let mut transport = Transport::new(INSTANCE_NAME.to_owned(), SERVER_ADDRESS.to_owned())?;
@@ -64,11 +65,10 @@ fn old_main() -> anyhow::Result<()> {
             Box::new(|| {
                 println!("WAKE ASKED");
             }),
+            Box::new(|name, value| {
+                println!("STATE CHANGE: {} -> {:?}", name, value);
+            }),
         );
-
-    component.observe(Box::new(|event: &ComponentChange| {
-        println!("EVENT: {:?}", event);
-    }));
 
     let mut config = Config::new();
     config.insert("config".to_string(), ConfigValue::Bool(false));
@@ -78,10 +78,7 @@ fn old_main() -> anyhow::Result<()> {
 
     println!("init");
     component.init()?;
-    println!(
-        "after init: state = {:?}",
-        component.get_state("state").expect("could not get state")
-    );
+    println!("after init: state = {:?}", component.get_state("state"));
 
     println!("execute_action on");
     component.execute_action("on", Value::Bool(true))?;

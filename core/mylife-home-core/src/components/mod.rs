@@ -1,4 +1,5 @@
-mod extension;
-mod messages;
+mod local_components;
+mod local_pugins;
 
-pub use extension::Extension;
+pub use local_components::LocalComponents;
+pub use local_pugins::LocalPlugins;
