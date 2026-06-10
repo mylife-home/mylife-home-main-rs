@@ -1,9 +1,6 @@
 use log::debug;
-use plugin_runtime::{PluginRegistration, runtime::{MylifePluginRuntime}};
-use std::{
-    collections::HashMap,
-    sync::{OnceLock},
-};
+use plugin_runtime::{PluginRegistration, runtime::MylifePluginRuntime};
+use std::{collections::HashMap, sync::OnceLock};
 
 const LOG_TARGET: &str = "mylife:home:core:modules";
 
@@ -19,7 +16,7 @@ impl Registry {
         }
     }
 
-    pub fn plugins(&self) -> Vec<& dyn MylifePluginRuntime> {
+    pub fn plugins(&self) -> Vec<&dyn MylifePluginRuntime> {
         self.plugins.values().map(|v| &**v).collect()
     }
 
@@ -37,7 +34,6 @@ pub fn init() {
         let id = runtime.metadata().id().to_owned();
 
         registry.plugins.insert(id.clone(), runtime);
-
 
         debug!(
             target: LOG_TARGET,
