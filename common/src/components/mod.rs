@@ -1,6 +1,6 @@
 use std::{any::Any, fmt};
 
-use tokio::{sync::mpsc::UnboundedReceiver, task::JoinHandle};
+use tokio::task::JoinHandle;
 
 mod component;
 pub mod metadata;
@@ -140,7 +140,7 @@ struct ShutdownHandler;
 
 impl ComponentsHandler for ShutdownHandler {
     fn handle(&mut self, data: &mut ComponentsData, message: &dyn ComponentsMessage) {
-        let Some(message) = message.as_any().downcast_ref::<ShutdownMessage>() else {
+        let Some(_message) = message.as_any().downcast_ref::<ShutdownMessage>() else {
             return;
         };
 
