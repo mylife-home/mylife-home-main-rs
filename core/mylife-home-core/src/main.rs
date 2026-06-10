@@ -4,7 +4,7 @@ use tokio::time::sleep;
 
 use common::{
     bus::{self, Transport},
-    components::{ComponentChange, Components, ShutdownMessage},
+    components::{Components, ShutdownMessage},
 };
 use plugin_runtime::runtime::{Config, ConfigValue, Value};
 
