@@ -217,11 +217,11 @@ impl Registry {
 }
 
 impl Observable<RegistryEventType> for Registry {
-    fn observe(&mut self, observer: Box<Observer<RegistryEventType>>) -> ObserverId {
+    fn observe(&self, observer: Box<Observer<RegistryEventType>>) -> ObserverId {
         self.subject.observe(observer)
     }
 
-    fn unobserve(&mut self, id: ObserverId) -> bool {
+    fn unobserve(&self, id: ObserverId) -> bool {
         self.subject.unobserve(id)
     }
 }

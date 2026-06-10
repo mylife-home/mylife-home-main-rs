@@ -79,13 +79,13 @@ impl Presence {
 
 impl Observable<PresenceEventType> for Presence {
     fn observe(
-        &mut self,
+        &self,
         observer: Box<crate::utils::observable::Observer<PresenceEventType>>,
     ) -> crate::utils::observable::ObserverId {
         self.subject.observe(observer)
     }
 
-    fn unobserve(&mut self, id: crate::utils::observable::ObserverId) -> bool {
+    fn unobserve(&self, id: crate::utils::observable::ObserverId) -> bool {
         self.subject.unobserve(id)
     }
 }

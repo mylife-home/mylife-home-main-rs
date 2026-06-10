@@ -1,9 +1,8 @@
 use std::{
-    cell::RefCell,
     collections::HashMap,
     fmt,
     marker::PhantomData,
-    sync::{Arc, atomic::AtomicUsize},
+    sync::{Arc, Mutex, MutexGuard, atomic::AtomicUsize},
 };
 
 /// A simple observable value that can be observed for changes.
@@ -19,15 +18,15 @@ pub trait EventType {
 /// A simple observable that can be observed for notifications.
 pub trait Observable<T: EventType> {
     /// Adds an observer that will be called on subject notification.
-    fn observe(&mut self, observer: Box<Observer<T>>) -> ObserverId;
+    fn observe(&self, observer: Box<Observer<T>>) -> ObserverId;
 
     /// Removes an observer by its unique identifier.
-    fn unobserve(&mut self, id: ObserverId) -> bool;
+    fn unobserve(&self, id: ObserverId) -> bool;
 }
 
 /// A simple subject that can be observed for notifications.
 pub struct Subject<T: EventType> {
-    observers: RefCell<HashMap<ObserverId, Arc<Observer<T>>>>,
+    observers: Mutex<HashMap<ObserverId, Arc<Observer<T>>>>,
     id_gen: AtomicUsize,
 }
 
@@ -37,22 +36,22 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Subject")
-            .field("observers", &self.observers.borrow().len())
+            .field("observers", &self.observers().len())
             .finish()
     }
 }
 
 impl<T: EventType> Observable<T> for Subject<T> {
-    fn observe(&mut self, observer: Box<Observer<T>>) -> ObserverId {
+    fn observe(&self, observer: Box<Observer<T>>) -> ObserverId {
         let id = self
             .id_gen
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        self.observers.borrow_mut().insert(id, observer.into());
+        self.observers().insert(id, observer.into());
         id
     }
 
-    fn unobserve(&mut self, id: ObserverId) -> bool {
-        self.observers.borrow_mut().remove(&id).is_some()
+    fn unobserve(&self, id: ObserverId) -> bool {
+        self.observers().remove(&id).is_some()
     }
 }
 
@@ -60,7 +59,7 @@ impl<T: EventType> Subject<T> {
     /// Creates a new observable subject.
     pub fn new() -> Self {
         Self {
-            observers: RefCell::new(HashMap::new()),
+            observers: Mutex::new(HashMap::new()),
             id_gen: AtomicUsize::new(0),
         }
     }
@@ -68,16 +67,15 @@ impl<T: EventType> Subject<T> {
     /// Notifies all observers with the given value.
     pub fn notify(&self, value: &T::Event<'_>) {
         // Allow the observers to mutate the observers list while we are notifying them.
-        let observers = self
-            .observers
-            .borrow()
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
+        let observers = self.observers().values().cloned().collect::<Vec<_>>();
 
         for observer in observers.into_iter() {
             observer(value);
         }
+    }
+
+    fn observers(&self) -> MutexGuard<'_, HashMap<ObserverId, Arc<Observer<T>>>> {
+        self.observers.lock().expect("could not lock mutex")
     }
 }
 
@@ -107,17 +105,17 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SubjectValue")
             .field("value", &self.value)
-            .field("observers", &self.subject.observers.borrow().len())
+            .field("observers", &self.subject.observers().len())
             .finish()
     }
 }
 
 impl<T> Observable<ObservableValueEventType<T>> for SubjectValue<T> {
-    fn observe(&mut self, observer: Box<Observer<ObservableValueEventType<T>>>) -> ObserverId {
+    fn observe(&self, observer: Box<Observer<ObservableValueEventType<T>>>) -> ObserverId {
         self.subject.observe(observer)
     }
 
-    fn unobserve(&mut self, id: ObserverId) -> bool {
+    fn unobserve(&self, id: ObserverId) -> bool {
         self.subject.unobserve(id)
     }
 }
