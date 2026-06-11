@@ -98,7 +98,7 @@ pub struct SubjectValue<T> {
     subject: Subject<ObservableValueEventType<T>>,
 }
 
-impl<T> fmt::Debug for SubjectValue<ObservableValueEventType<T>>
+impl<T> fmt::Debug for SubjectValue<T>
 where
     T: fmt::Debug,
 {
