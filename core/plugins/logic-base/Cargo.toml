@@ -13,3 +13,4 @@ plugin_macros = { path = "../../plugin-macros" }
 inventory = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
+tokio = { workspace = true }
