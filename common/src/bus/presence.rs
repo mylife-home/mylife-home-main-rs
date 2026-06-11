@@ -76,7 +76,12 @@ impl Presence {
     ///
     /// Note: reserved for PresenceHandler
     fn clear_status(&mut self) {
-        self.instances.clear();
+        for instance_name in self.instances.drain() {
+            log::debug!("instance {} is now offline (disconnection)", instance_name);
+            self.subject.notify(&PresenceEvent::InstanceOffline {
+                instance_name: &instance_name,
+            });
+        }
     }
 }
 
