@@ -2,54 +2,28 @@ use std::{collections::HashSet, mem::swap, time::Duration};
 
 use bytes::Bytes;
 use kameo::{message, prelude::*};
-use kameo_actors::pubsub::{self, PubSub};
 use tokio::{select, sync::broadcast, time::timeout};
 
-use crate::bus::{
+use crate::{bus::{
     client_a::State::Running,
     encoding,
     mqtt::{MqttClient, MqttEvent},
-};
+}, utils::actors::{ActorHandle, PublisherHandle}};
 
 use super::mqtt;
 
 #[derive(Debug, Clone)]
-pub struct Publisher<Message: Send + Clone + 'static> {
-    name: &'static str,
-    pubsub_ref: ActorRef<PubSub<Message>>,
-}
+pub struct ClientHandle(ActorHandle<Client>);
 
-impl<Message: Send + Clone + 'static> Publisher<Message> {
-    pub fn new(name: &'static str) -> Self {
-        let pubsub_ref = ActorRef::lookup(name)
-            .expect("error during registry looking")
-            .unwrap_or_else(|| panic!("pubsub '{}' not found", name));
-        Self { name, pubsub_ref }
-    }
-
-    pub fn publish(&self, msg: Message) {
-        if let Err(e) = self.pubsub_ref.tell(pubsub::Publish(msg)).try_send() {
-            log::error!("Could not send message to pubsub '{}': {}", self.name, e);
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ClientRef(ActorRef<Client>);
-
-impl ClientRef {
+impl ClientHandle {
     const NAME: &str = "bus.client";
 
     pub fn new() -> Self {
-        Self(
-            ActorRef::lookup(Self::NAME)
-                .expect("error during registry looking")
-                .unwrap_or_else(|| panic!("actor '{}' not found", Self::NAME)),
-        )
+        Self(ActorHandle::from_name(Self::NAME))
     }
 
     pub fn publish(&self, topic: Topic, payload: Bytes, retain: bool) {
-        self.send(Publish {
+        self.0.tell_sync(Publish {
             topic,
             payload,
             retain,
@@ -61,21 +35,11 @@ impl ClientRef {
     }
 
     pub fn subscribe(&self, subscription: Subscription) {
-        self.send(Subscribe(subscription));
+        self.0.tell_sync(Subscribe(subscription));
     }
 
     pub fn unsubscribe(&self, subscription: Subscription) {
-        self.send(Unsubscribe(subscription));
-    }
-
-    fn send<Message>(&self, msg: Message)
-    where
-        Client: message::Message<Message>,
-        Message: Send + 'static,
-    {
-        if let Err(e) = self.0.tell(msg).try_send() {
-            log::error!("Could not send message to pubsub '{}': {}", Self::NAME, e);
-        }
+        self.0.tell_sync(Unsubscribe(subscription));
     }
 }
 
@@ -98,8 +62,8 @@ struct RunningData {
 
     subscriptions: HashSet<String>,
 
-    on_message: Publisher<Message>,
-    on_online: Publisher<Online>,
+    on_message: PublisherHandle<Message>,
+    on_online: PublisherHandle<Online>,
 }
 
 #[derive(Debug)]
@@ -135,8 +99,8 @@ impl Actor for Client {
             mqtt_client,
             events,
             subscriptions: HashSet::new(),
-            on_message: Publisher::new("bus.client.message"),
-            on_online: Publisher::new("bus.client.online"),
+            on_message: PublisherHandle::new("bus.client.message"),
+            on_online: PublisherHandle::new("bus.client.online"),
         })))
     }
 
