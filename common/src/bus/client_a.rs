@@ -102,8 +102,8 @@ impl Actor for Client {
             mqtt_client,
             events,
             subscriptions: HashSet::new(),
-            on_message: PublisherHandle::new("bus.client.message"),
-            on_online: PublisherHandle::new("bus.client.online"),
+            on_message: PublisherHandle::from_name("bus.client.message"),
+            on_online: PublisherHandle::from_name("bus.client.online"),
         })))
     }
 
