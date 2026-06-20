@@ -1,13 +1,15 @@
-use std::{
-    collections::HashSet, mem::swap, time::Duration
-};
+use std::{collections::HashSet, mem::swap, time::Duration};
 
 use bytes::Bytes;
 use kameo::{message, prelude::*};
 use kameo_actors::pubsub::{self, PubSub};
 use tokio::{select, sync::broadcast, time::timeout};
 
-use crate::{bus::{client_a::State::Running, encoding, mqtt::{MqttClient, MqttEvent}}};
+use crate::bus::{
+    client_a::State::Running,
+    encoding,
+    mqtt::{MqttClient, MqttEvent},
+};
 
 use super::mqtt;
 
@@ -19,13 +21,60 @@ pub struct Publisher<Message: Send + Clone + 'static> {
 
 impl<Message: Send + Clone + 'static> Publisher<Message> {
     pub fn new(name: &'static str) -> Self {
-        let pubsub_ref = ActorRef::lookup(name).expect("error during registry looking").unwrap_or_else(|| panic!("pubsub '{}' not found", name));
+        let pubsub_ref = ActorRef::lookup(name)
+            .expect("error during registry looking")
+            .unwrap_or_else(|| panic!("pubsub '{}' not found", name));
         Self { name, pubsub_ref }
     }
 
     pub fn publish(&self, msg: Message) {
         if let Err(e) = self.pubsub_ref.tell(pubsub::Publish(msg)).try_send() {
             log::error!("Could not send message to pubsub '{}': {}", self.name, e);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ClientRef(ActorRef<Client>);
+
+impl ClientRef {
+    const NAME: &str = "bus.client";
+
+    pub fn new() -> Self {
+        Self(
+            ActorRef::lookup(Self::NAME)
+                .expect("error during registry looking")
+                .unwrap_or_else(|| panic!("actor '{}' not found", Self::NAME)),
+        )
+    }
+
+    pub fn publish(&self, topic: Topic, payload: Bytes, retain: bool) {
+        self.send(Publish {
+            topic,
+            payload,
+            retain,
+        });
+    }
+
+    pub fn clear_retain(&self, topic: Topic) {
+        self.publish(topic, Bytes::new(), true);
+    }
+
+    pub fn subscribe(&self, subscription: Subscription) {
+        self.send(Subscribe(subscription));
+    }
+
+    pub fn unsubscribe(&self, subscription: Subscription) {
+        self.send(Unsubscribe(subscription));
+    }
+
+    fn send<Message>(&self, msg: Message)
+    where
+        Client: message::Message<Message>,
+        Message: Send + 'static,
+    {
+        if let Err(e) = self.0.tell(msg).try_send() {
+            log::error!("Could not send message to pubsub '{}': {}", Self::NAME, e);
         }
     }
 }
@@ -81,7 +130,7 @@ impl Actor for Client {
 
         let events = mqtt_client.events();
 
-        Ok(Self(State::Running(RunningData { 
+        Ok(Self(State::Running(RunningData {
             instance_name: config.instance_name,
             mqtt_client,
             events,
@@ -95,11 +144,10 @@ impl Actor for Client {
         &mut self,
         _actor_ref: WeakActorRef<Self>,
         _reason: ActorStopReason,
-    ) -> anyhow::Result<()>
-    {
+    ) -> anyhow::Result<()> {
         let mut state = State::Stopped;
         swap(&mut state, &mut self.0);
-        
+
         let State::Running(data) = state else {
             panic!("incorrect state");
         };
@@ -113,10 +161,9 @@ impl Actor for Client {
         &mut self,
         _actor_ref: WeakActorRef<Self>,
         mailbox_rx: &mut MailboxReceiver<Self>,
-    ) -> anyhow::Result<Option<mailbox::Signal<Self>>>
-    {
+    ) -> anyhow::Result<Option<mailbox::Signal<Self>>> {
         loop {
-            select!{
+            select! {
                 event = self.running_data().get_next_event() => {
                     self.running_data().process_event(event).await;
                 },
@@ -136,9 +183,7 @@ impl message::Message<Subscribe> for Client {
         msg: Subscribe,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        for subscription in msg.0 {
-            self.running_data().subscribe(subscription);
-        }
+        self.running_data().subscribe(msg.0);
     }
 }
 
@@ -150,25 +195,18 @@ impl message::Message<Unsubscribe> for Client {
         msg: Unsubscribe,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        for subscription in msg.0 {
-            self.running_data().unsubscribe(subscription);
-        }
+        self.running_data().unsubscribe(msg.0);
     }
 }
-
 
 impl message::Message<Publish> for Client {
     type Reply = ();
 
-    async fn handle(
-        &mut self,
-        msg: Publish,
-        _ctx: &mut Context<Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.running_data().publish(msg.topic, msg.payload, msg.retain);
+    async fn handle(&mut self, msg: Publish, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
+        self.running_data()
+            .publish(msg.topic, msg.payload, msg.retain);
     }
 }
-
 
 impl Client {
     fn running_data(&mut self) -> &mut RunningData {
@@ -239,11 +277,12 @@ impl RunningData {
                 payload,
                 retain,
             } => {
-                self.on_message.publish(Message::new(topic, payload, retain));
+                self.on_message
+                    .publish(Message::new(topic, payload, retain));
             }
 
             MqttEvent::Error(e) => {
-                log::error!("got mqtt error: {}",e);
+                log::error!("got mqtt error: {}", e);
             }
         }
     }
@@ -252,17 +291,14 @@ impl RunningData {
         // register on self state, and remove on every message received
         // wait 1 sec after last message receive
 
-        let _temp_sub = TempSubscription::new(
-            &self.mqtt_client,
-            format!("{}/#", self.instance_name),
-        );
+        let _temp_sub =
+            TempSubscription::new(&self.mqtt_client, format!("{}/#", self.instance_name));
 
         loop {
             match timeout(Duration::from_secs(1), self.events.recv()).await {
                 Ok(Ok(event)) => {
                     if let mqtt::MqttEvent::Message { topic, retain, .. } = event {
-                        if retain && topic.starts_with(&format!("{}/", self.instance_name))
-                        {
+                        if retain && topic.starts_with(&format!("{}/", self.instance_name)) {
                             self.clear_retain(Topic(topic));
                         }
 
@@ -297,11 +333,8 @@ impl RunningData {
     /// Reserved for the main loop of the bus.
     pub async fn shutdown(self) {
         self.clear_retain(TopicBuilder::local(&self.instance_name, "online").build());
-        self.mqtt_client
-            .shutdown()
-            .await;
+        self.mqtt_client.shutdown().await;
     }
-
 
     /// Subscribe to a topic, adding it to the set of subscriptions and sending a subscribe request to the MQTT client if it's a new subscription.
     pub fn subscribe(&mut self, topic: Subscription) {
@@ -415,10 +448,10 @@ pub struct Publish {
 pub struct Online(bool);
 
 #[derive(Debug, Clone)]
-pub struct Subscribe(Vec<Subscription>);
+pub struct Subscribe(Subscription);
 
 #[derive(Debug, Clone)]
-pub struct Unsubscribe(Vec<Subscription>);
+pub struct Unsubscribe(Subscription);
 
 /// A concrete, fully resolved topic with no wildcards. Suitable for publishing,
 /// and usable as an exact-match subscription via `From<Topic>`.
@@ -603,4 +636,3 @@ impl SubscriptionBuilder {
         Subscription(self.parts.join("/"))
     }
 }
-
