@@ -4,11 +4,14 @@ use bytes::Bytes;
 use kameo::{message, prelude::*};
 use tokio::{select, sync::broadcast, time::timeout};
 
-use crate::{bus::{
-    client_a::State::Running,
-    encoding,
-    mqtt::{MqttClient, MqttEvent},
-}, utils::actors::{ActorHandle, PublisherHandle}};
+use crate::{
+    bus::{
+        client_a::State::Running,
+        encoding,
+        mqtt::{MqttClient, MqttEvent},
+    },
+    utils::actors::{ActorHandle, PublisherHandle},
+};
 
 use super::mqtt;
 

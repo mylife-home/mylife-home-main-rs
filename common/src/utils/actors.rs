@@ -3,7 +3,6 @@ use std::{borrow::Cow, fmt};
 use kameo::{actor::ActorRef, message};
 use kameo_actors::pubsub::{self, PubSub};
 
-
 pub struct ActorHandle<Actor: kameo::Actor> {
     name: Cow<'static, str>,
     actor_ref: ActorRef<Actor>,
@@ -11,21 +10,23 @@ pub struct ActorHandle<Actor: kameo::Actor> {
 
 impl<Actor: kameo::Actor> fmt::Debug for ActorHandle<Actor> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ActorHandle").field("name", &self.name).field("actor_ref", &self.actor_ref).finish()
+        f.debug_struct("ActorHandle")
+            .field("name", &self.name)
+            .field("actor_ref", &self.actor_ref)
+            .finish()
     }
 }
 
 impl<Actor: kameo::Actor> Clone for ActorHandle<Actor> {
     fn clone(&self) -> Self {
-        Self { 
+        Self {
             name: self.name.clone(),
-            actor_ref: self.actor_ref.clone()
+            actor_ref: self.actor_ref.clone(),
         }
     }
 }
 
 impl<Actor: kameo::Actor> ActorHandle<Actor> {
-
     pub fn from_name(name: impl Into<Cow<'static, str>>) -> Self {
         let name = name.into();
         let actor_ref = ActorRef::lookup(&name)
