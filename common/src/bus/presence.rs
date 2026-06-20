@@ -1,144 +1,129 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
+
+use kameo::{error::Infallible, message, prelude::*};
 
 use crate::{
-    bus::{
-        BusData, BusMessage,
-        client::{MqttEvent, TopicBuilder},
-        encoding,
-    },
-    utils::{
-        mailbox::MailboxHandle,
-        observable::{EventType, Observable, Subject},
-    },
+    bus::{client, encoding},
+    utils::actors::PublisherHandle,
 };
 
-use super::BusHandler;
+/// Name of the PubSub actor that delivers online changes
+pub const ONLINE_PUBSUB_NAME: &str = "bus.presence.online";
 
-pub struct PresenceEventType;
+const DOMAIN: &str = "online";
 
-impl EventType for PresenceEventType {
-    type Event<'a> = PresenceEvent<'a>;
-}
-
-/// PresenceEvent represents the presence status of an instance, emitted when an instance goes online or offline.
-pub enum PresenceEvent<'a> {
-    /// InstanceOnline is emitted when an instance goes online, containing the instance name.
-    InstanceOnline { instance_name: &'a str },
-
-    /// InstanceOffline is emitted when an instance goes offline, containing the instance name.
-    InstanceOffline { instance_name: &'a str },
-}
-
-/// Presence tracks the online status of instances and emits events when they change.
+#[derive(Debug)]
 pub struct Presence {
-    instances: HashSet<String>,
-    subject: Subject<PresenceEventType>,
+    instance_name: Arc<String>,
+    online_instances: HashSet<String>,
+
+    on_online: PublisherHandle<Online>,
+}
+
+pub struct PresenceConfig {
+    pub instance_name: Arc<String>,
+}
+
+impl Actor for Presence {
+    type Args = PresenceConfig;
+    type Error = Infallible;
+
+    async fn on_start(config: Self::Args, _actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            instance_name: config.instance_name,
+            online_instances: HashSet::new(),
+            on_online: PublisherHandle::from_name(ONLINE_PUBSUB_NAME),
+        })
+    }
+
+    async fn on_stop(
+        &mut self,
+        _actor_ref: WeakActorRef<Self>,
+        _reason: ActorStopReason,
+    ) -> Result<(), Self::Error> {
+        self.online_instances.clear();
+
+        Ok(())
+    }
+}
+
+impl message::Message<client::Online> for Presence {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: client::Online,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        if msg.is_online() {
+            return;
+        }
+
+        for instance in self.online_instances.drain() {
+            self.on_online.publish(Online::new(Arc::new(instance), false));
+        }
+    }
+}
+
+impl message::Message<client::Message> for Presence {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: client::Message,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        let (Some(domain), Some(instance)) = (msg.domain(), msg.instance()) else {
+            return;
+        };
+
+        if domain != DOMAIN || instance == self.instance_name.as_str() {
+            return;
+        }
+
+        let online = match encoding::read_bool(msg.payload()) {
+            Ok(value) => value,
+            Err(e) => {
+                log::error!("Error reading online value ({:?}): {}", msg.payload(), e);
+                return;
+            }
+        };
+
+        self.set_online(String::from(instance), online);
+    }
 }
 
 impl Presence {
-    pub fn new() -> Self {
-        Self {
-            instances: HashSet::new(),
-            subject: Subject::new(),
-        }
-    }
-
-    /// Marks an instance as online, emitting an InstanceOnline event if it was not already online.
-    pub fn is_online(&self, instance_name: &str) -> bool {
-        self.instances.contains(instance_name)
-    }
-
-    /// Get the list of online instances.
-    pub fn get_online_instances(&self) -> Vec<&String> {
-        self.instances.iter().collect()
-    }
-
-    /// Update the online status of an instance, emitting an event if it changes.
-    ///
-    /// Note: reserved for PresenceHandler
-    fn update_instance_status(&mut self, instance_name: &str, online: bool) {
-        if online {
-            if self.instances.insert(instance_name.to_string()) {
-                log::debug!("instance {} is now online", instance_name);
-                self.subject
-                    .notify(&PresenceEvent::InstanceOnline { instance_name });
-            }
+    fn set_online(&mut self, instance: String, value: bool) {
+        let do_publish = if value {
+            self.online_instances.insert(instance.clone())
         } else {
-            if self.instances.remove(instance_name) {
-                log::debug!("instance {} is now offline", instance_name);
-                self.subject
-                    .notify(&PresenceEvent::InstanceOffline { instance_name });
-            }
-        }
-    }
+            self.online_instances.remove(&instance)
+        };
 
-    /// Clear all presence status, marking all instances as offline and emitting events for each.
-    ///
-    /// Note: reserved for PresenceHandler
-    fn clear_status(&mut self) {
-        for instance_name in self.instances.drain() {
-            log::debug!("instance {} is now offline (disconnection)", instance_name);
-            self.subject.notify(&PresenceEvent::InstanceOffline {
-                instance_name: &instance_name,
-            });
+        if do_publish {
+            self.on_online
+                .publish(Online::new(Arc::new(instance), value));
         }
     }
 }
 
-impl Observable<PresenceEventType> for Presence {
-    fn observe(
-        &self,
-        observer: Box<crate::utils::observable::Observer<PresenceEventType>>,
-    ) -> crate::utils::observable::ObserverId {
-        self.subject.observe(observer)
-    }
-
-    fn unobserve(&self, id: crate::utils::observable::ObserverId) -> bool {
-        self.subject.unobserve(id)
-    }
+#[derive(Debug, Clone)]
+pub struct Online {
+    instance: Arc<String>,
+    value: bool,
 }
 
-pub struct PresenceHandler;
-
-impl BusHandler for PresenceHandler {
-    fn init(&mut self, data: &mut BusData, _: &MailboxHandle<Box<dyn BusMessage>>) {
-        data.client_mut()
-            .subscribe(TopicBuilder::any_instance("online").build());
+impl Online {
+    fn new(instance: Arc<String>, value: bool) -> Self {
+        Self { instance, value }
     }
 
-    fn handle_mqtt(&mut self, data: &mut BusData, event: &MqttEvent) {
-        match event {
-            MqttEvent::Disconnected { .. } => {
-                data.presence.clear_status();
-            }
+    pub fn instance(&self) -> &str {
+        &self.instance
+    }
 
-            MqttEvent::Message(message) => {
-                let (Some(domain), Some(instance_name)) = (message.domain(), message.instance())
-                else {
-                    return;
-                };
-
-                if domain != "online" || instance_name == data.client().instance_name() {
-                    return;
-                }
-
-                let online = match encoding::read_bool(message.payload()) {
-                    Ok(value) => value,
-                    Err(e) => {
-                        log::error!(
-                            "Error reading online value ({:?}): {}",
-                            message.payload(),
-                            e
-                        );
-                        return;
-                    }
-                };
-
-                data.presence_mut()
-                    .update_instance_status(instance_name, online);
-            }
-
-            _ => {}
-        }
+    pub fn value(&self) -> bool {
+        self.value
     }
 }
