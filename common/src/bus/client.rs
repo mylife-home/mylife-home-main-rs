@@ -246,22 +246,7 @@ impl Client {
                 );
 
                 self.on_online.publish(Online(true));
-
-                self.subscribe_instance_online();
-
-                let Some(mqtt_client) = &self.mqtt_client else {
-                    log::error!("mqtt client not set; cannot resume subscriptions");
-                    return;
-                };
-
-                if let Err(e) = mqtt_client.subscribe(self.subscriptions.iter().cloned().collect())
-                {
-                    log::error!(
-                        "failed to subscribe to topics {:?}: {}",
-                        self.subscriptions.iter().cloned().collect::<Vec<_>>(),
-                        e
-                    );
-                }
+                self.resume_subscriptions();
 
                 log::info!("MQTT client connected");
             }
@@ -357,21 +342,27 @@ impl Client {
         self.clear_retain(TopicBuilder::local(&self.instance_name, ONLINE_DOMAIN).build());
     }
 
-    fn subscribe_instance_online(&mut self) {
-        let topic = TopicBuilder::any_instance(ONLINE_DOMAIN)
-            .build()
-            .into_string();
-
+    fn resume_subscriptions(&self) {
         let Some(mqtt_client) = &self.mqtt_client else {
-            log::error!(
-                "failed to subscribe to topic {}: mqtt client not set",
-                topic
-            );
+            log::error!("mqtt client not set; cannot resume subscriptions");
             return;
         };
 
-        if let Err(e) = mqtt_client.subscribe(vec![topic.clone()]) {
-            log::error!("failed to subscribe to topic {}: {}", topic, e);
+        let mut subscriptions: Vec<_> = self.subscriptions.iter().cloned().collect();
+
+        // Add online instances subscription (builtin)
+        subscriptions.push(
+            TopicBuilder::any_instance(ONLINE_DOMAIN)
+                .build()
+                .into_string(),
+        );
+
+        if let Err(e) = mqtt_client.subscribe(subscriptions) {
+            log::error!(
+                "failed to subscribe to topics {:?}: {}",
+                self.subscriptions.iter().cloned().collect::<Vec<_>>(),
+                e
+            );
         }
     }
 

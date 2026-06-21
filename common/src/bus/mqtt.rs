@@ -361,6 +361,7 @@ impl IoWorker {
                             self.emit_event(MqttEvent::Disconnected { reason: String::from("connection closed by peer") });
                         }
                         Some(Ok(packet)) => {
+                            log::trace!("<< {:?}", packet);
                             if let Err(error) = self.handle_incoming_packet(packet).await {
                                 self.emit_event(MqttEvent::Error(Arc::new(error)));
                                 self.connected = false;
@@ -462,19 +463,23 @@ impl IoWorker {
                 retain,
             } => {
                 let packet = self.build_publish_packet(topic, payload, retain);
+                log::trace!(">> {:?}", packet);
                 stream.send(packet).await?;
             }
             MqttCommand::Subscribe { paths } => {
                 self.pending_subscription_paths = Some(paths.clone());
                 let packet = self.build_subscribe_packet(paths);
+                log::trace!(">> {:?}", packet);
                 stream.send(packet).await?;
             }
             MqttCommand::Unsubscribe { paths } => {
                 let packet = self.build_unsubscribe_packet(paths);
+                log::trace!(">> {:?}", packet);
                 stream.send(packet).await?;
             }
             MqttCommand::Shutdown => {
                 let packet = Packet::Disconnect;
+                log::trace!(">> {:?}", packet);
                 stream.send(packet).await?;
                 self.shutting_down = true;
             }
