@@ -1,43 +1,69 @@
+use core::panic;
 use std::{sync::Arc, time::Duration};
 
-use common::bus::mqtt::MqttClient;
+use common::bus::client;
+use kameo::actor::Spawn;
+use kameo_actors::pubsub;
+use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
 
-    // let payload = env::var("MQTT_PAYLOAD").unwrap_or_else(|_| "hello from common".to_owned());
+    let instance_name = Arc::new("common-demo-client".to_owned());
+    let server_address = "rpi-dev-home-main:1883".to_owned();
 
-    let client = Arc::new(
-        MqttClient::create(
-            "common-demo-client".to_owned(),
-            "rpi-dev-home-main:1883".to_owned(),
-            None,
-        )
-        .expect("failed to start mqtt client"),
-    );
+    spawn_pubsub::<client::InstanceOnline>(client::INSTANCE_ONLINE_PUBSUB_NAME).await;
+    spawn_pubsub::<client::Online>(client::ONLINE_PUBSUB_NAME).await;
+    spawn_pubsub::<client::Message>(client::MESSAGE_PUBSUB_NAME).await;
 
-    let mut events = client.events();
-    let thread_client = Arc::downgrade(&client);
-    tokio::spawn(async move {
-        while let Ok(event) = events.recv().await {
-            println!("event: {event:?}");
-
-            if let common::bus::mqtt::MqttEvent::Connected = event {
-                let client = thread_client.upgrade().expect("failed to upgrade client");
-                client
-                    .subscribe(vec![String::from("#")])
-                    .expect("failed to subscribe");
-            }
-        }
+    let client_ref = client::Client::spawn(client::ClientConfig {
+        instance_name,
+        server_address,
     });
 
-    // client.subscribe(vec![String::from("#")]).expect("failed to subscribe");
-    // client
-    //     .publish(&topic, payload.as_bytes(), false)
-    //     .expect("failed to publish");
+    client_ref
+        .wait_for_startup_with_result(|res| {
+            if let Err(e) = res {
+                panic!("could not start actor '{}': {}", "bus.client", e);
+            }
+        })
+        .await;
 
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    let client = Arc::try_unwrap(client).expect("failed to unwrap client");
-    client.shutdown().await;
+    client_ref.register("bus.client").unwrap_or_else(|e| {
+        panic!("could not register actor '{}': {}", "bus.client", e);
+    });
+
+    sleep(Duration::from_secs(10)).await;
+    // shutdown
+
+    client_ref.stop_gracefully().await.unwrap_or_else(|e| {
+        panic!("could not stop actor '{}': {}", "bus.client", e);
+    });
+
+    client_ref
+        .wait_for_shutdown_with_result(|res| {
+            if let Err(e) = res {
+                panic!("could not stop actor '{}': {}", "bus.client", e);
+            }
+        })
+        .await;
+}
+
+async fn spawn_pubsub<Message: 'static>(name: &'static str) {
+    let actor_ref = pubsub::PubSub::spawn(pubsub::PubSub::<Message>::new(
+        kameo_actors::DeliveryStrategy::Guaranteed,
+    ));
+
+    actor_ref.register(name).unwrap_or_else(|e| {
+        panic!("could not register actor '{}': {}", name, e);
+    });
+
+    actor_ref
+        .wait_for_startup_with_result(|res| {
+            if let Err(e) = res {
+                panic!("could not start actor '{}': {}", name, e);
+            }
+        })
+        .await;
 }

@@ -1,5 +1,6 @@
 use std::{borrow::Cow, fmt};
 
+use anyhow::Context;
 use kameo::{actor::ActorRef, message};
 use kameo_actors::pubsub::{self, PubSub};
 
@@ -29,13 +30,12 @@ impl<Actor: kameo::Actor> Clone for ActorHandle<Actor> {
 
 impl<Actor: kameo::Actor> ActorHandle<Actor> {
     /// Create a handle to an actor given its registry name
-    pub fn from_name(name: impl Into<Cow<'static, str>>) -> Self {
+    pub fn from_name(name: impl Into<Cow<'static, str>>) -> anyhow::Result<Self> {
         let name = name.into();
-        let actor_ref = ActorRef::lookup(&name)
-            .expect("error during registry looking")
-            .unwrap_or_else(|| panic!("actor '{}' not found", name));
+        let actor_ref =
+            ActorRef::lookup(&name)?.with_context(|| format!("actor '{}' not found", name))?;
 
-        Self { name, actor_ref }
+        Ok(Self { name, actor_ref })
     }
 
     /// Synchronously send a message to an actor, and log on error
@@ -56,8 +56,8 @@ pub struct PublisherHandle<Message: Send + Clone + 'static>(ActorHandle<PubSub<M
 
 impl<Message: Send + Clone + 'static> PublisherHandle<Message> {
     /// Create a handle to a PubSub actor given its registry name
-    pub fn from_name(name: impl Into<Cow<'static, str>>) -> Self {
-        Self(ActorHandle::from_name(name))
+    pub fn from_name(name: impl Into<Cow<'static, str>>) -> anyhow::Result<Self> {
+        Ok(Self(ActorHandle::from_name(name)?))
     }
 
     /// Publish a message to the PubSub

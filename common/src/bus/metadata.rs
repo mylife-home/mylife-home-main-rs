@@ -1,12 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
 use bytes::Bytes;
-use kameo::{error::Infallible, message, prelude::*};
+use kameo::{message, prelude::*};
 
-use crate::{
-    bus::{client::{self, ClientHandle, Topic, TopicBuilder}, encoding},
-    utils::actors::PublisherHandle,
-};
+use crate::bus::client::{self, ClientHandle, TopicBuilder};
 
 const DOMAIN: &str = "metadata";
 
@@ -24,13 +21,13 @@ pub struct Metadata {
 
 impl Actor for Metadata {
     type Args = MetadataConfig;
-    type Error = Infallible;
+    type Error = anyhow::Error;
 
     async fn on_start(config: Self::Args, _actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         Ok(Self {
             instance_name: config.instance_name,
             metadata: HashMap::new(),
-            client: ClientHandle::new(),
+            client: ClientHandle::new()?,
         })
     }
 
@@ -76,11 +73,7 @@ impl message::Message<client::Online> for Metadata {
 impl message::Message<Set> for Metadata {
     type Reply = ();
 
-    async fn handle(
-        &mut self,
-        msg: Set,
-        _ctx: &mut Context<Self, Self::Reply>,
-    ) -> Self::Reply {
+    async fn handle(&mut self, msg: Set, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
         self.metadata.insert(msg.path.clone(), msg.value.clone());
         self.publish(&msg.path, Some(msg.value));
     }
@@ -89,11 +82,7 @@ impl message::Message<Set> for Metadata {
 impl message::Message<Clear> for Metadata {
     type Reply = ();
 
-    async fn handle(
-        &mut self,
-        msg: Clear,
-        _ctx: &mut Context<Self, Self::Reply>,
-    ) -> Self::Reply {
+    async fn handle(&mut self, msg: Clear, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
         if self.metadata.remove(&msg.path).is_some() {
             self.publish(&msg.path, None);
         }

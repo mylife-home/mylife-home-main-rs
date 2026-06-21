@@ -1,4 +1,4 @@
-use std::{collections::HashSet, mem::swap, sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use kameo::{message, prelude::*};
@@ -6,7 +6,6 @@ use tokio::{select, sync::broadcast, time::timeout};
 
 use crate::{
     bus::{
-        client::State::Running,
         encoding,
         mqtt::{MqttClient, MqttEvent},
     },
@@ -21,6 +20,11 @@ pub const MESSAGE_PUBSUB_NAME: &str = "bus.client.message";
 /// Name of the PubSub actor that delivers online changes
 pub const ONLINE_PUBSUB_NAME: &str = "bus.client.online";
 
+/// Name of the PubSub actor that delivers instance online changes
+pub const INSTANCE_ONLINE_PUBSUB_NAME: &str = "bus.client.instance-online";
+
+const ONLINE_DOMAIN: &str = "online";
+
 /// Client access to the client actor
 #[derive(Debug, Clone)]
 pub struct ClientHandle(ActorHandle<Client>);
@@ -29,8 +33,8 @@ impl ClientHandle {
     const ACTOR_NAME: &str = "bus.client";
 
     /// Create a new access
-    pub fn new() -> Self {
-        Self(ActorHandle::from_name(Self::ACTOR_NAME))
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self(ActorHandle::from_name(Self::ACTOR_NAME)?))
     }
 
     /// Publish a message to MQTT
@@ -60,25 +64,18 @@ impl ClientHandle {
 
 /// Client manages the MQTT connection, providing an interface for the bus to interact with the MQTT layer.
 #[derive(Debug)]
-pub struct Client(State);
-
-#[derive(Debug)]
-enum State {
-    Running(RunningData),
-    Stopped,
-}
-
-#[derive(Debug)]
-struct RunningData {
+pub struct Client {
     instance_name: Arc<String>,
 
-    mqtt_client: MqttClient,
+    mqtt_client: Option<MqttClient>,
     events: broadcast::Receiver<MqttEvent>,
 
     subscriptions: HashSet<String>,
+    online_instances: HashSet<String>,
 
     on_message: PublisherHandle<Message>,
     on_online: PublisherHandle<Online>,
+    on_instance_online: PublisherHandle<InstanceOnline>,
 }
 
 #[derive(Debug)]
@@ -109,14 +106,16 @@ impl Actor for Client {
 
         let events = mqtt_client.events();
 
-        Ok(Self(State::Running(RunningData {
+        Ok(Self {
             instance_name: config.instance_name,
-            mqtt_client,
+            mqtt_client: Some(mqtt_client),
             events,
             subscriptions: HashSet::new(),
-            on_message: PublisherHandle::from_name(MESSAGE_PUBSUB_NAME),
-            on_online: PublisherHandle::from_name(ONLINE_PUBSUB_NAME),
-        })))
+            online_instances: HashSet::new(),
+            on_message: PublisherHandle::from_name(MESSAGE_PUBSUB_NAME)?,
+            on_online: PublisherHandle::from_name(ONLINE_PUBSUB_NAME)?,
+            on_instance_online: PublisherHandle::from_name(INSTANCE_ONLINE_PUBSUB_NAME)?,
+        })
     }
 
     async fn on_stop(
@@ -124,14 +123,13 @@ impl Actor for Client {
         _actor_ref: WeakActorRef<Self>,
         _reason: ActorStopReason,
     ) -> anyhow::Result<()> {
-        let mut state = State::Stopped;
-        swap(&mut state, &mut self.0);
+        self.mark_offline();
 
-        let State::Running(data) = state else {
-            panic!("incorrect state");
+        let Some(mqtt_client) = self.mqtt_client.take() else {
+            anyhow::bail!("incorrect state");
         };
 
-        data.shutdown().await;
+        mqtt_client.shutdown().await;
 
         Ok(())
     }
@@ -143,8 +141,8 @@ impl Actor for Client {
     ) -> anyhow::Result<Option<mailbox::Signal<Self>>> {
         loop {
             select! {
-                event = self.running_data().get_next_event() => {
-                    self.running_data().process_event(event).await;
+                event = self.get_next_event() => {
+                    self.process_event(event).await;
                 },
                 res = mailbox_rx.recv() => {
                     return Ok(res)
@@ -162,7 +160,21 @@ impl message::Message<Subscribe> for Client {
         msg: Subscribe,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.running_data().subscribe(msg.0);
+        let topic = msg.0.as_str();
+
+        let Some(mqtt_client) = &self.mqtt_client else {
+            log::error!(
+                "failed to subscribe to topic {}: mqtt client not set",
+                topic
+            );
+            return;
+        };
+
+        if self.subscriptions.insert(topic.to_owned()) {
+            if let Err(e) = mqtt_client.subscribe(vec![topic.to_owned()]) {
+                log::error!("failed to subscribe to topic {}: {}", topic, e);
+            }
+        }
     }
 }
 
@@ -174,7 +186,21 @@ impl message::Message<Unsubscribe> for Client {
         msg: Unsubscribe,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.running_data().unsubscribe(msg.0);
+        let topic = msg.0.as_str();
+
+        let Some(mqtt_client) = &self.mqtt_client else {
+            log::error!(
+                "failed to unsubscribe from topic {}: mqtt client not set",
+                topic
+            );
+            return;
+        };
+
+        if self.subscriptions.remove(topic) {
+            if let Err(e) = mqtt_client.unsubscribe(vec![topic.to_owned()]) {
+                log::error!("failed to unsubscribe from topic {}: {}", topic, e);
+            }
+        }
     }
 }
 
@@ -182,23 +208,12 @@ impl message::Message<Publish> for Client {
     type Reply = ();
 
     async fn handle(&mut self, msg: Publish, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
-        self.running_data()
-            .publish(msg.topic, msg.payload, msg.retain);
+        self.publish(msg.topic, msg.payload, msg.retain);
     }
 }
 
 impl Client {
-    fn running_data(&mut self) -> &mut RunningData {
-        let Running(data) = &mut self.0 else {
-            panic!("not running");
-        };
-
-        data
-    }
-}
-
-impl RunningData {
-    pub async fn get_next_event(&mut self) -> mqtt::MqttEvent {
+    async fn get_next_event(&mut self) -> mqtt::MqttEvent {
         loop {
             match self.events.recv().await {
                 Ok(event) => {
@@ -225,16 +240,21 @@ impl RunningData {
                 }
 
                 self.publish(
-                    TopicBuilder::local(&self.instance_name, "online").build(),
+                    TopicBuilder::local(&self.instance_name, ONLINE_DOMAIN).build(),
                     encoding::write_bool(true),
                     true,
                 );
 
                 self.on_online.publish(Online(true));
 
-                if let Err(e) = self
-                    .mqtt_client
-                    .subscribe(self.subscriptions.iter().cloned().collect())
+                self.subscribe_instance_online();
+
+                let Some(mqtt_client) = &self.mqtt_client else {
+                    log::error!("mqtt client not set; cannot resume subscriptions");
+                    return;
+                };
+
+                if let Err(e) = mqtt_client.subscribe(self.subscriptions.iter().cloned().collect())
                 {
                     log::error!(
                         "failed to subscribe to topics {:?}: {}",
@@ -247,6 +267,7 @@ impl RunningData {
             }
 
             MqttEvent::Disconnected { reason } => {
+                self.clear_instance_online();
                 self.on_online.publish(Online(false));
                 log::info!("MQTT client disconnected: {}", reason);
             }
@@ -256,8 +277,9 @@ impl RunningData {
                 payload,
                 retain,
             } => {
-                self.on_message
-                    .publish(Message::new(topic, payload, retain));
+                let msg = Message::new(topic, payload, retain);
+                self.process_instance_online_message(&msg);
+                self.on_message.publish(msg);
             }
 
             MqttEvent::Error(e) => {
@@ -267,11 +289,15 @@ impl RunningData {
     }
 
     async fn clear_resident_state(&mut self) -> anyhow::Result<()> {
+        self.mark_offline();
+
         // register on self state, and remove on every message received
         // wait 1 sec after last message receive
+        let Some(mqtt_client) = &self.mqtt_client else {
+            anyhow::bail!("mqtt client not set");
+        };
 
-        let _temp_sub =
-            TempSubscription::new(&self.mqtt_client, format!("{}/#", self.instance_name));
+        let _temp_sub = TempSubscription::new(mqtt_client, format!("{}/#", self.instance_name));
 
         loop {
             match timeout(Duration::from_secs(1), self.events.recv()).await {
@@ -307,44 +333,90 @@ impl RunningData {
         }
     }
 
-    /// Terminate the client, closing the MQTT connection and cleaning up resources. After calling this method, the client should not be used anymore.
-    ///
-    /// Reserved for the main loop of the bus.
-    pub async fn shutdown(self) {
-        self.clear_retain(TopicBuilder::local(&self.instance_name, "online").build());
-        self.mqtt_client.shutdown().await;
-    }
-
-    /// Subscribe to a topic, adding it to the set of subscriptions and sending a subscribe request to the MQTT client if it's a new subscription.
-    pub fn subscribe(&mut self, topic: Subscription) {
-        let topic = topic.as_str();
-        if self.subscriptions.insert(topic.to_owned()) {
-            if let Err(e) = self.mqtt_client.subscribe(vec![topic.to_owned()]) {
-                log::error!("failed to subscribe to topic {}: {}", topic, e);
-            }
-        }
-    }
-
-    /// Unsubscribe from a topic, removing it from the set of subscriptions and sending an unsubscribe request to the MQTT client if it was previously subscribed.
-    pub fn unsubscribe(&mut self, topic: Subscription) {
-        let topic = topic.as_str();
-        if self.subscriptions.remove(topic) {
-            if let Err(e) = self.mqtt_client.unsubscribe(vec![topic.to_owned()]) {
-                log::error!("failed to unsubscribe from topic {}: {}", topic, e);
-            }
-        }
-    }
-
     /// Publish a message to a topic, sending a publish request to the MQTT client.
-    pub fn publish(&self, topic: Topic, payload: Bytes, retain: bool) {
-        if let Err(e) = self.mqtt_client.publish(topic.to_string(), payload, retain) {
+    fn publish(&self, topic: Topic, payload: Bytes, retain: bool) {
+        let Some(mqtt_client) = &self.mqtt_client else {
+            log::error!(
+                "failed to publish message to topic {}: mqtt client not set",
+                topic
+            );
+            return;
+        };
+
+        if let Err(e) = mqtt_client.publish(topic.to_string(), payload, retain) {
             log::error!("failed to publish message to topic {}: {}", topic, e);
         }
     }
 
     /// Clear the retained message of a topic.
-    pub fn clear_retain(&self, topic: Topic) {
+    fn clear_retain(&self, topic: Topic) {
         self.publish(topic, Bytes::new(), true);
+    }
+
+    fn mark_offline(&self) {
+        self.clear_retain(TopicBuilder::local(&self.instance_name, ONLINE_DOMAIN).build());
+    }
+
+    fn subscribe_instance_online(&mut self) {
+        let topic = TopicBuilder::any_instance(ONLINE_DOMAIN)
+            .build()
+            .into_string();
+
+        let Some(mqtt_client) = &self.mqtt_client else {
+            log::error!(
+                "failed to subscribe to topic {}: mqtt client not set",
+                topic
+            );
+            return;
+        };
+
+        if let Err(e) = mqtt_client.subscribe(vec![topic.clone()]) {
+            log::error!("failed to subscribe to topic {}: {}", topic, e);
+        }
+    }
+
+    fn clear_instance_online(&mut self) {
+        for instance in self.online_instances.drain() {
+            self.on_instance_online.publish(InstanceOnline {
+                instance: Arc::new(instance),
+                online: false,
+            });
+        }
+    }
+
+    fn process_instance_online_message(&mut self, msg: &Message) {
+        let (Some(domain), Some(instance)) = (msg.domain(), msg.instance()) else {
+            return;
+        };
+
+        if domain != ONLINE_DOMAIN || instance == self.instance_name.as_str() {
+            return;
+        }
+
+        let online = match encoding::read_bool(msg.payload()) {
+            Ok(value) => value,
+            Err(e) => {
+                log::error!("Error reading online value ({:?}): {}", msg.payload(), e);
+                return;
+            }
+        };
+
+        self.set_instance_online(String::from(instance), online);
+    }
+
+    fn set_instance_online(&mut self, instance: String, online: bool) {
+        let do_publish = if online {
+            self.online_instances.insert(instance.clone())
+        } else {
+            self.online_instances.remove(&instance)
+        };
+
+        if do_publish {
+            self.on_instance_online.publish(InstanceOnline {
+                instance: Arc::new(instance),
+                online,
+            });
+        }
     }
 }
 
@@ -434,6 +506,22 @@ pub struct Online(bool);
 impl Online {
     pub fn is_online(&self) -> bool {
         self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InstanceOnline {
+    instance: Arc<String>,
+    online: bool,
+}
+
+impl InstanceOnline {
+    pub fn instance(&self) -> &str {
+        &self.instance
+    }
+
+    pub fn is_online(&self) -> bool {
+        self.online
     }
 }
 
