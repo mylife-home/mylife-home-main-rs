@@ -70,8 +70,26 @@ impl<Message: Send + Clone + 'static> PublisherHandle<Message> {
     }
 }
 
+pub async fn spawn_pubsub<Message: 'static>(name: &'static str) {
+    let actor_ref = pubsub::PubSub::spawn(pubsub::PubSub::<Message>::new(
+        kameo_actors::DeliveryStrategy::Guaranteed,
+    ));
+
+    actor_ref.register(name).unwrap_or_else(|e| {
+        panic!("could not register actor '{}': {}", name, e);
+    });
+
+    actor_ref
+        .wait_for_startup_with_result(|res| {
+            if let Err(e) = res {
+                panic!("could not start actor '{}': {}", name, e);
+            }
+        })
+        .await;
+}
+
 #[derive(Actor)]
-struct TracingActor<T: fmt::Debug + Send + 'static>{
+struct TracingActor<T: fmt::Debug + Send + 'static> {
     name: String,
     _data: PhantomData<T>,
 }

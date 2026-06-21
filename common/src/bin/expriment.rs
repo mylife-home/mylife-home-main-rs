@@ -1,9 +1,11 @@
 use core::panic;
 use std::{sync::Arc, time::Duration};
 
-use common::{bus::client, utils::actors::trace_pubsub};
+use common::{
+    bus::client,
+    utils::actors::{spawn_pubsub, trace_pubsub},
+};
 use kameo::actor::Spawn;
-use kameo_actors::pubsub;
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -49,24 +51,6 @@ async fn main() {
         .wait_for_shutdown_with_result(|res| {
             if let Err(e) = res {
                 panic!("could not stop actor '{}': {}", "bus.client", e);
-            }
-        })
-        .await;
-}
-
-async fn spawn_pubsub<Message: 'static>(name: &'static str) {
-    let actor_ref = pubsub::PubSub::spawn(pubsub::PubSub::<Message>::new(
-        kameo_actors::DeliveryStrategy::Guaranteed,
-    ));
-
-    actor_ref.register(name).unwrap_or_else(|e| {
-        panic!("could not register actor '{}': {}", name, e);
-    });
-
-    actor_ref
-        .wait_for_startup_with_result(|res| {
-            if let Err(e) = res {
-                panic!("could not start actor '{}': {}", name, e);
             }
         })
         .await;
