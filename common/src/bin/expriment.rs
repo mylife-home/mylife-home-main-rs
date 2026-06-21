@@ -1,7 +1,7 @@
 use core::panic;
 use std::{sync::Arc, time::Duration};
 
-use common::bus::client;
+use common::{bus::client, utils::actors::trace_pubsub};
 use kameo::actor::Spawn;
 use kameo_actors::pubsub;
 use tokio::time::sleep;
@@ -16,6 +16,10 @@ async fn main() {
     spawn_pubsub::<client::InstanceOnline>(client::INSTANCE_ONLINE_PUBSUB_NAME).await;
     spawn_pubsub::<client::Online>(client::ONLINE_PUBSUB_NAME).await;
     spawn_pubsub::<client::Message>(client::MESSAGE_PUBSUB_NAME).await;
+
+    trace_pubsub::<client::InstanceOnline>(client::INSTANCE_ONLINE_PUBSUB_NAME).await;
+    trace_pubsub::<client::Online>(client::ONLINE_PUBSUB_NAME).await;
+    trace_pubsub::<client::Message>(client::MESSAGE_PUBSUB_NAME).await;
 
     let client_ref = client::Client::spawn(client::ClientConfig {
         instance_name,

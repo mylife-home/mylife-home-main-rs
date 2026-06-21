@@ -1,7 +1,11 @@
-use std::{borrow::Cow, fmt};
+use std::{borrow::Cow, fmt, marker::PhantomData};
 
 use anyhow::Context;
-use kameo::{actor::ActorRef, message};
+use kameo::{
+    Actor,
+    actor::{ActorRef, Spawn},
+    message,
+};
 use kameo_actors::pubsub::{self, PubSub};
 
 /// Handle to an actor
@@ -64,4 +68,46 @@ impl<Message: Send + Clone + 'static> PublisherHandle<Message> {
     pub fn publish(&self, msg: Message) {
         self.0.tell_sync(pubsub::Publish(msg));
     }
+}
+
+#[derive(Actor)]
+struct TracingActor<T: fmt::Debug + Send + 'static>{
+    name: String,
+    _data: PhantomData<T>,
+}
+
+impl<T: fmt::Debug + Send + 'static> message::Message<T> for TracingActor<T> {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: T,
+        _ctx: &mut message::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        log::trace!("PubSub {} -> {:?}", self.name, msg);
+    }
+}
+
+pub async fn trace_pubsub<T: fmt::Debug + Send + 'static>(name: &str) {
+    let pubsub = ActorRef::<pubsub::PubSub<T>>::lookup(name)
+        .expect("lookup error")
+        .expect("pubsub not found");
+
+    let tracer = TracingActor::spawn(TracingActor::<T> {
+        name: name.to_owned(),
+        _data: PhantomData,
+    });
+
+    tracer
+        .wait_for_startup_with_result(|res| {
+            if let Err(e) = res {
+                panic!("could not start actor '{}': {}", name, e);
+            }
+        })
+        .await;
+
+    pubsub
+        .tell(pubsub::Subscribe(tracer.clone()))
+        .try_send()
+        .expect("could not subscribe");
 }
