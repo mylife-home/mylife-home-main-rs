@@ -1,6 +1,7 @@
 use std::{borrow::Cow, fmt, marker::PhantomData};
 
 use anyhow::Context;
+use async_trait::async_trait;
 use kameo::{
     Actor,
     actor::{ActorRef, Spawn},
@@ -70,22 +71,15 @@ impl<Message: Send + Clone + 'static> PublisherHandle<Message> {
     }
 }
 
-pub async fn spawn_pubsub<Message: 'static>(name: &'static str) {
-    let actor_ref = pubsub::PubSub::spawn(pubsub::PubSub::<Message>::new(
-        kameo_actors::DeliveryStrategy::Guaranteed,
-    ));
+pub async fn spawn_pubsub<Message: 'static>(name: &'static str) -> SpawnedActor {
+    let (actor, _) = SpawnedActor::start::<pubsub::PubSub<Message>>(
+        pubsub::PubSub::<Message>::new(kameo_actors::DeliveryStrategy::Guaranteed),
+    )
+    .await;
 
-    actor_ref.register(name).unwrap_or_else(|e| {
-        panic!("could not register actor '{}': {}", name, e);
-    });
+    actor.register(name);
 
-    actor_ref
-        .wait_for_startup_with_result(|res| {
-            if let Err(e) = res {
-                panic!("could not start actor '{}': {}", name, e);
-            }
-        })
-        .await;
+    actor
 }
 
 #[derive(Actor)]
@@ -106,26 +100,111 @@ impl<T: fmt::Debug + Send + 'static> message::Message<T> for TracingActor<T> {
     }
 }
 
-pub async fn trace_pubsub<T: fmt::Debug + Send + 'static>(name: &str) {
+pub async fn trace_pubsub<T: fmt::Debug + Send + 'static>(name: &str) -> SpawnedActor {
     let pubsub = ActorRef::<pubsub::PubSub<T>>::lookup(name)
         .expect("lookup error")
         .expect("pubsub not found");
 
-    let tracer = TracingActor::spawn(TracingActor::<T> {
+    let (tracer, tracer_ref) = SpawnedActor::start::<TracingActor<T>>(TracingActor::<T> {
         name: name.to_owned(),
         _data: PhantomData,
-    });
-
-    tracer
-        .wait_for_startup_with_result(|res| {
-            if let Err(e) = res {
-                panic!("could not start actor '{}': {}", name, e);
-            }
-        })
-        .await;
+    })
+    .await;
 
     pubsub
-        .tell(pubsub::Subscribe(tracer.clone()))
+        .tell(pubsub::Subscribe(tracer_ref))
         .try_send()
         .expect("could not subscribe");
+
+    tracer
+}
+
+pub struct SpawnedActor(Box<dyn UntypedSpawnedActor>);
+
+impl SpawnedActor {
+    pub async fn start<TActor>(args: TActor::Args) -> (Self, ActorRef<TActor>)
+    where
+        TActor: Actor,
+        <TActor as Actor>::Error: fmt::Display,
+    {
+        let actor_ref = TActor::spawn(args);
+
+        actor_ref
+            .wait_for_startup_with_result(|res| {
+                if let Err(e) = res {
+                    panic!("could not start actor: {}", e);
+                }
+            })
+            .await;
+
+        (
+            Self(Box::new(TypedSpawnedActor(actor_ref.clone()))),
+            actor_ref,
+        )
+    }
+
+    pub fn register(&self, name: impl Into<Cow<'static, str>>) {
+        self.0
+            .register(name.into())
+            .unwrap_or_else(|e| panic!("could not register actor: {}", e));
+    }
+
+    pub async fn terminate(&self) {
+        self.0.terminate().await;
+    }
+}
+
+#[async_trait]
+trait UntypedSpawnedActor {
+    fn register(&self, name: Cow<'static, str>) -> anyhow::Result<()>;
+    async fn terminate(&self);
+}
+
+struct TypedSpawnedActor<TActor: Actor>(ActorRef<TActor>);
+
+#[async_trait]
+impl<TActor> UntypedSpawnedActor for TypedSpawnedActor<TActor>
+where
+    TActor: Actor,
+    <TActor as Actor>::Error: fmt::Display,
+{
+    fn register(&self, name: Cow<'static, str>) -> anyhow::Result<()> {
+        self.0.register(name)?;
+
+        Ok(())
+    }
+
+    async fn terminate(&self) {
+        self.0.stop_gracefully().await.unwrap_or_else(|e| {
+            log::error!("could not stop actor '{}': {}", "bus.client", e);
+        });
+
+        self.0
+            .wait_for_shutdown_with_result(|res| {
+                if let Err(e) = res {
+                    log::error!("could not stop actor '{}': {}", "bus.client", e);
+                }
+            })
+            .await;
+    }
+}
+
+pub struct SpawnedActors(Vec<SpawnedActor>);
+
+impl SpawnedActors {
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn add(&mut self, actor: SpawnedActor) {
+        self.0.push(actor);
+    }
+
+    pub async fn terminate(&mut self) {
+        for actor in self.0.iter().rev() {
+            actor.terminate().await;
+        }
+
+        self.0.clear();
+    }
 }
