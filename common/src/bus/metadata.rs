@@ -21,6 +21,7 @@ const METADATA_NAME: &str = "bus.metadata";
 /// Name of the PubSub actor that delivers remote metadata update
 const REMOTE_UPDATE_PUBSUB_NAME: &str = "bus.metadata.remote-update";
 
+#[derive(Debug)]
 pub struct MetadataConfig {
     pub instance_name: Arc<String>,
     pub listen_remote: bool,
@@ -81,7 +82,7 @@ pub async fn init_actor(actors: &mut SpawnedActors, config: MetadataConfig) {
 }
 
 #[derive(Debug)]
-pub struct Metadata {
+struct Metadata {
     instance_name: Arc<String>,
     metadata: HashMap<String, Bytes>,
     remote: Option<Remote>,
