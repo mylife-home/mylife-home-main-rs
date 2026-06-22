@@ -174,6 +174,8 @@ impl message::Message<Subscribe> for Client {
             if let Err(e) = mqtt_client.subscribe(vec![topic.to_owned()]) {
                 log::error!("failed to subscribe to topic {}: {}", topic, e);
             }
+
+            log::trace!("Subscribed to '{}'", topic);
         }
     }
 }
@@ -200,6 +202,8 @@ impl message::Message<Unsubscribe> for Client {
             if let Err(e) = mqtt_client.unsubscribe(vec![topic.to_owned()]) {
                 log::error!("failed to unsubscribe from topic {}: {}", topic, e);
             }
+
+            log::trace!("Unsubscribed from '{}'", topic);
         }
     }
 }
