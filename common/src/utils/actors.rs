@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt, marker::PhantomData};
+use std::{any::type_name, borrow::Cow, fmt, marker::PhantomData};
 
 use anyhow::Context;
 use async_trait::async_trait;
@@ -71,6 +71,22 @@ impl<Message: Send + Clone + 'static> PublisherHandle<Message> {
     }
 }
 
+/// Subscribe an actor to a PubSub
+pub fn pubsub_subscribe<M, A>(
+    actor_ref: ActorRef<A>,
+    name: impl Into<Cow<'static, str>>,
+) -> anyhow::Result<()>
+where
+    M: Send + Clone + 'static,
+    A: Actor + message::Message<M>,
+{
+    let handle = ActorHandle::<PubSub<M>>::from_name(name)?;
+
+    handle.tell_sync(pubsub::Subscribe(actor_ref));
+
+    Ok(())
+}
+
 pub async fn spawn_pubsub<Message: 'static>(name: &'static str) -> SpawnedActor {
     let (actor, _) = SpawnedActor::start::<pubsub::PubSub<Message>>(
         pubsub::PubSub::<Message>::new(kameo_actors::DeliveryStrategy::Guaranteed),
@@ -132,7 +148,7 @@ impl SpawnedActor {
         actor_ref
             .wait_for_startup_with_result(|res| {
                 if let Err(e) = res {
-                    panic!("could not start actor: {}", e);
+                    panic!("could not start actor '{}': {}", type_name::<TActor>(), e);
                 }
             })
             .await;
