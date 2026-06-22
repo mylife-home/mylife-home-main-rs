@@ -5,23 +5,79 @@ use std::{
 
 use bytes::Bytes;
 use kameo::{message, prelude::*};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     bus::client::{self, ClientHandle, TopicBuilder},
-    utils::actors::{PublisherHandle, pubsub_subscribe},
+    utils::actors::{
+        ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub,
+    },
 };
 
 const DOMAIN: &str = "metadata";
 
-/// Name of the PubSub actor that delivers remote metadata update
-pub const REMOTE_METADATA_SET_PUBSUB_NAME: &str = "bus.metadata.remote-update";
+const METADATA_NAME: &str = "bus.metadata";
 
-/// Name of the PubSub actor that delivers online changes
-pub const ONLINE_PUBSUB_NAME: &str = "bus.client.online";
+/// Name of the PubSub actor that delivers remote metadata update
+const REMOTE_UPDATE_PUBSUB_NAME: &str = "bus.metadata.remote-update";
 
 pub struct MetadataConfig {
     pub instance_name: Arc<String>,
     pub listen_remote: bool,
+}
+
+/// Client access to the metadata actor
+#[derive(Debug, Clone)]
+pub struct MetadataHandle {
+    actor: ActorHandle<Metadata>,
+    on_remote_update: SubscriberHandle<RemoteUpdate>,
+}
+
+impl MetadataHandle {
+    /// Create a new access
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self {
+            actor: ActorHandle::from_name(METADATA_NAME)?,
+            on_remote_update: SubscriberHandle::from_name(REMOTE_UPDATE_PUBSUB_NAME)?,
+        })
+    }
+
+    /// Set metadata on the local instance
+    pub fn set<T: Serialize>(&self, path: &str, value: &T) -> anyhow::Result<()> {
+        let buff = serde_json::to_vec(value)?;
+
+        self.actor.tell_sync(LocalUpdate {
+            path: path.to_owned(),
+            value: Some(Bytes::from_owner(buff)),
+        });
+
+        Ok(())
+    }
+
+    /// Clear metadata on the local instance
+    pub fn clear(&self, path: &str) {
+        self.actor.tell_sync(LocalUpdate {
+            path: path.to_owned(),
+            value: None,
+        });
+    }
+
+    /// Get the PubSub for remote metadata update
+    pub fn on_remote_update(&self) -> &SubscriberHandle<RemoteUpdate> {
+        &self.on_remote_update
+    }
+}
+
+pub async fn init_pubsubs(actors: &mut SpawnedActors) {
+    actors.add(spawn_pubsub::<RemoteUpdate>(REMOTE_UPDATE_PUBSUB_NAME).await);
+}
+
+pub async fn init_actor(actors: &mut SpawnedActors, config: MetadataConfig) {
+    let (metadata, _) = SpawnedActor::start::<Metadata>(config).await;
+
+    metadata.register(METADATA_NAME);
+
+    actors.add(metadata);
 }
 
 #[derive(Debug)]
@@ -38,14 +94,15 @@ impl Actor for Metadata {
     type Error = anyhow::Error;
 
     async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
-        let remote = if config.listen_remote {
-            pubsub_subscribe::<client::InstanceOnline, _>(
-                actor_ref.clone(),
-                client::INSTANCE_ONLINE_PUBSUB_NAME,
-            )?;
-            pubsub_subscribe::<client::Message, _>(actor_ref, client::MESSAGE_PUBSUB_NAME)?;
+        let client = ClientHandle::new()?;
 
-            Some(Remote::new()?)
+        let remote = if config.listen_remote {
+            let remote = Remote::new(client.clone())?;
+
+            client.on_instance_online().subscribe(actor_ref.clone());
+            client.on_message().subscribe(actor_ref.clone());
+
+            Some(remote)
         } else {
             None
         };
@@ -54,7 +111,7 @@ impl Actor for Metadata {
             instance_name: config.instance_name,
             metadata: HashMap::new(),
             remote,
-            client: ClientHandle::new()?,
+            client,
         })
     }
 
@@ -115,12 +172,12 @@ impl message::Message<client::InstanceOnline> for Metadata {
     }
 }
 
-impl message::Message<LocalMetadataUpdate> for Metadata {
+impl message::Message<LocalUpdate> for Metadata {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        msg: LocalMetadataUpdate,
+        msg: LocalUpdate,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         if let Some(value) = msg.value {
@@ -153,16 +210,16 @@ impl Metadata {
 #[derive(Debug)]
 struct Remote {
     metadata: HashMap<String, HashSet<String>>,
-    on_update: PublisherHandle<RemoteMetadataUpdate>,
+    on_update: PublisherHandle<RemoteUpdate>,
     client: ClientHandle,
 }
 
 impl Remote {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new(client: ClientHandle) -> anyhow::Result<Self> {
         Ok(Self {
             metadata: HashMap::new(),
-            on_update: PublisherHandle::from_name(REMOTE_METADATA_SET_PUBSUB_NAME)?,
-            client: ClientHandle::new()?,
+            on_update: PublisherHandle::from_name(REMOTE_UPDATE_PUBSUB_NAME)?,
+            client,
         })
     }
 
@@ -222,7 +279,7 @@ impl Remote {
     }
 
     fn emit(&self, instance: &str, path: &str, value: Option<&Bytes>) {
-        self.on_update.publish(RemoteMetadataUpdate {
+        self.on_update.publish(RemoteUpdate {
             instance: Arc::new(instance.to_owned()),
             path: Arc::new(path.to_owned()),
             value: value.map(|value| Arc::new(value.clone())),
@@ -238,19 +295,19 @@ impl Remote {
 }
 
 #[derive(Debug, Clone)]
-struct LocalMetadataUpdate {
+struct LocalUpdate {
     path: String,
     value: Option<Bytes>,
 }
 
 #[derive(Debug, Clone)]
-pub struct RemoteMetadataUpdate {
+pub struct RemoteUpdate {
     instance: Arc<String>,
     path: Arc<String>,
     value: Option<Arc<Bytes>>,
 }
 
-impl RemoteMetadataUpdate {
+impl RemoteUpdate {
     pub fn instance(&self) -> &str {
         &self.instance
     }
@@ -259,7 +316,17 @@ impl RemoteMetadataUpdate {
         &self.path
     }
 
-    pub fn value(&self) -> Option<&Bytes> {
-        self.value.as_deref()
+    pub fn has_value(&self) -> bool {
+        self.value.is_some()
+    }
+
+    pub fn read_value<T: for<'a> Deserialize<'a>>(&self) -> anyhow::Result<T> {
+        let Some(raw) = &self.value else {
+            anyhow::bail!("no value");
+        };
+
+        let value = serde_json::from_slice::<T>(raw)?;
+
+        Ok(value)
     }
 }

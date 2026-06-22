@@ -71,20 +71,19 @@ impl<Message: Send + Clone + 'static> PublisherHandle<Message> {
     }
 }
 
-/// Subscribe an actor to a PubSub
-pub fn pubsub_subscribe<M, A>(
-    actor_ref: ActorRef<A>,
-    name: impl Into<Cow<'static, str>>,
-) -> anyhow::Result<()>
-where
-    M: Send + Clone + 'static,
-    A: Actor + message::Message<M>,
-{
-    let handle = ActorHandle::<PubSub<M>>::from_name(name)?;
+#[derive(Debug, Clone)]
+pub struct SubscriberHandle<M: Send + Clone + 'static>(ActorHandle<PubSub<M>>);
 
-    handle.tell_sync(pubsub::Subscribe(actor_ref));
+impl<M: Send + Clone + 'static> SubscriberHandle<M> {
+    /// Create a handle to a PubSub actor given its registry name
+    pub fn from_name(name: impl Into<Cow<'static, str>>) -> anyhow::Result<Self> {
+        Ok(Self(ActorHandle::from_name(name)?))
+    }
 
-    Ok(())
+    /// Subscribe to the PubSub
+    pub fn subscribe<A: Actor + message::Message<M>>(&self, actor_ref: ActorRef<A>) {
+        self.0.tell_sync(pubsub::Subscribe(actor_ref));
+    }
 }
 
 pub async fn spawn_pubsub<Message: 'static>(name: &'static str) -> SpawnedActor {

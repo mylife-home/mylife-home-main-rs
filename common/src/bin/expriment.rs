@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use common::{
     bus::{client, metadata},
-    utils::actors::{SpawnedActor, SpawnedActors, spawn_pubsub},
+    utils::actors::SpawnedActors,
 };
 use tokio::time::sleep;
 
@@ -15,34 +15,26 @@ async fn main() {
 
     let mut actors = SpawnedActors::new();
 
-    actors.add(spawn_pubsub::<client::InstanceOnline>(client::INSTANCE_ONLINE_PUBSUB_NAME).await);
-    actors.add(spawn_pubsub::<client::Online>(client::ONLINE_PUBSUB_NAME).await);
-    actors.add(spawn_pubsub::<client::Message>(client::MESSAGE_PUBSUB_NAME).await);
+    client::init_pubsubs(&mut actors).await;
+    metadata::init_pubsubs(&mut actors).await;
 
-    let (client, _) = SpawnedActor::start::<client::Client>(client::ClientConfig {
-        instance_name: instance_name.clone(),
-        server_address,
-    })
+    client::init_actor(
+        &mut actors,
+        client::ClientConfig {
+            instance_name: instance_name.clone(),
+            server_address,
+        },
+    )
     .await;
 
-    client.register("bus.client");
-
-    actors.add(client);
-
-    actors.add(
-        spawn_pubsub::<metadata::RemoteMetadataUpdate>(metadata::REMOTE_METADATA_SET_PUBSUB_NAME)
-            .await,
-    );
-
-    let (metadata, _) = SpawnedActor::start::<metadata::Metadata>(metadata::MetadataConfig {
-        instance_name: instance_name.clone(),
-        listen_remote: true,
-    })
+    metadata::init_actor(
+        &mut actors,
+        metadata::MetadataConfig {
+            instance_name: instance_name.clone(),
+            listen_remote: true,
+        },
+    )
     .await;
-
-    metadata.register("bus.metadata");
-
-    actors.add(metadata);
 
     sleep(Duration::from_secs(10)).await;
     // shutdown

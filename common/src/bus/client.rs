@@ -9,37 +9,50 @@ use crate::{
         encoding,
         mqtt::{MqttClient, MqttEvent},
     },
-    utils::actors::{ActorHandle, PublisherHandle},
+    utils::actors::{
+        ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub,
+    },
 };
 
 use super::mqtt;
 
+/// Name of the client actor
+const CLIENT_NAME: &str = "bus.client";
+
 /// Name of the PubSub actor that delivers messages
-pub const MESSAGE_PUBSUB_NAME: &str = "bus.client.message";
+const MESSAGE_PUBSUB_NAME: &str = "bus.client.message";
 
 /// Name of the PubSub actor that delivers online changes
-pub const ONLINE_PUBSUB_NAME: &str = "bus.client.online";
+const ONLINE_PUBSUB_NAME: &str = "bus.client.online";
 
 /// Name of the PubSub actor that delivers instance online changes
-pub const INSTANCE_ONLINE_PUBSUB_NAME: &str = "bus.client.instance-online";
+const INSTANCE_ONLINE_PUBSUB_NAME: &str = "bus.client.instance-online";
 
 const ONLINE_DOMAIN: &str = "online";
 
 /// Client access to the client actor
 #[derive(Debug, Clone)]
-pub struct ClientHandle(ActorHandle<Client>);
+pub struct ClientHandle {
+    actor: ActorHandle<Client>,
+    on_message: SubscriberHandle<Message>,
+    on_online: SubscriberHandle<Online>,
+    on_instance_online: SubscriberHandle<InstanceOnline>,
+}
 
 impl ClientHandle {
-    const ACTOR_NAME: &str = "bus.client";
-
     /// Create a new access
     pub fn new() -> anyhow::Result<Self> {
-        Ok(Self(ActorHandle::from_name(Self::ACTOR_NAME)?))
+        Ok(Self {
+            actor: ActorHandle::from_name(CLIENT_NAME)?,
+            on_message: SubscriberHandle::from_name(MESSAGE_PUBSUB_NAME)?,
+            on_online: SubscriberHandle::from_name(ONLINE_PUBSUB_NAME)?,
+            on_instance_online: SubscriberHandle::from_name(INSTANCE_ONLINE_PUBSUB_NAME)?,
+        })
     }
 
     /// Publish a message to MQTT
     pub fn publish(&self, topic: Topic, payload: Bytes, retain: bool) {
-        self.0.tell_sync(Publish {
+        self.actor.tell_sync(Publish {
             topic,
             payload,
             retain,
@@ -53,13 +66,44 @@ impl ClientHandle {
 
     /// Subscribe to an MQTT topic
     pub fn subscribe(&self, subscription: Subscription) {
-        self.0.tell_sync(Subscribe(subscription));
+        self.actor.tell_sync(Subscribe(subscription));
     }
 
     /// Unsubscribe to an MQTT topic
     pub fn unsubscribe(&self, subscription: Subscription) {
-        self.0.tell_sync(Unsubscribe(subscription));
+        self.actor.tell_sync(Unsubscribe(subscription));
     }
+
+    /// Get the PubSub for incoming MQTT messages
+    pub fn on_message(&self) -> &SubscriberHandle<Message> {
+        &self.on_message
+    }
+
+    /// Get the PubSub for online
+    pub fn on_online(&self) -> &SubscriberHandle<Online> {
+        &self.on_online
+    }
+
+    /// Get the PubSub for instance onlone
+    pub fn on_instance_online(&self) -> &SubscriberHandle<InstanceOnline> {
+        &self.on_instance_online
+    }
+}
+
+/// Init PubSub links related to client (no dependency)
+pub async fn init_pubsubs(actors: &mut SpawnedActors) {
+    actors.add(spawn_pubsub::<InstanceOnline>(INSTANCE_ONLINE_PUBSUB_NAME).await);
+    actors.add(spawn_pubsub::<Online>(ONLINE_PUBSUB_NAME).await);
+    actors.add(spawn_pubsub::<Message>(MESSAGE_PUBSUB_NAME).await);
+}
+
+/// Init client actor
+pub async fn init_actor(actors: &mut SpawnedActors, config: ClientConfig) {
+    let (client, _) = SpawnedActor::start::<Client>(config).await;
+
+    client.register(CLIENT_NAME);
+
+    actors.add(client);
 }
 
 /// Client manages the MQTT connection, providing an interface for the bus to interact with the MQTT layer.
