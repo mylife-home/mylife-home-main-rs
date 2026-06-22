@@ -478,9 +478,15 @@ impl Message {
     /// Parse the topic to extract usefull parts
     pub fn parse_topic(&'_ self) -> Option<ParsedTopic<'_>> {
         let mut parts = self.topic.splitn(3, '/');
-        let Some(instance) = parts.next() else { return None; };
-        let Some(domain) = parts.next() else { return None; };
-        let Some(remaining) = parts.next() else { return None; };
+        let Some(instance) = parts.next() else {
+            return None;
+        };
+        let Some(domain) = parts.next() else {
+            return None;
+        };
+        let Some(remaining) = parts.next() else {
+            return None;
+        };
 
         Some(ParsedTopic {
             instance,

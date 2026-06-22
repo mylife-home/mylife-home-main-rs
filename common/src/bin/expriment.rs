@@ -29,7 +29,10 @@ async fn main() {
 
     actors.add(client);
 
-    actors.add(spawn_pubsub::<metadata::RemoteMetadataUpdate>(metadata::REMOTE_METADATA_SET_PUBSUB_NAME).await);
+    actors.add(
+        spawn_pubsub::<metadata::RemoteMetadataUpdate>(metadata::REMOTE_METADATA_SET_PUBSUB_NAME)
+            .await,
+    );
 
     let (metadata, _) = SpawnedActor::start::<metadata::Metadata>(metadata::MetadataConfig {
         instance_name: instance_name.clone(),
