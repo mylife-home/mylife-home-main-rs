@@ -484,9 +484,7 @@ impl Message {
         let Some(domain) = parts.next() else {
             return None;
         };
-        let Some(remaining) = parts.next() else {
-            return None;
-        };
+        let remaining = parts.next().unwrap_or_default();
 
         Some(ParsedTopic {
             instance,
