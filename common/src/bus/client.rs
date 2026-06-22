@@ -380,23 +380,27 @@ impl Client {
     }
 
     fn process_instance_online_message(&mut self, msg: &Message) {
-        let (Some(domain), Some(instance)) = (msg.domain(), msg.instance()) else {
+        let Some(topic) = msg.parse_topic() else {
             return;
         };
 
-        if domain != ONLINE_DOMAIN || instance == self.instance_name.as_str() {
+        if topic.domain != ONLINE_DOMAIN || topic.instance == self.instance_name.as_str() {
             return;
         }
 
-        let online = match encoding::read_bool(msg.payload()) {
-            Ok(value) => value,
-            Err(e) => {
-                log::error!("Error reading online value ({:?}): {}", msg.payload(), e);
-                return;
+        let online = if msg.payload().is_empty() {
+            false
+        } else {
+            match encoding::read_bool(msg.payload()) {
+                Ok(value) => value,
+                Err(e) => {
+                    log::error!("Error reading online value ({:?}): {}", msg.payload(), e);
+                    return;
+                }
             }
         };
 
-        self.set_instance_online(String::from(instance), online);
+        self.set_instance_online(String::from(topic.instance), online);
     }
 
     fn set_instance_online(&mut self, instance: String, online: bool) {
@@ -471,15 +475,27 @@ impl Message {
         self.retain
     }
 
-    /// Get the instance part of the topic, which is the first segment.
-    pub fn instance(&self) -> Option<&str> {
-        self.topic.split('/').nth(0)
-    }
+    /// Parse the topic to extract usefull parts
+    pub fn parse_topic(&'_ self) -> Option<ParsedTopic<'_>> {
+        let mut parts = self.topic.splitn(3, '/');
+        let Some(instance) = parts.next() else { return None; };
+        let Some(domain) = parts.next() else { return None; };
+        let Some(remaining) = parts.next() else { return None; };
 
-    /// Get the domain part of the topic, which is the second segment.
-    pub fn domain(&self) -> Option<&str> {
-        self.topic.split('/').nth(1)
+        Some(ParsedTopic {
+            instance,
+            domain,
+            remaining,
+        })
     }
+}
+
+/// Output of the topic parsing
+#[derive(Debug)]
+pub struct ParsedTopic<'a> {
+    pub instance: &'a str,
+    pub domain: &'a str,
+    pub remaining: &'a str,
 }
 
 #[derive(Debug, Clone)]
