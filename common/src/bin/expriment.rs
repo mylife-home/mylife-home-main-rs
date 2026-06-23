@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use common::{
     bus::{client, metadata},
-    components::registry,
+    components::{registry, remote},
     utils::actors::SpawnedActors,
 };
 use tokio::time::sleep;
@@ -39,6 +39,7 @@ async fn main() {
     .await;
 
     registry::init_actor(&mut actors).await;
+    remote::init_actor(&mut actors).await;
 
     sleep(Duration::from_secs(10)).await;
     // shutdown
