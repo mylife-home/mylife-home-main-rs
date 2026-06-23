@@ -100,7 +100,6 @@ impl PluginMetadata {
     }
 }
 
-
 /// Mirror of PluginMetadata without the computed id, used only for deserialization.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,8 +116,13 @@ struct PluginMetadataShadow {
 impl From<PluginMetadataShadow> for PluginMetadata {
     fn from(s: PluginMetadataShadow) -> Self {
         PluginMetadata::new(
-            s.name, s.module, s.usage, s.version,
-            s.description, s.members, s.config,
+            s.name,
+            s.module,
+            s.usage,
+            s.version,
+            s.description,
+            s.members,
+            s.config,
         )
     }
 }
