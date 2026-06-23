@@ -1,8 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use common::{
-    bus::{client, metadata},
-    utils::actors::SpawnedActors,
+    bus::{client, metadata}, components::registry, utils::actors::SpawnedActors,
 };
 use tokio::time::sleep;
 
@@ -17,6 +16,7 @@ async fn main() {
 
     client::init_pubsubs(&mut actors).await;
     metadata::init_pubsubs(&mut actors).await;
+    registry::init_pubsubs(&mut actors).await;
 
     client::init_actor(
         &mut actors,
@@ -35,6 +35,8 @@ async fn main() {
         },
     )
     .await;
+
+    registry::init_actor(&mut actors).await;
 
     sleep(Duration::from_secs(10)).await;
     // shutdown

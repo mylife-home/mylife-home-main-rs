@@ -1,37 +1,61 @@
-use std::{any::Any, sync::Arc};
+use std::sync::Arc;
 
-use crate::{
-    components::{metadata::PluginMetadata, types::Value},
-    utils::observable::{EventType, Observable},
-};
+use crate::components::types::Value;
 
-/// Component represents a component that can be registered to the registry.
-pub trait Component: Observable<ComponentChangeEventType> + Send {
-    /// Returns the unique identifier of the component.
-    fn id(&self) -> &str;
-
-    /// Returns the plugin metadata of the component.
-    fn plugin(&self) -> Arc<PluginMetadata>;
-
-    /// Gets the state of the component by its name.
-    fn get_state(&self, name: &str) -> Value;
-
-    /// Executes an action on the component.
-    fn execute_action(&mut self, name: &str, value: Value);
-
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
+#[derive(Debug, Clone)]
+pub struct Action {
+    component_id: Arc<String>,
+    name: Arc<String>,
+    value: Arc<Value>,
 }
 
-/// ComponentChange represents the changes that can occur on a component.
-#[derive(Debug)]
-pub enum ComponentChange<'a> {
-    /// State is emitted when a state of the component changes, containing the state name and the new value.
-    State { name: &'a str, value: &'a Value },
+impl Action {
+    pub fn new(component_id: String, name: String, value: Value) -> Self {
+        Self {
+            component_id: Arc::new(component_id),
+            name: Arc::new(name),
+            value: Arc::new(value),
+        }
+    }
+
+    pub fn component_id(&self) -> &str {
+        &self.component_id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn value(&self) -> &Value {
+        &self.value
+    }
 }
 
-pub struct ComponentChangeEventType;
+#[derive(Debug, Clone)]
+pub struct State {
+    component_id: Arc<String>,
+    name: Arc<String>,
+    value: Arc<Value>,
+}
 
-impl EventType for ComponentChangeEventType {
-    type Event<'a> = ComponentChange<'a>;
+impl State {
+    pub fn new(component_id: String, name: String, value: Value) -> Self {
+        Self {
+            component_id: Arc::new(component_id),
+            name: Arc::new(name),
+            value: Arc::new(value),
+        }
+    }
+
+    pub fn component_id(&self) -> &str {
+        &self.component_id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn value(&self) -> &Value {
+        &self.value
+    }
 }

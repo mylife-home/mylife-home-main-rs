@@ -4,269 +4,391 @@ use std::{
     sync::Arc,
 };
 
+use kameo::{message, prelude::*};
+
 use crate::{
-    components::{Component, metadata::PluginMetadata},
-    utils::observable::{EventType, Observable, Observer, ObserverId, Subject},
+    components::metadata::PluginMetadata,
+    utils::actors::{
+        ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub,
+    },
 };
 
+const REGISTRY_NAME: &str = "components.registry";
+const UPDATE_PUBSUB_NAME: &str = "components.registry.update";
+
+/// Client access to the registry actor
+#[derive(Debug, Clone)]
+pub struct RegistryHandle {
+    actor: ActorHandle<Registry>,
+    on_update: SubscriberHandle<RegistryUpdated>,
+}
+
+impl RegistryHandle {
+    /// Create a new access
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self {
+            actor: ActorHandle::from_name(REGISTRY_NAME)?,
+            on_update: SubscriberHandle::from_name(UPDATE_PUBSUB_NAME)?,
+        })
+    }
+
+    pub async fn plugin_add(&self) {}
+
+    /// Get the PubSub for registry update
+    pub fn on_update(&self) -> &SubscriberHandle<RegistryUpdated> {
+        &self.on_update
+    }
+}
+
+pub async fn init_pubsubs(actors: &mut SpawnedActors) {
+    actors.add(spawn_pubsub::<RegistryUpdated>(UPDATE_PUBSUB_NAME).await);
+}
+
+pub async fn init_actor(actors: &mut SpawnedActors) {
+    let (registry, _) = SpawnedActor::start::<Registry>(()).await;
+
+    registry.register(REGISTRY_NAME);
+
+    actors.add(registry);
+}
+
 /// Registry is responsible for managing the plugins and components of all instances, and providing an observable interface for other modules to subscribe to registry events.
-pub struct Registry {
-    components: HashMap<String, ComponentData>,
+struct Registry {
+    components: HashMap<Arc<String>, ComponentData>,
     instances: HashMap<InstanceName, InstanceData>,
-    subject: Subject<RegistryEventType>,
+    on_update: PublisherHandle<RegistryUpdated>,
 }
 
 impl Registry {
-    /// Creates a new Registry instance.
-    pub fn new() -> Self {
-        Self {
-            components: HashMap::new(),
-            instances: HashMap::new(),
-            subject: Subject::new(),
-        }
-    }
-
-    /// Add a plugin to the registry.
-    pub fn add_plugin(&mut self, instance_name: Option<&str>, plugin: Arc<PluginMetadata>) {
+    fn add_plugin(
+        &mut self,
+        instance_name: Option<String>,
+        plugin: Arc<PluginMetadata>,
+    ) -> anyhow::Result<()> {
         let instance_name = InstanceName::from(instance_name);
 
-        let instance_data = self.instances.entry(instance_name.clone()).or_default();
+        let instance_data = self
+            .instances
+            .entry(instance_name.clone())
+            .or_insert_with(|| InstanceData::new(instance_name.clone()));
 
-        if instance_data.get_plugin(plugin.id()).is_some() {
-            log::error!("plugin {}:{} already added", instance_name, plugin.id());
-            return;
-        }
+        instance_data.add_plugin(plugin.clone())?;
 
-        instance_data.add_plugin(plugin.to_owned());
+        log::debug!("plugin '{}:{}' added", instance_name, plugin.id());
 
-        log::debug!("plugin {}:{} added", instance_name, plugin.id());
+        self.on_update
+            .publish(RegistryUpdated::PluginAdded(PluginAdded {
+                instance: instance_name.into(),
+                plugin,
+            }));
 
-        self.subject.notify(&RegistryEvent::PluginAdded {
-            instance_name: (&instance_name).into(),
-            plugin: &plugin,
-        });
+        Ok(())
     }
 
-    /// Removes a plugin from the registry.
-    pub fn remove_plugin(&mut self, instance_name: Option<&str>, plugin: &Arc<PluginMetadata>) {
+    fn remove_plugin(
+        &mut self,
+        instance_name: Option<String>,
+        plugin_id: &str,
+    ) -> anyhow::Result<()> {
         let instance_name = InstanceName::from(instance_name);
 
         let Some(instance_data) = self.instances.get_mut(&instance_name) else {
-            log::error!("plugin {}:{} not found", instance_name, plugin.id());
-            return;
+            anyhow::bail!("plugin '{}:{}' not found", instance_name, plugin_id);
         };
 
-        instance_data.remove_plugin(plugin);
+        let plugin = instance_data.remove_plugin(plugin_id)?;
 
         if instance_data.is_empty() {
             self.instances.remove(&instance_name);
         }
 
-        self.subject.notify(&RegistryEvent::PluginRemoved {
-            instance_name: (&instance_name).into(),
-            plugin,
-        });
+        log::debug!("plugin '{}:{}' removed", instance_name, plugin_id);
+
+        self.on_update
+            .publish(RegistryUpdated::PluginRemoved(PluginRemoved {
+                instance: instance_name.into(),
+                plugin,
+            }));
+
+        Ok(())
     }
 
-    /// Gets a plugin by its unique identifier, which is a combination of the instance name and the plugin id.
-    pub fn get_plugin(
-        &self,
-        instance_name: Option<&str>,
-        plugin_id: &str,
-    ) -> Option<&Arc<PluginMetadata>> {
+    fn add_component(
+        &mut self,
+        instance_name: Option<String>,
+        plugin_id: String,
+        component_id: String,
+    ) -> anyhow::Result<()> {
         let instance_name = InstanceName::from(instance_name);
-
-        let Some(instance_data) = self.instances.get(&instance_name) else {
-            return None;
-        };
-
-        instance_data.get_plugin(plugin_id)
-    }
-
-    /// Gets all plugins of an instance.
-    pub fn get_plugins(&self, instance_name: Option<&str>) -> Vec<Arc<PluginMetadata>> {
-        let instance_name = InstanceName::from(instance_name);
-
-        if let Some(instance_data) = self.instances.get(&instance_name) {
-            instance_data.plugins.values().cloned().collect()
-        } else {
-            Vec::new()
-        }
-    }
-
-    /// Adds a component to the registry.
-    pub fn add_component(&mut self, instance_name: Option<&str>, component: Box<dyn Component>) {
-        let component_id = component.id().to_owned();
-        let instance_name = InstanceName::from(instance_name);
+        let component_id = Arc::new(component_id);
 
         if self.components.contains_key(&component_id) {
-            log::error!("component {} already registered", component_id);
-            return;
+            anyhow::bail!("component '{}' already registered", component_id);
         }
+
+        let Some(instance_data) = self.instances.get_mut(&instance_name) else {
+            anyhow::bail!("plugin '{}:{}' does not exist", instance_name, component_id);
+        };
+
+        let plugin = instance_data.add_component(&plugin_id, component_id.clone())?;
 
         self.components.insert(
             component_id.clone(),
-            ComponentData::new(instance_name.to_owned(), component),
+            ComponentData::new(component_id.clone(), instance_name.clone(), plugin.clone()),
         );
 
-        let instance_data = self.instances.entry(instance_name.to_owned()).or_default();
-
-        let component = self
-            .components
-            .get(&component_id)
-            .expect("data inconsistency: could not get component")
-            .component();
-
-        instance_data.add_component(component);
-
         log::debug!(
-            "component {} registered for instance {}",
+            "component '{}' registered for instance '{}'",
             component_id,
             instance_name
         );
-        self.subject.notify(&RegistryEvent::ComponentAdded {
-            instance_name: (&instance_name).into(),
-            component,
-        });
+
+        self.on_update
+            .publish(RegistryUpdated::ComponentAdded(ComponentAdded {
+                instance: instance_name.into(),
+                plugin,
+                component_id,
+            }));
+
+        Ok(())
     }
 
-    /// Removes a component from the registry.
-    pub fn remove_component(&mut self, instance_name: Option<&str>, component_id: &str) {
+    fn remove_component(
+        &mut self,
+        instance_name: Option<String>,
+        component_id: String,
+    ) -> anyhow::Result<()> {
         let instance_name = InstanceName::from(instance_name);
+        let component_id = Arc::new(component_id);
 
-        let component_data = match self.components.remove(component_id) {
-            Some(component_data) => component_data,
-            None => {
-                log::error!("component {} not found", component_id);
-                return;
-            }
+        let Some(component_data) = self.components.get(&component_id) else {
+            anyhow::bail!("component '{}' not found", component_id)
         };
 
-        let component = component_data.component();
+        if component_data.instance_name != instance_name {
+            anyhow::bail!(
+                "component '{}' not found on instance '{}'",
+                component_id,
+                instance_name
+            );
+        }
+
+        let plugin = component_data.plugin().clone();
+
+        self.components.remove(&component_id);
 
         let instance_data = self
             .instances
             .get_mut(&instance_name)
             .expect("data inconsistency: instance data not found");
 
-        instance_data.remove_component(component);
+        instance_data.remove_component(&component_id);
 
         if instance_data.is_empty() {
             self.instances.remove(&instance_name);
         }
 
         log::debug!(
-            "component {} unregistered for instance {}",
+            "component '{}' unregistered for instance '{}'",
             component_id,
             instance_name
         );
 
-        self.subject.notify(&RegistryEvent::ComponentRemoved {
-            instance_name: (&instance_name).into(),
-            component,
-        });
-    }
+        self.on_update
+            .publish(RegistryUpdated::ComponentRemoved(ComponentRemoved {
+                instance: instance_name.into(),
+                plugin,
+                component_id,
+            }));
 
-    /// Gets a component by its unique identifier.
-    pub fn get_component(&self, component_id: &str) -> Option<&dyn Component> {
-        self.components
-            .get(component_id)
-            .map(|data| data.component())
+        Ok(())
     }
+}
 
-    pub fn get_component_mut(&mut self, component_id: &str) -> Option<&mut dyn Component> {
-        self.components
-            .get_mut(component_id)
-            .map(|data| data.component_mut())
+impl Actor for Registry {
+    type Args = ();
+
+    type Error = anyhow::Error;
+
+    async fn on_start(_args: Self::Args, _actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            components: HashMap::new(),
+            instances: HashMap::new(),
+            on_update: PublisherHandle::from_name(UPDATE_PUBSUB_NAME)?,
+        })
     }
+}
 
-    pub fn get_component_data(&self, component_id: &str) -> Option<(Option<&str>, &dyn Component)> {
-        self.components.get(component_id).map(|data| data.data())
-    }
+impl message::Message<PluginAdd> for Registry {
+    type Reply = anyhow::Result<()>;
 
-    pub fn get_component_data_mut(
+    async fn handle(
         &mut self,
-        component_id: &str,
-    ) -> Option<(Option<&str>, &mut dyn Component)> {
-        self.components
-            .get_mut(component_id)
-            .map(|data| data.data_mut())
-    }
-
-    /// Gets all components.
-    pub fn get_components(&self) -> Vec<&dyn Component> {
-        self.components
-            .values()
-            .map(|data| data.component())
-            .collect()
-    }
-
-    /// Gets all instance names that have registered plugins or components.
-    pub fn get_instance_names(&self) -> Vec<Option<String>> {
-        self.instances.keys().cloned().map(|k| k.into()).collect()
+        msg: PluginAdd,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.add_plugin(msg.instance, msg.plugin)
     }
 }
 
-impl Observable<RegistryEventType> for Registry {
-    fn observe(&self, observer: Box<Observer<RegistryEventType>>) -> ObserverId {
-        self.subject.observe(observer)
-    }
+impl message::Message<PluginRemove> for Registry {
+    type Reply = anyhow::Result<()>;
 
-    fn unobserve(&self, id: ObserverId) -> bool {
-        self.subject.unobserve(id)
+    async fn handle(
+        &mut self,
+        msg: PluginRemove,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.remove_plugin(msg.instance, &msg.plugin_id)
     }
 }
 
-#[derive(Debug)]
-pub struct RegistryEventType;
+impl message::Message<ComponentAdd> for Registry {
+    type Reply = anyhow::Result<()>;
 
-impl EventType for RegistryEventType {
-    type Event<'a> = RegistryEvent<'a>;
+    async fn handle(
+        &mut self,
+        msg: ComponentAdd,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.add_component(msg.instance, msg.plugin_id, msg.component_id)
+    }
 }
 
-/// RegistryEvent represents the events that can occur in the registry, such as adding or removing a plugin or component.
-pub enum RegistryEvent<'a> {
-    /// PluginAdded is emitted when a plugin is added to the registry, containing the instance name and the plugin metadata.
-    PluginAdded {
-        instance_name: Option<&'a str>,
-        plugin: &'a Arc<PluginMetadata>,
-    },
+impl message::Message<ComponentRemove> for Registry {
+    type Reply = anyhow::Result<()>;
 
-    /// PluginRemoved is emitted when a plugin is removed from the registry, containing the instance name and the plugin metadata.
-    PluginRemoved {
-        instance_name: Option<&'a str>,
-        plugin: &'a Arc<PluginMetadata>,
-    },
+    async fn handle(
+        &mut self,
+        msg: ComponentRemove,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.remove_component(msg.instance, msg.component_id)
+    }
+}
 
-    /// ComponentAdded is emitted when a component is added to the registry, containing the instance name and the component.
-    ComponentAdded {
-        instance_name: Option<&'a str>,
-        component: &'a dyn Component,
-    },
+#[derive(Debug, Clone)]
+struct PluginAdd {
+    instance: Option<String>,
+    plugin: Arc<PluginMetadata>,
+}
 
-    /// ComponentRemoved is emitted when a component is removed from the registry, containing the instance name and the component.
-    ComponentRemoved {
-        instance_name: Option<&'a str>,
-        component: &'a dyn Component,
-    },
+#[derive(Debug, Clone)]
+struct PluginRemove {
+    instance: Option<String>,
+    plugin_id: String,
+}
+
+#[derive(Debug, Clone)]
+struct ComponentAdd {
+    instance: Option<String>,
+    plugin_id: String,
+    component_id: String,
+}
+
+#[derive(Debug, Clone)]
+struct ComponentRemove {
+    instance: Option<String>,
+    component_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum RegistryUpdated {
+    PluginAdded(PluginAdded),
+    PluginRemoved(PluginRemoved),
+    ComponentAdded(ComponentAdded),
+    ComponentRemoved(ComponentRemoved),
+}
+
+#[derive(Debug, Clone)]
+pub struct PluginAdded {
+    instance: Option<Arc<String>>,
+    plugin: Arc<PluginMetadata>,
+}
+
+impl PluginAdded {
+    pub fn instance(&self) -> Option<&str> {
+        self.instance.as_ref().map(|v| v.as_str())
+    }
+
+    pub fn plugin(&self) -> &Arc<PluginMetadata> {
+        &self.plugin
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PluginRemoved {
+    instance: Option<Arc<String>>,
+    plugin: Arc<PluginMetadata>,
+}
+
+impl PluginRemoved {
+    pub fn instance(&self) -> Option<&str> {
+        self.instance.as_ref().map(|v| v.as_str())
+    }
+
+    pub fn plugin(&self) -> &Arc<PluginMetadata> {
+        &self.plugin
+    }
+}
+#[derive(Debug, Clone)]
+pub struct ComponentAdded {
+    instance: Option<Arc<String>>,
+    plugin: Arc<PluginMetadata>,
+    component_id: Arc<String>,
+}
+
+impl ComponentAdded {
+    pub fn instance(&self) -> Option<&str> {
+        self.instance.as_ref().map(|v| v.as_str())
+    }
+
+    pub fn plugin(&self) -> &Arc<PluginMetadata> {
+        &self.plugin
+    }
+
+    pub fn component_id(&self) -> &str {
+        &self.component_id
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ComponentRemoved {
+    instance: Option<Arc<String>>,
+    plugin: Arc<PluginMetadata>,
+    component_id: Arc<String>,
+}
+
+impl ComponentRemoved {
+    pub fn instance(&self) -> Option<&str> {
+        self.instance.as_ref().map(|v| v.as_str())
+    }
+
+    pub fn plugin(&self) -> &Arc<PluginMetadata> {
+        &self.plugin
+    }
+
+    pub fn component_id(&self) -> &str {
+        &self.component_id
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-struct InstanceName(Option<String>);
+struct InstanceName(Option<Arc<String>>);
 
-impl From<Option<&str>> for InstanceName {
-    fn from(value: Option<&str>) -> Self {
-        Self(value.map(|s| s.to_owned()))
+impl From<Option<Arc<String>>> for InstanceName {
+    fn from(value: Option<Arc<String>>) -> Self {
+        Self(value)
     }
 }
 
-impl<'a> From<&'a InstanceName> for Option<&'a str> {
-    fn from(value: &'a InstanceName) -> Self {
-        value.0.as_deref()
+impl From<Option<String>> for InstanceName {
+    fn from(value: Option<String>) -> Self {
+        Self(value.map(|s| Arc::new(s)))
     }
 }
 
-impl<'a> From<InstanceName> for Option<String> {
+impl<'a> From<InstanceName> for Option<Arc<String>> {
     fn from(value: InstanceName) -> Self {
         value.0
     }
@@ -282,64 +404,149 @@ impl fmt::Display for InstanceName {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug)]
 struct InstanceData {
-    components: HashSet<String>,
-    plugins: HashMap<String, Arc<PluginMetadata>>,
+    instance_name: InstanceName,
+    components: HashSet<Arc<String>>,
+    plugins: HashMap<String, PluginData>,
 }
 
 impl InstanceData {
+    pub fn new(instance_name: InstanceName) -> Self {
+        Self {
+            instance_name,
+            components: HashSet::new(),
+            plugins: HashMap::new(),
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.components.is_empty() && self.plugins.is_empty()
     }
 
-    pub fn add_component(&mut self, component: &dyn Component) {
-        self.components.insert(component.id().to_owned());
+    pub fn add_component(
+        &mut self,
+        plugin_id: &str,
+        component_id: Arc<String>,
+    ) -> anyhow::Result<Arc<PluginMetadata>> {
+        let Some(plugin) = self.plugins.get_mut(plugin_id) else {
+            anyhow::bail!(
+                "plugin '{}:{}' does not exist",
+                self.instance_name,
+                plugin_id
+            );
+        };
+
+        plugin.add_component();
+
+        self.components.insert(component_id);
+
+        Ok(plugin.metadata().clone())
     }
 
-    pub fn remove_component(&mut self, component: &dyn Component) {
-        self.components.remove(component.id());
+    pub fn remove_component(&mut self, component_id: &Arc<String>) {
+        self.components.remove(component_id);
     }
 
-    pub fn add_plugin(&mut self, plugin: Arc<PluginMetadata>) {
-        self.plugins.insert(plugin.id().to_owned(), plugin);
+    pub fn add_plugin(&mut self, plugin: Arc<PluginMetadata>) -> anyhow::Result<()> {
+        let id = plugin.id().to_owned();
+
+        if self.plugins.contains_key(&id) {
+            anyhow::bail!("plugin '{}:{}' does already exist", self.instance_name, id);
+        }
+
+        self.plugins
+            .insert(plugin.id().to_owned(), PluginData::new(plugin));
+        Ok(())
     }
 
-    pub fn remove_plugin(&mut self, plugin: &Arc<PluginMetadata>) {
-        self.plugins.remove(plugin.id());
+    pub fn remove_plugin(&mut self, plugin_id: &str) -> anyhow::Result<Arc<PluginMetadata>> {
+        let Some(plugin) = self.plugins.get(plugin_id) else {
+            anyhow::bail!(
+                "plugin '{}:{}' does not exist",
+                self.instance_name,
+                plugin_id
+            );
+        };
+
+        if plugin.used() {
+            anyhow::bail!("plugin '{}:{}' is used", self.instance_name, plugin_id);
+        }
+
+        let plugin = plugin.metadata().clone();
+
+        self.plugins.remove(plugin_id);
+
+        Ok(plugin)
     }
 
-    pub fn get_plugin(&self, id: &str) -> Option<&Arc<PluginMetadata>> {
+    pub fn get_plugin(&self, id: &str) -> Option<&PluginData> {
         self.plugins.get(id)
     }
 }
 
-struct ComponentData {
-    instance_name: InstanceName,
-    component: Box<dyn Component>,
+#[derive(Debug)]
+
+struct PluginData {
+    metadata: Arc<PluginMetadata>,
+    components: usize,
 }
 
-impl ComponentData {
-    pub fn new(instance_name: InstanceName, component: Box<dyn Component>) -> Self {
+impl PluginData {
+    pub fn new(metadata: Arc<PluginMetadata>) -> Self {
         Self {
-            instance_name,
-            component,
+            metadata,
+            components: 0,
         }
     }
 
-    pub fn component(&self) -> &dyn Component {
-        self.component.as_ref()
+    pub fn metadata(&self) -> &Arc<PluginMetadata> {
+        &self.metadata
     }
 
-    pub fn component_mut(&mut self) -> &mut dyn Component {
-        self.component.as_mut()
+    pub fn add_component(&mut self) {
+        self.components += 1;
     }
 
-    pub fn data(&self) -> (Option<&str>, &dyn Component) {
-        ((&self.instance_name).into(), self.component.as_ref())
+    pub fn remove_component(&mut self) {
+        assert!(self.components > 0);
+        self.components -= 1;
     }
 
-    pub fn data_mut(&mut self) -> (Option<&str>, &mut dyn Component) {
-        ((&self.instance_name).into(), self.component.as_mut())
+    pub fn used(&self) -> bool {
+        self.components > 0
+    }
+}
+
+#[derive(Debug)]
+struct ComponentData {
+    instance_name: InstanceName,
+    component_id: Arc<String>,
+    plugin: Arc<PluginMetadata>,
+}
+
+impl ComponentData {
+    pub fn new(
+        component_id: Arc<String>,
+        instance_name: InstanceName,
+        plugin: Arc<PluginMetadata>,
+    ) -> Self {
+        Self {
+            component_id,
+            instance_name,
+            plugin,
+        }
+    }
+
+    pub fn component_id(&self) -> &str {
+        &self.component_id
+    }
+
+    pub fn instance_name(&self) -> Option<&str> {
+        self.instance_name.0.as_ref().map(|s| s.as_str())
+    }
+
+    pub fn plugin(&self) -> &Arc<PluginMetadata> {
+        &self.plugin
     }
 }
