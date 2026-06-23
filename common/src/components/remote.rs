@@ -252,6 +252,13 @@ impl Remote {
             return;
         };
 
+        log::trace!(
+            "unref plugin '{}:{}' from component '{}:{}'",
+            &key.instance,
+            &component.plugin_id,
+            &key.instance,
+            &key.id
+        );
         self.unref_plugin(&key.instance, &component.plugin_id).await;
     }
 
@@ -277,6 +284,29 @@ impl Remote {
                 e
             );
             return;
+        }
+
+        if let Some(plugin) = self.remote_plugins.get_mut(&RemoteKey {
+            instance: instance.clone(),
+            id: plugin_id.clone(),
+        }) {
+            plugin.usage += 1;
+
+            log::trace!(
+                "ref plugin '{}:{}' from component '{}:{}' -> {}",
+                instance,
+                plugin_id,
+                instance,
+                component_id,
+                plugin.usage
+            );
+        } else {
+            log::error!(
+                "plugin '{}' not found for component '{}:{}'",
+                plugin_id,
+                instance,
+                component_id
+            );
         }
 
         self.remote_components.insert(

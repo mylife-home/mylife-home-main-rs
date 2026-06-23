@@ -241,7 +241,7 @@ impl Registry {
             .get_mut(&instance_name)
             .expect("data inconsistency: instance data not found");
 
-        instance_data.remove_component(&component_id);
+        instance_data.remove_component(plugin.id(), &component_id);
 
         if instance_data.is_empty() {
             self.instances.remove(&instance_name);
@@ -514,7 +514,11 @@ impl InstanceData {
         Ok(plugin.metadata().clone())
     }
 
-    pub fn remove_component(&mut self, component_id: &Arc<String>) {
+    pub fn remove_component(&mut self, plugin_id: &str, component_id: &Arc<String>) {
+        self.plugins
+            .get_mut(plugin_id)
+            .expect("data inconsistency")
+            .remove_component();
         self.components.remove(component_id);
     }
 
