@@ -32,7 +32,46 @@ impl RegistryHandle {
         })
     }
 
-    pub async fn plugin_add(&self) {}
+    /// Add a plugin, waiting for the registry reply
+    pub async fn plugin_add(&self, instance: Option<String>, plugin: Arc<PluginMetadata>) -> anyhow::Result<()> {
+        self.actor.call(PluginAdd {
+            instance,
+            plugin,
+        }).await?;
+
+        Ok(())
+    }
+
+    /// Remove a plugin, waiting for the registry reply
+    pub async fn plugin_remove(&self, instance: Option<String>, plugin_id: String) -> anyhow::Result<()> {
+        self.actor.call(PluginRemove {
+            instance,
+            plugin_id,
+        }).await?;
+
+        Ok(())
+    }
+
+    /// Add a component, waiting for the registry reply
+    pub async fn component_add(&self, instance: Option<String>, plugin_id: String, component_id: String) -> anyhow::Result<()> {
+        self.actor.call(ComponentAdd {
+            instance,
+            plugin_id,
+            component_id,
+        }).await?;
+
+        Ok(())
+    }
+
+    /// Remove a component, waiting for the registry reply
+    pub async fn component_remove(&self, instance: Option<String>, component_id: String) -> anyhow::Result<()> {
+        self.actor.call(ComponentRemove {
+            instance,
+            component_id,
+        }).await?;
+
+        Ok(())
+    }
 
     /// Get the PubSub for registry update
     pub fn on_update(&self) -> &SubscriberHandle<RegistryUpdated> {

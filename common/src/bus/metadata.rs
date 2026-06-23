@@ -47,7 +47,7 @@ impl MetadataHandle {
     pub fn set<T: Serialize>(&self, path: &str, value: &T) -> anyhow::Result<()> {
         let buff = serde_json::to_vec(value)?;
 
-        self.actor.tell_sync(LocalUpdate {
+        self.actor.send(LocalUpdate {
             path: path.to_owned(),
             value: Some(Bytes::from_owner(buff)),
         });
@@ -57,7 +57,7 @@ impl MetadataHandle {
 
     /// Clear metadata on the local instance
     pub fn clear(&self, path: &str) {
-        self.actor.tell_sync(LocalUpdate {
+        self.actor.send(LocalUpdate {
             path: path.to_owned(),
             value: None,
         });

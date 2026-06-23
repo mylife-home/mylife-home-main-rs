@@ -58,7 +58,7 @@ impl ClientHandle {
 
     /// Publish a message to MQTT
     pub fn publish(&self, topic: Topic, payload: Bytes, retain: bool) {
-        self.actor.tell_sync(Publish {
+        self.actor.send(Publish {
             topic,
             payload,
             retain,
@@ -72,12 +72,12 @@ impl ClientHandle {
 
     /// Subscribe to an MQTT topic
     pub fn subscribe(&self, subscription: Subscription) {
-        self.actor.tell_sync(Subscribe(subscription));
+        self.actor.send(Subscribe(subscription));
     }
 
     /// Unsubscribe to an MQTT topic
     pub fn unsubscribe(&self, subscription: Subscription) {
-        self.actor.tell_sync(Unsubscribe(subscription));
+        self.actor.send(Unsubscribe(subscription));
     }
 
     /// Get the PubSub for incoming MQTT messages
