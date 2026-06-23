@@ -1,7 +1,9 @@
 use std::{sync::Arc, time::Duration};
 
 use common::{
-    bus::{client, metadata}, components::registry, utils::actors::SpawnedActors,
+    bus::{client, metadata},
+    components::registry,
+    utils::actors::SpawnedActors,
 };
 use tokio::time::sleep;
 
