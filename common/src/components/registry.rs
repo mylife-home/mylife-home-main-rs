@@ -791,6 +791,13 @@ impl ComponentData {
             return;
         }
 
+        log::trace!(
+            "component action: {}:{} -> {:?}",
+            self.component_id,
+            name,
+            value
+        );
+
         if let Err(e) = self
             .on_action
             .tell(ComponentExecuteAction {
@@ -842,6 +849,13 @@ impl ComponentData {
             .state
             .get_mut(name)
             .expect("data inconsistency: state missing") = Some(value.clone());
+
+        log::trace!(
+            "component state changed: {}:{} -> {:?}",
+            self.component_id,
+            name,
+            value
+        );
 
         self.on_update
             .publish(RegistryUpdated::ComponentStateChanged(
