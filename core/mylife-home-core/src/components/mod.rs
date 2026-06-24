@@ -1,5 +1,2 @@
-mod local_components;
-mod local_pugins;
-
-pub use local_components::{LocalComponents, LocalComponentsMailboxHandleExt};
-pub use local_pugins::LocalPlugins;
+pub mod local_components;
+pub mod local_pugins;

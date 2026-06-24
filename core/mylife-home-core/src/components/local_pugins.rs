@@ -1,23 +1,14 @@
 use crate::modules;
-use common::{
-    components::{ComponentsData, ComponentsHandler, ComponentsMessage},
-    utils::mailbox::MailboxHandle,
-};
+use common::components::registry;
 
-pub struct LocalPlugins {}
+pub async fn init() {
+    // plugin are here forever, we can just register them
+    let registry = registry::RegistryHandle::new().expect("Cannot get registry access");
 
-impl LocalPlugins {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl ComponentsHandler for LocalPlugins {
-    fn init(&mut self, data: &mut ComponentsData, _: &MailboxHandle<Box<dyn ComponentsMessage>>) {
-        let registry = data.registry_mut();
-
-        for plugin in modules::registry().plugins() {
-            registry.add_plugin(None, plugin.metadata().clone());
-        }
+    for plugin in modules::registry().plugins() {
+        registry
+            .plugin_add(None, plugin.metadata().clone())
+            .await
+            .expect("Could not registry plugin")
     }
 }
