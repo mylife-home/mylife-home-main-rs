@@ -850,12 +850,17 @@ impl ComponentData {
             .get_mut(name)
             .expect("data inconsistency: state missing") = Some(value.clone());
 
-        log::trace!(
-            "component state changed: {}:{} -> {:?}",
-            self.component_id,
-            name,
-            value
-        );
+        if log::log_enabled!(log::Level::Trace) {
+            let state_complete = self.state.iter().all(|(_, v)| v.is_some());
+
+            log::trace!(
+                "component state changed: {}:{} -> {:?} (complete={})",
+                self.component_id,
+                name,
+                value,
+                state_complete,
+            );
+        }
 
         self.on_update
             .publish(RegistryUpdated::ComponentStateChanged(

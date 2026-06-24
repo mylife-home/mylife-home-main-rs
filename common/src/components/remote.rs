@@ -1,16 +1,25 @@
 use std::{collections::HashMap, sync::Arc};
 
+use anyhow::Context;
+use bytes::Bytes;
 use kameo::{message, prelude::*};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    bus::metadata::{self, MetadataHandle, RemoteUpdate},
+    bus::{
+        client::{self, ClientHandle, Subscription, Topic, TopicBuilder},
+        encoding,
+        metadata::{self, MetadataHandle, RemoteUpdate},
+    },
     components::{
-        metadata::PluginMetadata,
-        registry::{self, RegistryHandle},
+        metadata::{MemberType, PluginMetadata},
+        registry::{self, ComponentExecuteAction, ComponentHandle, RegistryHandle},
+        types::Value,
     },
     utils::actors::{SpawnedActor, SpawnedActors},
 };
+
+const DOMAIN: &str = "components";
 
 const REMOTE_NAME: &str = "bus.remote";
 
@@ -24,11 +33,13 @@ pub async fn init_actor(actors: &mut SpawnedActors) {
 
 #[derive(Debug)]
 struct Remote {
+    client: ClientHandle,
     metadata: MetadataHandle,
     registry: RegistryHandle,
+    weak_ref_self: WeakActorRef<Self>,
 
-    remote_plugins: HashMap<RemoteKey, RemotePluginData>,
-    remote_components: HashMap<RemoteKey, RemoteComponentData>,
+    remote_plugins: HashMap<RemotePluginKey, RemotePluginData>,
+    remote_components: HashMap<String, RemoteComponentData>,
     remote_pending_components: Vec<RemotePendingComponent>,
 }
 
@@ -36,19 +47,23 @@ impl Actor for Remote {
     type Args = ();
     type Error = anyhow::Error;
 
-    async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
+    async fn on_start(_config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
+        let client = ClientHandle::new()?;
         let metadata = MetadataHandle::new()?;
         let registry = RegistryHandle::new()?;
 
         metadata.on_remote_update().subscribe(actor_ref.clone());
-        registry.on_update().subscribe(actor_ref);
+        registry.on_update().subscribe(actor_ref.clone());
+        client.on_message().subscribe(actor_ref.clone());
 
         Ok(Self {
+            client,
             metadata,
             registry,
             remote_plugins: HashMap::new(),
             remote_components: HashMap::new(),
             remote_pending_components: Vec::new(),
+            weak_ref_self: actor_ref.downgrade(),
         })
     }
 
@@ -70,7 +85,7 @@ impl message::Message<metadata::RemoteUpdate> for Remote {
     async fn handle(
         &mut self,
         msg: metadata::RemoteUpdate,
-        _ctx: &mut Context<Self, Self::Reply>,
+        _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let mut parts = msg.path().splitn(2, '/');
         let Some(typ) = parts.next() else {
@@ -102,15 +117,75 @@ impl message::Message<metadata::RemoteUpdate> for Remote {
     }
 }
 
+impl message::Message<client::Message> for Remote {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: client::Message,
+        _ctx: &mut message::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        let Some(topic) = msg.parse_topic() else {
+            return;
+        };
+
+        if topic.domain != DOMAIN {
+            return;
+        }
+
+        let parts: Vec<_> = topic.remaining.split('/').collect();
+        if parts.len() != 2 {
+            log::warn!("Bad component message topic: '{}', ignored", msg.topic());
+            return;
+        }
+
+        let component_id = parts[0];
+        let member_name = parts[1];
+
+        if let Err(e) =
+            self.handle_state_change(topic.instance, component_id, member_name, msg.payload())
+        {
+            log::error!(
+                "Cannot update component '{}' state '{}'' state: {}",
+                component_id,
+                member_name,
+                e
+            );
+            return;
+        }
+
+        // TODO: local action
+    }
+}
+
 impl message::Message<registry::RegistryUpdated> for Remote {
     type Reply = ();
 
     async fn handle(
         &mut self,
         msg: registry::RegistryUpdated,
-        _ctx: &mut Context<Self, Self::Reply>,
+        _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        // TODO
+        // TODO: local to remote
+    }
+}
+
+impl message::Message<registry::ComponentExecuteAction> for Remote {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: registry::ComponentExecuteAction,
+        _ctx: &mut message::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        if let Err(e) = self.execute_action(msg.component_id(), msg.name(), msg.value()) {
+            log::error!(
+                "Cannot execute component '{}' action '{}': {}",
+                msg.component_id(),
+                msg.name(),
+                e
+            );
+        }
     }
 }
 
@@ -137,7 +212,7 @@ impl Remote {
             return;
         }
 
-        let key = RemoteKey {
+        let key = RemotePluginKey {
             instance: msg.instance().to_owned(),
             id: id.to_owned(),
         };
@@ -157,8 +232,13 @@ impl Remote {
         }
 
         // usage 1 = created
-        self.remote_plugins
-            .insert(key, RemotePluginData { usage: 1 });
+        self.remote_plugins.insert(
+            key,
+            RemotePluginData {
+                metadata: plugin,
+                usage: 1,
+            },
+        );
 
         // Check if we have pending components
         let pendings: Vec<_> = self
@@ -202,7 +282,7 @@ impl Remote {
             return;
         }
 
-        let plugin_key = RemoteKey {
+        let plugin_key = RemotePluginKey {
             instance: msg.instance().to_owned(),
             id: component.plugin,
         };
@@ -224,16 +304,7 @@ impl Remote {
     }
 
     async fn remove_remote_component(&mut self, id: &str, msg: &RemoteUpdate) {
-        let key = RemoteKey {
-            instance: msg.instance().to_owned(),
-            id: id.to_owned(),
-        };
-
-        if let Err(e) = self
-            .registry
-            .component_remove(Some(key.instance.clone()), key.id.clone())
-            .await
-        {
+        if let Err(e) = self.registry.component_remove(id.to_owned()).await {
             log::error!(
                 "cannot remove component from registry '{}:{}': {}",
                 msg.instance(),
@@ -243,23 +314,25 @@ impl Remote {
             return;
         }
 
-        let Some(component) = self.remote_components.remove(&key) else {
+        let Some(component) = self.remote_components.remove(id) else {
             log::error!(
-                "data inconsistency: registry remove component but not found locally: '{}:{}'",
-                key.instance,
-                key.id
+                "data inconsistency: registry remove component but not found locally: '{}'",
+                id
             );
             return;
         };
 
+        self.client
+            .unsubscribe(self.component_subscription(&component.instance, id));
+
         log::trace!(
-            "unref plugin '{}:{}' from component '{}:{}'",
-            &key.instance,
+            "unref plugin '{}:{}' from component '{}'",
+            &component.instance,
             &component.plugin_id,
-            &key.instance,
-            &key.id
+            id
         );
-        self.unref_plugin(&key.instance, &component.plugin_id).await;
+        self.unref_plugin(&component.instance, &component.plugin_id)
+            .await;
     }
 
     async fn do_add_component(
@@ -268,25 +341,36 @@ impl Remote {
         plugin_id: String,
         component_id: String,
     ) {
-        if let Err(e) = self
+        let on_action = if let Some(self_ref) = self.weak_ref_self.upgrade() {
+            self_ref.recipient::<ComponentExecuteAction>()
+        } else {
+            log::error!("cannot upgrade self ref");
+            return;
+        };
+
+        let handle = match self
             .registry
             .component_add(
                 Some(instance.clone()),
                 plugin_id.clone(),
                 component_id.clone(),
+                on_action,
             )
             .await
         {
-            log::error!(
-                "cannot add component to registry '{}:{}': {}",
-                instance,
-                component_id,
-                e
-            );
-            return;
-        }
+            Ok(handle) => handle,
+            Err(e) => {
+                log::error!(
+                    "cannot add component to registry '{}:{}': {}",
+                    instance,
+                    component_id,
+                    e
+                );
+                return;
+            }
+        };
 
-        if let Some(plugin) = self.remote_plugins.get_mut(&RemoteKey {
+        if let Some(plugin) = self.remote_plugins.get_mut(&RemotePluginKey {
             instance: instance.clone(),
             id: plugin_id.clone(),
         }) {
@@ -310,16 +394,34 @@ impl Remote {
         }
 
         self.remote_components.insert(
-            RemoteKey {
-                instance,
-                id: component_id,
+            component_id.clone(),
+            RemoteComponentData {
+                instance: instance.clone(),
+                plugin_id,
+                handle,
             },
-            RemoteComponentData { plugin_id },
         );
+
+        self.client
+            .subscribe(self.component_subscription(&instance, &component_id));
+    }
+
+    fn component_subscription(&self, instance: &str, component_id: &str) -> Subscription {
+        TopicBuilder::remote(instance, DOMAIN)
+            .segment(component_id)
+            .any()
+            .build()
+    }
+
+    fn component_topic(&self, instance: &str, component_id: &str, member_name: &str) -> Topic {
+        TopicBuilder::remote(instance, DOMAIN)
+            .segment(component_id)
+            .segment(member_name)
+            .build()
     }
 
     async fn unref_plugin(&mut self, instance: &str, id: &str) {
-        let key = RemoteKey {
+        let key = RemotePluginKey {
             instance: instance.to_owned(),
             id: id.to_owned(),
         };
@@ -363,6 +465,115 @@ impl Remote {
             self.remote_plugins.remove(&key);
         }
     }
+
+    fn execute_action(
+        &mut self,
+        component_id: &str,
+        action: &str,
+        value: &Value,
+    ) -> anyhow::Result<()> {
+        let component = self
+            .remote_components
+            .get(component_id)
+            .context("component does not exist")?;
+
+        let plugin_key = RemotePluginKey {
+            instance: component.instance.clone(),
+            id: component.plugin_id.clone(),
+        };
+
+        let plugin = self.remote_plugins.get(&plugin_key).with_context(|| {
+            format!(
+                "plugin not found '{}:{}'",
+                plugin_key.instance, plugin_key.id
+            )
+        })?;
+
+        let member = plugin.metadata.members().get(action).with_context(|| {
+            format!(
+                "member '{}' not found on plugin '{}:{}'",
+                action, plugin_key.instance, plugin_key.id
+            )
+        })?;
+
+        if member.member_type() != MemberType::Action {
+            anyhow::bail!(
+                "member '{}' not found on plugin '{}:{}'",
+                action,
+                plugin_key.instance,
+                plugin_key.id
+            );
+        }
+
+        let buffer = encoding::write_value(member.value_type(), value);
+        let topic = self.component_topic(&component.instance, component_id, action);
+        self.client.publish(topic, buffer, false);
+
+        Ok(())
+    }
+
+    fn handle_state_change(
+        &mut self,
+        instance_name: &str,
+        component_id: &str,
+        state: &str,
+        value: &Bytes,
+    ) -> anyhow::Result<()> {
+        let component = self
+            .remote_components
+            .get(component_id)
+            .context("component does not exist")?;
+
+        if component.instance != instance_name {
+            anyhow::bail!(
+                "component '{}' is on instance '{}', but is now updated from instance '{}'",
+                component_id,
+                component.instance,
+                instance_name
+            );
+        }
+
+        let plugin_key = RemotePluginKey {
+            instance: component.instance.clone(),
+            id: component.plugin_id.clone(),
+        };
+
+        let plugin = self.remote_plugins.get(&plugin_key).with_context(|| {
+            format!(
+                "plugin not found '{}:{}'",
+                plugin_key.instance, plugin_key.id
+            )
+        })?;
+
+        let member = plugin.metadata.members().get(state).with_context(|| {
+            format!(
+                "member '{}' not found on plugin '{}:{}'",
+                state, plugin_key.instance, plugin_key.id
+            )
+        })?;
+
+        if member.member_type() != MemberType::State {
+            anyhow::bail!(
+                "member '{}' not found on plugin '{}:{}'",
+                state,
+                plugin_key.instance,
+                plugin_key.id
+            );
+        }
+
+        let value = encoding::read_value(member.value_type(), value).with_context(|| {
+            format!(
+                "cannot read state '{}' value '{:?}' of type '{}'",
+                state,
+                value,
+                member.value_type()
+            )
+        })?;
+
+        component.handle.state_changed(state.to_owned(), value);
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -380,17 +591,20 @@ struct RemotePendingComponent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct RemoteKey {
+struct RemotePluginKey {
     instance: String,
     id: String,
 }
 
 #[derive(Debug)]
 struct RemotePluginData {
+    metadata: Arc<PluginMetadata>,
     usage: usize,
 }
 
 #[derive(Debug)]
 struct RemoteComponentData {
+    instance: String,
     plugin_id: String,
+    handle: ComponentHandle,
 }
