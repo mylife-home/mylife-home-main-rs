@@ -103,7 +103,7 @@ impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
 
 /// ComponentImpl is a live plugin instance: it wraps the user plugin value,
 /// holds its id and metadata, and exposes the Component interface by routing
-/// through the shared access table. State changes are emitted via its subject.
+/// through the shared access table.
 struct ComponentImpl<PluginType: MylifePlugin> {
     access: Arc<PluginRuntimeAccess<PluginType>>,
     component: PluginType,
@@ -123,8 +123,7 @@ impl<PluginType: MylifePlugin> fmt::Debug for ComponentImpl<PluginType> {
 }
 
 impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
-    /// Creates an instance, builds the plugin value, and wires its state
-    /// change listeners to the subject.
+    /// Creates an instance, builds the plugin value, and wires its state.
     pub fn new(
         access: &Arc<PluginRuntimeAccess<PluginType>>,
         id: &str,
@@ -132,21 +131,16 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
         waker: Box<dyn Fn() + Send + Sync>,
         state_change: Box<dyn Fn(/*name:*/ &str, /*value:*/ &Value) + Send + Sync>,
     ) -> Box<Self> {
-        let mut component = Box::new(ComponentImpl {
+        Box::new(ComponentImpl {
             access: access.clone(),
             component: PluginType::new(id, WakeHandle::new(waker)),
             id: String::from(id),
             plugin_metadata,
             state_change: Arc::new(state_change),
-        });
-
-        component.register_state_handlers();
-
-        component
+        })
     }
 
-    /// Installs, for each state member, a listener that forwards its changes
-    /// to the subject as a ComponentChange::State event.
+    /// Installs, for each state member, a listener that forwards its changes.
     fn register_state_handlers(&mut self) {
         for (name, state) in self.access.states.iter() {
             let id = self.id.clone();
@@ -188,7 +182,14 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
     }
 
     fn init(&mut self) -> anyhow::Result<()> {
-        self.component.init()
+        self.component.init()?;
+
+        // Register after init, so that state changes are not trigger before.
+        // The component actor will then publish all state at once.
+        // This avoid spurious triggers that may happen during configure()/init()
+        self.register_state_handlers();
+
+        Ok(())
     }
 
     fn async_handler(&mut self) {

@@ -3,11 +3,13 @@ use std::{sync::Arc, time::Duration};
 use tokio::time::sleep;
 
 use common::{
-    bus::{self, client, metadata},
+    bus::{client, metadata},
     components::{registry, remote},
     utils::actors::SpawnedActors,
 };
 use plugin_runtime::runtime::{Config, ConfigValue, Value};
+
+use crate::components::LocalComponentsHandle;
 
 mod components;
 mod modules;
@@ -52,21 +54,29 @@ async fn main() {
     registry::init_actor(&mut actors).await;
     remote::init_actor(&mut actors).await;
 
-    components::local_pugins::init().await;
-    // components::local_components::
+    components::init_actor(&mut actors).await;
+    components::init_plugins().await;
 
-    sleep(Duration::from_secs(10)).await;
+    create_component().await;
+
+    sleep(Duration::from_secs(5)).await;
+
+    delete_component().await;
+
+    sleep(Duration::from_secs(5)).await;
+
     // shutdown
-
     actors.terminate().await;
 }
-/*
-async fn create_component(mailbox_sender: &MailboxHandle<Box<dyn ComponentsMessage>>) {
+
+async fn create_component() {
     let mut config = Config::new();
     config.insert("config".to_string(), ConfigValue::Bool(false));
 
-    mailbox_sender
-        .component_create(
+    let handle = LocalComponentsHandle::new().expect("failed to create handle");
+
+    handle
+        .component_add(
             "comp-id".to_owned(),
             "logic-base.value-binary".to_owned(),
             config,
@@ -74,4 +84,12 @@ async fn create_component(mailbox_sender: &MailboxHandle<Box<dyn ComponentsMessa
         .await
         .expect("could not create component");
 }
-*/
+
+async fn delete_component() {
+    let handle = LocalComponentsHandle::new().expect("failed to create handle");
+
+    handle
+        .component_remove("comp-id".to_owned())
+        .await
+        .expect("could not delete component");
+}

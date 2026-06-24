@@ -5,9 +5,12 @@ use std::{
 
 use crate::modules;
 use anyhow::Context;
-use common::components::registry::{ComponentExecuteAction, ComponentHandle};
+use common::components::registry::{ComponentExecuteAction, RegistryHandle};
 use kameo::{Actor, error::HookError, message, prelude::*};
-use plugin_runtime::runtime::{Config, MylifeComponent, MylifePluginRuntime, Value};
+use plugin_runtime::{
+    metadata::MemberType,
+    runtime::{Config, MylifeComponent, Value},
+};
 
 #[derive(Debug, Clone)]
 pub struct LocalComponentHandle {
@@ -60,6 +63,7 @@ impl LocalComponentHandle {
 struct LocalComponent {
     id: String,
     component_impl: Box<dyn MylifeComponent>,
+    registry: RegistryHandle,
 }
 
 impl fmt::Debug for LocalComponent {
@@ -72,10 +76,10 @@ impl fmt::Debug for LocalComponent {
 
 #[derive(Debug)]
 pub struct LocalComponentConfig {
-    id: String,
-    plugin: String,
-    config: Config,
-    component_handle: ComponentHandle,
+    pub id: String,
+    pub plugin: String,
+    pub config: Config,
+    pub registry: RegistryHandle,
 }
 
 impl Actor for LocalComponent {
@@ -83,12 +87,29 @@ impl Actor for LocalComponent {
     type Error = Arc<anyhow::Error>;
 
     async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
+        let LocalComponentConfig {
+            id,
+            plugin,
+            config,
+            registry,
+        } = config;
+
         let plugin = modules::registry()
-            .plugin(&config.plugin)
-            .with_context(|| format!("plugin '{}' not found", config.plugin))?;
+            .plugin(&plugin)
+            .with_context(|| format!("plugin '{}' not found", plugin))?;
+
+        // We cannot fail anymore, create component now on the registry to get its handle
+        let handle = registry
+            .component_add(
+                None,
+                plugin.metadata().id().to_owned(),
+                id.clone(),
+                actor_ref.clone().recipient(),
+            )
+            .await?;
 
         let waker = {
-            let id = config.id.clone();
+            let id = id.clone();
             let weak_ref_self = actor_ref.downgrade();
 
             move || {
@@ -104,19 +125,63 @@ impl Actor for LocalComponent {
         };
 
         let state_change = {
-            let component_handle = config.component_handle.clone();
+            let handle = handle.clone();
 
             move |name: &str, value: &Value| {
-                component_handle.state_changed(name.to_owned(), value.clone());
+                handle.state_changed(name.to_owned(), value.clone());
             }
         };
 
-        let component_impl = plugin.create(&config.id, Box::new(waker), Box::new(state_change));
+        let mut component_impl = plugin.create(&id, Box::new(waker), Box::new(state_change));
+
+        if let Err(e) = component_impl.configure(&config) {
+            if let Err(e) = registry.component_remove(id.clone()).await {
+                log::error!(
+                    "could not remove component '{}' that failed during configure: {}",
+                    id,
+                    e
+                );
+            }
+
+            Err(e).with_context(|| format!("failed to configure component '{}'", id))?;
+        }
+
+        if let Err(e) = component_impl.init() {
+            if let Err(e) = registry.component_remove(id.clone()).await {
+                log::error!(
+                    "could not remove component '{}' that failed during init: {}",
+                    id,
+                    e
+                );
+            }
+
+            Err(e).with_context(|| format!("failed to init component '{}'", id))?;
+        }
+
+        // publish all state immediately
+
+        for (name, member) in plugin.metadata().members() {
+            if member.member_type() == MemberType::State {
+                let value = component_impl.get_state(name);
+                handle.state_changed(name.clone(), value);
+            }
+        }
 
         Ok(Self {
-            id: config.id,
+            id,
             component_impl,
+            registry,
         })
+    }
+
+    async fn on_stop(
+        &mut self,
+        _actor_ref: WeakActorRef<Self>,
+        _reason: ActorStopReason,
+    ) -> Result<(), Self::Error> {
+        self.registry.component_remove(self.id.clone()).await?;
+
+        Ok(())
     }
 }
 
