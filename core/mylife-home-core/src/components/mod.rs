@@ -4,7 +4,7 @@ use common::{
     components::registry::{self, RegistryHandle},
     utils::actors::{ActorHandle, SpawnedActor, SpawnedActors},
 };
-use kameo::{Actor, error::Infallible, message};
+use kameo::{Actor, message};
 use plugin_runtime::runtime::Config;
 
 use crate::{

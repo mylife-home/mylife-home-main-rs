@@ -7,7 +7,7 @@ use common::{
     components::{registry, remote},
     utils::actors::SpawnedActors,
 };
-use plugin_runtime::runtime::{Config, ConfigValue, Value};
+use plugin_runtime::runtime::{Config, ConfigValue};
 
 use crate::components::LocalComponentsHandle;
 
