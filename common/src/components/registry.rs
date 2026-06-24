@@ -7,7 +7,10 @@ use std::{
 use kameo::{message, prelude::*};
 
 use crate::{
-    components::metadata::PluginMetadata,
+    components::{
+        metadata::{MemberType, PluginMetadata},
+        types::Value,
+    },
     utils::actors::{
         ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub,
     },
@@ -65,37 +68,63 @@ impl RegistryHandle {
         instance: Option<String>,
         plugin_id: String,
         component_id: String,
-    ) -> anyhow::Result<()> {
+        on_action: Recipient<ComponentExecuteAction>,
+    ) -> anyhow::Result<ComponentHandle> {
         self.actor
             .call(ComponentAdd {
                 instance,
                 plugin_id,
-                component_id,
+                component_id: component_id.clone(),
+                on_action,
             })
             .await?;
+
+        Ok(ComponentHandle::new(self.actor.clone(), component_id))
+    }
+
+    /// Remove a component, waiting for the registry reply
+    pub async fn component_remove(&self, component_id: String) -> anyhow::Result<()> {
+        self.actor.call(ComponentRemove { component_id }).await?;
 
         Ok(())
     }
 
-    /// Remove a component, waiting for the registry reply
-    pub async fn component_remove(
-        &self,
-        instance: Option<String>,
-        component_id: String,
-    ) -> anyhow::Result<()> {
-        self.actor
-            .call(ComponentRemove {
-                instance,
-                component_id,
-            })
-            .await?;
-
-        Ok(())
+    /// Execute an action on a component
+    pub fn component_execute_action(&self, component_id: String, action: String, value: Value) {
+        self.actor.send(ComponentAction {
+            component_id,
+            action,
+            value,
+        });
     }
 
     /// Get the PubSub for registry update
     pub fn on_update(&self) -> &SubscriberHandle<RegistryUpdated> {
         &self.on_update
+    }
+}
+
+/// Specific registry access part for a component
+#[derive(Debug, Clone)]
+pub struct ComponentHandle {
+    registry: ActorHandle<Registry>,
+    component_id: Arc<String>,
+}
+
+impl ComponentHandle {
+    fn new(registry: ActorHandle<Registry>, component_id: String) -> Self {
+        Self {
+            registry,
+            component_id: Arc::new(component_id),
+        }
+    }
+
+    pub fn state_changed(&self, state: String, value: Value) {
+        self.registry.send(ComponentEmitState {
+            component_id: self.component_id.clone(),
+            state,
+            value,
+        });
     }
 }
 
@@ -177,6 +206,7 @@ impl Registry {
         instance_name: Option<String>,
         plugin_id: String,
         component_id: String,
+        on_action: Recipient<ComponentExecuteAction>,
     ) -> anyhow::Result<()> {
         let instance_name = InstanceName::from(instance_name);
         let component_id = Arc::new(component_id);
@@ -193,7 +223,13 @@ impl Registry {
 
         self.components.insert(
             component_id.clone(),
-            ComponentData::new(component_id.clone(), instance_name.clone(), plugin.clone()),
+            ComponentData::new(
+                component_id.clone(),
+                instance_name.clone(),
+                plugin.clone(),
+                on_action,
+                self.on_update.clone(),
+            ),
         );
 
         log::debug!(
@@ -212,27 +248,15 @@ impl Registry {
         Ok(())
     }
 
-    fn remove_component(
-        &mut self,
-        instance_name: Option<String>,
-        component_id: String,
-    ) -> anyhow::Result<()> {
-        let instance_name = InstanceName::from(instance_name);
+    fn remove_component(&mut self, component_id: String) -> anyhow::Result<()> {
         let component_id = Arc::new(component_id);
 
         let Some(component_data) = self.components.get(&component_id) else {
             anyhow::bail!("component '{}' not found", component_id)
         };
 
-        if component_data.instance_name != instance_name {
-            anyhow::bail!(
-                "component '{}' not found on instance '{}'",
-                component_id,
-                instance_name
-            );
-        }
-
         let plugin = component_data.plugin().clone();
+        let instance_name = component_data.instance_name().clone();
 
         self.components.remove(&component_id);
 
@@ -262,6 +286,26 @@ impl Registry {
 
         Ok(())
     }
+
+    fn execute_action(&mut self, component_id: String, action: &str, value: Value) {
+        let component_id = Arc::new(component_id);
+
+        let Some(component_data) = self.components.get_mut(&component_id) else {
+            log::error!("component '{}' not found", component_id);
+            return;
+        };
+
+        component_data.execute_action(action, value);
+    }
+
+    fn handle_state_change(&mut self, component_id: Arc<String>, state: &str, value: Value) {
+        let Some(component_data) = self.components.get_mut(&component_id) else {
+            log::error!("component '{}' not found", component_id);
+            return;
+        };
+
+        component_data.handle_state_change(state, value);
+    }
 }
 
 impl Actor for Registry {
@@ -279,8 +323,8 @@ impl Actor for Registry {
 
     async fn on_stop(
         &mut self,
-        actor_ref: WeakActorRef<Self>,
-        reason: ActorStopReason,
+        _actor_ref: WeakActorRef<Self>,
+        _reason: ActorStopReason,
     ) -> Result<(), Self::Error> {
         self.components.clear();
         self.instances.clear();
@@ -321,7 +365,7 @@ impl message::Message<ComponentAdd> for Registry {
         msg: ComponentAdd,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.add_component(msg.instance, msg.plugin_id, msg.component_id)
+        self.add_component(msg.instance, msg.plugin_id, msg.component_id, msg.on_action)
     }
 }
 
@@ -333,41 +377,109 @@ impl message::Message<ComponentRemove> for Registry {
         msg: ComponentRemove,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.remove_component(msg.instance, msg.component_id)
+        self.remove_component(msg.component_id)
     }
 }
 
+impl message::Message<ComponentAction> for Registry {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: ComponentAction,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.execute_action(msg.component_id, &msg.action, msg.value);
+    }
+}
+
+impl message::Message<ComponentEmitState> for Registry {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: ComponentEmitState,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.handle_state_change(msg.component_id, &msg.state, msg.value);
+    }
+}
+
+/// Registry command: add a plugin
 #[derive(Debug, Clone)]
 struct PluginAdd {
     instance: Option<String>,
     plugin: Arc<PluginMetadata>,
 }
 
+/// Registry command: remove a plugin
 #[derive(Debug, Clone)]
 struct PluginRemove {
     instance: Option<String>,
     plugin_id: String,
 }
 
+/// Registry command: add a component
 #[derive(Debug, Clone)]
 struct ComponentAdd {
     instance: Option<String>,
     plugin_id: String,
     component_id: String,
+    on_action: Recipient<ComponentExecuteAction>,
 }
 
+/// Registry command: remove a component
 #[derive(Debug, Clone)]
 struct ComponentRemove {
-    instance: Option<String>,
     component_id: String,
 }
 
+/// Registry command: execute action on component
+#[derive(Debug, Clone)]
+struct ComponentAction {
+    component_id: String,
+    action: String,
+    value: Value,
+}
+
+/// Message to be implemented by a component so that registry can dispatch actions to it
+#[derive(Debug, Clone)]
+pub struct ComponentExecuteAction {
+    // Still provide component_id here to allow one actor to handle multiple components
+    component_id: Arc<String>,
+    name: String,
+    value: Value,
+}
+
+impl ComponentExecuteAction {
+    pub fn component_id(&self) -> &str {
+        &self.component_id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn value(&self) -> &Value {
+        &self.value
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ComponentEmitState {
+    component_id: Arc<String>,
+    state: String,
+    value: Value,
+}
+
+/// Registry updates
 #[derive(Debug, Clone)]
 pub enum RegistryUpdated {
     PluginAdded(PluginAdded),
     PluginRemoved(PluginRemoved),
     ComponentAdded(ComponentAdded),
     ComponentRemoved(ComponentRemoved),
+    ComponentStateChanged(ComponentStateChanged),
 }
 
 #[derive(Debug, Clone)]
@@ -443,6 +555,15 @@ impl ComponentRemoved {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ComponentStateChanged {
+    instance: Option<Arc<String>>,
+    plugin: Arc<PluginMetadata>,
+    component_id: Arc<String>,
+    state: Arc<String>,
+    value: Arc<Value>,
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct InstanceName(Option<Arc<String>>);
 
@@ -458,7 +579,7 @@ impl From<Option<String>> for InstanceName {
     }
 }
 
-impl<'a> From<InstanceName> for Option<Arc<String>> {
+impl From<InstanceName> for Option<Arc<String>> {
     fn from(value: InstanceName) -> Self {
         value.0
     }
@@ -597,6 +718,9 @@ struct ComponentData {
     instance_name: InstanceName,
     component_id: Arc<String>,
     plugin: Arc<PluginMetadata>,
+    state: HashMap<String, Option<Value>>,
+    on_action: Recipient<ComponentExecuteAction>,
+    on_update: PublisherHandle<RegistryUpdated>,
 }
 
 impl ComponentData {
@@ -604,11 +728,24 @@ impl ComponentData {
         component_id: Arc<String>,
         instance_name: InstanceName,
         plugin: Arc<PluginMetadata>,
+        on_action: Recipient<ComponentExecuteAction>,
+        on_update: PublisherHandle<RegistryUpdated>,
     ) -> Self {
+        let mut state = HashMap::new();
+
+        for (name, member) in plugin.members() {
+            if member.member_type() == MemberType::State {
+                state.insert(name.clone(), None);
+            }
+        }
+
         Self {
             component_id,
             instance_name,
             plugin,
+            state,
+            on_action,
+            on_update,
         }
     }
 
@@ -616,11 +753,105 @@ impl ComponentData {
         &self.component_id
     }
 
-    pub fn instance_name(&self) -> Option<&str> {
-        self.instance_name.0.as_ref().map(|s| s.as_str())
+    pub fn instance_name(&self) -> &InstanceName {
+        &self.instance_name
     }
 
     pub fn plugin(&self) -> &Arc<PluginMetadata> {
         &self.plugin
+    }
+
+    pub fn execute_action(&mut self, name: &str, value: Value) {
+        let Some(member) = self.plugin.members().get(name) else {
+            log::error!(
+                "action '{}' does not exist on component '{}'",
+                name,
+                self.component_id
+            );
+            return;
+        };
+
+        if member.member_type() != MemberType::Action {
+            log::error!(
+                "action '{}' does not exist on component '{}'",
+                name,
+                self.component_id
+            );
+            return;
+        }
+
+        if !value.is_valid(member.value_type()) {
+            log::error!(
+                "action '{}' on component '{}' is of type '{}', value '{:?}' is not compatible",
+                name,
+                self.component_id,
+                member.value_type(),
+                value
+            );
+            return;
+        }
+
+        if let Err(e) = self
+            .on_action
+            .tell(ComponentExecuteAction {
+                component_id: self.component_id.clone(),
+                name: name.to_owned(),
+                value,
+            })
+            .try_send()
+        {
+            log::error!(
+                "could not send action to actor component '{}': {}",
+                self.component_id,
+                e
+            );
+        }
+    }
+
+    pub fn handle_state_change(&mut self, name: &str, value: Value) {
+        let Some(member) = self.plugin.members().get(name) else {
+            log::error!(
+                "state '{}' does not exist on component '{}'",
+                name,
+                self.component_id
+            );
+            return;
+        };
+
+        if member.member_type() != MemberType::State {
+            log::error!(
+                "state '{}' does not exist on component '{}'",
+                name,
+                self.component_id
+            );
+            return;
+        }
+
+        if !value.is_valid(member.value_type()) {
+            log::error!(
+                "state '{}' on component '{}' is of type '{}', value '{:?}' is not compatible",
+                name,
+                self.component_id,
+                member.value_type(),
+                value
+            );
+            return;
+        }
+
+        *self
+            .state
+            .get_mut(name)
+            .expect("data inconsistency: state missing") = Some(value.clone());
+
+        self.on_update
+            .publish(RegistryUpdated::ComponentStateChanged(
+                ComponentStateChanged {
+                    instance: self.instance_name.clone().into(),
+                    plugin: self.plugin.clone(),
+                    component_id: self.component_id.clone(),
+                    state: Arc::new(name.to_owned()),
+                    value: Arc::new(value),
+                },
+            ));
     }
 }
