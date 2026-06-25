@@ -102,6 +102,7 @@ impl Actor for Metadata {
 
             client.on_instance_online().subscribe(actor_ref.clone());
             client.on_message().subscribe(actor_ref.clone());
+            client.on_online().subscribe(actor_ref.clone());
 
             Some(remote)
         } else {
