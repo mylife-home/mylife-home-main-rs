@@ -197,7 +197,7 @@ impl message::Message<LocalUpdate> for Metadata {
 impl Metadata {
     fn publish(&self, path: &str, value: Option<Bytes>) {
         let topic = TopicBuilder::local(&self.instance_name, DOMAIN)
-            .segment(path)
+            .segments(path.split('/'))
             .build();
 
         if let Some(payload) = value {
