@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 use anyhow::Context;
 use bytes::Bytes;
@@ -23,8 +23,13 @@ const DOMAIN: &str = "components";
 
 const REMOTE_NAME: &str = "bus.remote";
 
-pub async fn init_actor(actors: &mut SpawnedActors) {
-    let (remote, _) = SpawnedActor::start::<Remote>(()).await;
+#[derive(Debug)]
+pub struct RemoteConfig {
+    pub instance_name: Arc<String>,
+}
+
+pub async fn init_actor(actors: &mut SpawnedActors, config: RemoteConfig) {
+    let (remote, _) = SpawnedActor::start::<Remote>(config).await;
 
     remote.register(REMOTE_NAME);
 
@@ -33,6 +38,7 @@ pub async fn init_actor(actors: &mut SpawnedActors) {
 
 #[derive(Debug)]
 struct Remote {
+    instance_name: Arc<String>,
     client: ClientHandle,
     metadata: MetadataHandle,
     registry: RegistryHandle,
@@ -41,13 +47,14 @@ struct Remote {
     remote_plugins: HashMap<RemotePluginKey, RemotePluginData>,
     remote_components: HashMap<String, RemoteComponentData>,
     remote_pending_components: Vec<RemotePendingComponent>,
+    local_components_states: HashMap<String, HashMap<String, Bytes>>,
 }
 
 impl Actor for Remote {
-    type Args = ();
+    type Args = RemoteConfig;
     type Error = anyhow::Error;
 
-    async fn on_start(_config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
+    async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         let client = ClientHandle::new()?;
         let metadata = MetadataHandle::new()?;
         let registry = RegistryHandle::new()?;
@@ -55,15 +62,18 @@ impl Actor for Remote {
         metadata.on_remote_update().subscribe(actor_ref.clone());
         registry.on_update().subscribe(actor_ref.clone());
         client.on_message().subscribe(actor_ref.clone());
+        client.on_online().subscribe(actor_ref.clone());
 
         Ok(Self {
+            instance_name: config.instance_name,
             client,
             metadata,
             registry,
+            weak_ref_self: actor_ref.downgrade(),
             remote_plugins: HashMap::new(),
             remote_components: HashMap::new(),
             remote_pending_components: Vec::new(),
-            weak_ref_self: actor_ref.downgrade(),
+            local_components_states: HashMap::new(),
         })
     }
 
@@ -142,19 +152,27 @@ impl message::Message<client::Message> for Remote {
         let component_id = parts[0];
         let member_name = parts[1];
 
-        if let Err(e) =
-            self.handle_state_change(topic.instance, component_id, member_name, msg.payload())
-        {
-            log::error!(
-                "Cannot update component '{}' state '{}'' state: {}",
-                component_id,
-                member_name,
-                e
-            );
-            return;
+        if topic.instance == *self.instance_name {
+            if let Err(e) = self.execute_local_action(component_id, member_name, msg.payload()) {
+                log::error!(
+                    "Cannot execute local component '{}' actipon '{}': {}",
+                    component_id,
+                    member_name,
+                    e
+                );
+            }
+        } else {
+            if let Err(e) =
+                self.handle_state_change(topic.instance, component_id, member_name, msg.payload())
+            {
+                log::error!(
+                    "Cannot update component '{}' state '{}': {}",
+                    component_id,
+                    member_name,
+                    e
+                );
+            }
         }
-
-        // TODO: local action
     }
 }
 
@@ -166,7 +184,132 @@ impl message::Message<registry::RegistryUpdated> for Remote {
         msg: registry::RegistryUpdated,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        // TODO: local to remote
+        match msg {
+            registry::RegistryUpdated::PluginAdded(plugin_data) => {
+                if plugin_data.instance().is_none() {
+                    let plugin = plugin_data.plugin();
+
+                    let path = format!("plugins/{}", plugin.id());
+                    if let Err(e) = self.metadata.set(&path, plugin.deref()) {
+                        log::error!("could not set metadata for plugin '{}': {}", plugin.id(), e);
+                    }
+                }
+            }
+
+            registry::RegistryUpdated::PluginRemoved(plugin_data) => {
+                if plugin_data.instance().is_none() {
+                    let plugin = plugin_data.plugin();
+
+                    let path = format!("plugins/{}", plugin.id());
+                    self.metadata.clear(&path);
+                }
+            }
+
+            registry::RegistryUpdated::ComponentAdded(component_data) => {
+                if component_data.instance().is_none() {
+                    let id = component_data.component_id();
+                    let plugin = component_data.plugin();
+                    let path = format!("components/{}", id);
+
+                    let comp_meta = ComponentMetadata {
+                        id: id.to_owned(),
+                        plugin: plugin.id().to_owned(),
+                    };
+
+                    if let Err(e) = self.metadata.set(&path, &comp_meta) {
+                        log::error!("could not set metadata for component '{}': {}", id, e);
+                    }
+
+                    // init state
+                    self.local_components_states
+                        .insert(id.to_owned(), HashMap::new());
+                }
+            }
+
+            registry::RegistryUpdated::ComponentRemoved(component_data) => {
+                if component_data.instance().is_none() {
+                    let id = component_data.component_id();
+                    let path = format!("components/{}", id);
+                    self.metadata.clear(&path);
+
+                    // remove all state
+                    self.local_components_states.remove(id);
+                    for (name, member) in component_data.plugin().members() {
+                        if member.member_type() != MemberType::State {
+                            continue;
+                        }
+
+                        let topic = self.component_topic(None, component_data.component_id(), name);
+                        self.client.clear_retain(topic);
+                    }
+                }
+            }
+
+            registry::RegistryUpdated::ComponentStateChanged(state_data) => {
+                if state_data.instance().is_none() {
+                    let Some(member) = state_data.plugin().members().get(state_data.state()) else {
+                        log::error!(
+                            "got state change for non-existant state '{}' on local component '{}' with plugin '{}'",
+                            state_data.state(),
+                            state_data.component_id(),
+                            state_data.plugin().id()
+                        );
+                        return;
+                    };
+
+                    if member.member_type() != MemberType::State {
+                        log::error!(
+                            "got state change for invalid state '{}' on local component '{}' with plugin '{}'",
+                            state_data.state(),
+                            state_data.component_id(),
+                            state_data.plugin().id()
+                        );
+                        return;
+                    }
+
+                    let value = encoding::write_value(member.value_type(), state_data.value());
+                    let topic =
+                        self.component_topic(None, state_data.component_id(), state_data.state());
+                    self.client.publish(topic, value.clone(), true);
+
+                    // update local_components_states
+                    let Some(component) = self
+                        .local_components_states
+                        .get_mut(state_data.component_id())
+                    else {
+                        log::error!(
+                            "local component '{}' state does not exist",
+                            state_data.component_id()
+                        );
+                        return;
+                    };
+
+                    component.insert(state_data.state().to_owned(), value);
+                }
+            }
+        }
+    }
+}
+
+impl message::Message<client::Online> for Remote {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: client::Online,
+        _ctx: &mut message::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        if !msg.is_online() {
+            return;
+        }
+
+        // (re)publish all state
+        for (id, state) in &self.local_components_states {
+            for (name, value) in state {
+                let topic = self.component_topic(None, id, name);
+                self.client.publish(topic, value.clone(), true);
+            }
+        }
     }
 }
 
@@ -323,7 +466,7 @@ impl Remote {
         };
 
         self.client
-            .unsubscribe(self.component_subscription(&component.instance, id));
+            .unsubscribe(self.component_subscription(Some(&component.instance), id));
 
         log::trace!(
             "unref plugin '{}:{}' from component '{}'",
@@ -403,21 +546,32 @@ impl Remote {
         );
 
         self.client
-            .subscribe(self.component_subscription(&instance, &component_id));
+            .subscribe(self.component_subscription(Some(&instance), &component_id));
     }
 
-    fn component_subscription(&self, instance: &str, component_id: &str) -> Subscription {
-        TopicBuilder::remote(instance, DOMAIN)
-            .segment(component_id)
-            .any()
-            .build()
+    fn component_subscription(&self, instance: Option<&str>, component_id: &str) -> Subscription {
+        let builder = if let Some(instance) = instance {
+            TopicBuilder::remote(instance, DOMAIN)
+        } else {
+            TopicBuilder::local(&self.instance_name, DOMAIN)
+        };
+
+        builder.segment(component_id).any().build()
     }
 
-    fn component_topic(&self, instance: &str, component_id: &str, member_name: &str) -> Topic {
-        TopicBuilder::remote(instance, DOMAIN)
-            .segment(component_id)
-            .segment(member_name)
-            .build()
+    fn component_topic(
+        &self,
+        instance: Option<&str>,
+        component_id: &str,
+        member_name: &str,
+    ) -> Topic {
+        let builder = if let Some(instance) = instance {
+            TopicBuilder::remote(instance, DOMAIN)
+        } else {
+            TopicBuilder::local(&self.instance_name, DOMAIN)
+        };
+
+        builder.segment(component_id).segment(member_name).build()
     }
 
     async fn unref_plugin(&mut self, instance: &str, id: &str) {
@@ -506,7 +660,7 @@ impl Remote {
         }
 
         let buffer = encoding::write_value(member.value_type(), value);
-        let topic = self.component_topic(&component.instance, component_id, action);
+        let topic = self.component_topic(Some(&component.instance), component_id, action);
         self.client.publish(topic, buffer, false);
 
         Ok(())
@@ -573,6 +727,15 @@ impl Remote {
         component.handle.state_changed(state.to_owned(), value);
 
         Ok(())
+    }
+
+    fn execute_local_action(
+        &mut self,
+        component_id: &str,
+        state: &str,
+        value: &Bytes,
+    ) -> anyhow::Result<()> {
+        todo!();
     }
 }
 

@@ -52,14 +52,20 @@ async fn main() {
     .await;
 
     registry::init_actor(&mut actors).await;
-    remote::init_actor(&mut actors).await;
+    remote::init_actor(
+        &mut actors,
+        remote::RemoteConfig {
+            instance_name: instance_name.clone(),
+        },
+    )
+    .await;
 
     components::init_actor(&mut actors).await;
     components::init_plugins().await;
 
     create_component().await;
 
-    sleep(Duration::from_secs(5)).await;
+    sleep(Duration::from_secs(5000)).await;
 
     delete_component().await;
 

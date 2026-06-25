@@ -564,6 +564,28 @@ pub struct ComponentStateChanged {
     value: Arc<Value>,
 }
 
+impl ComponentStateChanged {
+    pub fn instance(&self) -> Option<&str> {
+        self.instance.as_ref().map(|v| v.as_str())
+    }
+
+    pub fn plugin(&self) -> &Arc<PluginMetadata> {
+        &self.plugin
+    }
+
+    pub fn component_id(&self) -> &str {
+        &self.component_id
+    }
+
+    pub fn state(&self) -> &str {
+        &self.state
+    }
+
+    pub fn value(&self) -> &Value {
+        &self.value
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct InstanceName(Option<Arc<String>>);
 
