@@ -47,7 +47,7 @@ struct Remote {
     remote_plugins: HashMap<RemotePluginKey, RemotePluginData>,
     remote_components: HashMap<String, RemoteComponentData>,
     remote_pending_components: Vec<RemotePendingComponent>,
-    local_components_states: HashMap<String, HashMap<String, Bytes>>,
+    local_components: HashMap<String, LocalComponent>,
 }
 
 impl Actor for Remote {
@@ -73,7 +73,7 @@ impl Actor for Remote {
             remote_plugins: HashMap::new(),
             remote_components: HashMap::new(),
             remote_pending_components: Vec::new(),
-            local_components_states: HashMap::new(),
+            local_components: HashMap::new(),
         })
     }
 
@@ -155,7 +155,7 @@ impl message::Message<client::Message> for Remote {
         if topic.instance == *self.instance_name {
             if let Err(e) = self.execute_local_action(component_id, member_name, msg.payload()) {
                 log::error!(
-                    "Cannot execute local component '{}' actipon '{}': {}",
+                    "Cannot execute local component '{}' action '{}': {}",
                     component_id,
                     member_name,
                     e
@@ -220,9 +220,8 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                         log::error!("could not set metadata for component '{}': {}", id, e);
                     }
 
-                    // init state
-                    self.local_components_states
-                        .insert(id.to_owned(), HashMap::new());
+                    self.local_components
+                        .insert(id.to_owned(), LocalComponent::new(plugin.clone()));
                 }
             }
 
@@ -232,8 +231,9 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                     let path = format!("components/{}", id);
                     self.metadata.clear(&path);
 
+                    self.local_components.remove(id);
+
                     // remove all state
-                    self.local_components_states.remove(id);
                     for (name, member) in component_data.plugin().members() {
                         if member.member_type() != MemberType::State {
                             continue;
@@ -272,10 +272,8 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                         self.component_topic(None, state_data.component_id(), state_data.state());
                     self.client.publish(topic, value.clone(), true);
 
-                    // update local_components_states
-                    let Some(component) = self
-                        .local_components_states
-                        .get_mut(state_data.component_id())
+                    // update local_component state
+                    let Some(component) = self.local_components.get_mut(state_data.component_id())
                     else {
                         log::error!(
                             "local component '{}' state does not exist",
@@ -284,7 +282,7 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                         return;
                     };
 
-                    component.insert(state_data.state().to_owned(), value);
+                    component.state.insert(state_data.state().to_owned(), value);
                 }
             }
         }
@@ -304,8 +302,8 @@ impl message::Message<client::Online> for Remote {
         }
 
         // (re)publish all state
-        for (id, state) in &self.local_components_states {
-            for (name, value) in state {
+        for (id, component) in &self.local_components {
+            for (name, value) in &component.state {
                 let topic = self.component_topic(None, id, name);
                 self.client.publish(topic, value.clone(), true);
             }
@@ -732,10 +730,43 @@ impl Remote {
     fn execute_local_action(
         &mut self,
         component_id: &str,
-        state: &str,
+        action: &str,
         value: &Bytes,
     ) -> anyhow::Result<()> {
-        todo!();
+        let component = self
+            .local_components
+            .get(component_id)
+            .context("component not found")?;
+        let member = component
+            .plugin
+            .members()
+            .get(action)
+            .context("member not found")?;
+        if member.member_type() != MemberType::Action {
+            anyhow::bail!("member is not an action");
+        }
+
+        let value = encoding::read_value(member.value_type(), value)?;
+
+        self.registry
+            .component_execute_action(component_id.to_owned(), action.to_owned(), value);
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct LocalComponent {
+    plugin: Arc<PluginMetadata>,
+    state: HashMap<String, Bytes>,
+}
+
+impl LocalComponent {
+    pub fn new(plugin: Arc<PluginMetadata>) -> Self {
+        Self {
+            plugin,
+            state: HashMap::new(),
+        }
     }
 }
 
