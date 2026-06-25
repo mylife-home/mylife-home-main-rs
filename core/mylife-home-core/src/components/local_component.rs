@@ -159,7 +159,6 @@ impl Actor for LocalComponent {
         }
 
         // publish all state immediately
-
         for (name, member) in plugin.metadata().members() {
             if member.member_type() == MemberType::State {
                 let value = component_impl.get_state(name);
