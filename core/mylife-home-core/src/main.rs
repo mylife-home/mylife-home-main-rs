@@ -3,8 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use tokio::time::sleep;
 
 use common::{
-    instance_info,
-    utils::actors::SpawnedActors,
+    instance_info, utils::{actors::SpawnedActors, config},
 };
 use plugin_runtime::runtime::{Config, ConfigValue};
 
@@ -22,12 +21,11 @@ mod modules_include {
 async fn main() {
     pretty_env_logger::init();
     modules::init();
-
-    let server_address = "rpi-dev-home-main:1883".to_owned();
+    config::init("core.toml");
 
     let mut actors = SpawnedActors::new();
 
-    common::init(&mut actors, "core", server_address).await;
+    common::init(&mut actors, "core", true).await;
 
     components::init_actor(&mut actors).await;
     components::init_plugins().await;

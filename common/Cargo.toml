@@ -22,3 +22,4 @@ serde_with = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["codec"] }
+toml = { workspace = true }

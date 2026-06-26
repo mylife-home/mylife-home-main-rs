@@ -1,0 +1,9 @@
+[logging]
+console = true
+
+[bus]
+server_address = "%{BUS_SERVER|rpi-dev-home-main:1883}"
+
+[store]
+type = "fs"
+path = "store.json"
