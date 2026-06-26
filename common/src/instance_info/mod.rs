@@ -2,6 +2,7 @@ use kameo::{Actor, message, prelude::*};
 use kameo_actors::scheduler::{Scheduler, SetInterval};
 use std::{
     collections::{HashMap, HashSet},
+    env, fs,
     time::{Duration, SystemTime},
 };
 
@@ -61,9 +62,10 @@ struct InstanceInfoPublisher {
     metadata: MetadataHandle,
 
     r#type: Option<String>,
-    components: HashMap<String, String>,
+    versions: HashMap<String, String>,
     capabilities: HashSet<String>,
     instance_uptime: SystemTime,
+    hardware_info: HashMap<String, String>,
 }
 
 impl Actor for InstanceInfoPublisher {
@@ -78,14 +80,27 @@ impl Actor for InstanceInfoPublisher {
         let interval = SetInterval::new(actor_ref.downgrade(), Duration::from_secs(60), Refresh);
         scheduler.tell(interval).await?;
 
+        let mut versions = HashMap::new();
+
+        if let Some(version) = Self::os_version() {
+            versions.insert("os".to_owned(), version);
+        }
+
+        if let Some(version) = Self::kernel_version() {
+            versions.insert("kernel".to_owned(), version);
+        }
+
+        versions.insert("common".to_owned(), env!("CARGO_PKG_VERSION").to_owned());
+
         Ok(Self {
             scheduler,
             metadata,
             r#type: None,
-            components: HashMap::new(),
+            versions,
             capabilities: HashSet::new(),
             // Let's take actor startup time as instance uptime
             instance_uptime: SystemTime::now(),
+            hardware_info: Self::get_hardware_info(),
         })
     }
 
@@ -110,11 +125,11 @@ impl InstanceInfoPublisher {
 
         let info = types::InstanceInfo {
             r#type: r#type.clone(),
-            hardware: HashMap::new(), // TODO
-            versions: self.components.clone(),
+            hardware: self.hardware_info.clone(),
+            versions: self.versions.clone(),
             system_uptime: SystemTime::now(),
             instance_uptime: self.instance_uptime,
-            hostname: String::from("TODO"), // TODO
+            hostname: Self::hostname(),
             capabilities: self.capabilities.iter().cloned().collect(),
 
             wifi: None,
@@ -122,6 +137,83 @@ impl InstanceInfoPublisher {
 
         if let Err(e) = self.metadata.set("instance-info", &info) {
             log::error!("cannot set instance info: {}", e);
+        }
+    }
+
+    fn get_hardware_info() -> HashMap<String, String> {
+        let mut hardware = HashMap::new();
+
+        let info = match rpi_info::load_cpuinfo() {
+            Ok(Some(info)) => info,
+            Ok(None) => {
+                // not a recognized Pi
+                hardware.insert("main".to_owned(), env::consts::ARCH.to_owned());
+                return hardware;
+            }
+            Err(e) => {
+                log::debug!("could not read /proc/cpuinfo: {}", e);
+                hardware.insert("main".to_owned(), env::consts::ARCH.to_owned());
+                return hardware;
+            }
+        };
+
+        hardware.insert(
+            "main".to_owned(),
+            format!("Raspberry Pi {}", info.revision.model),
+        );
+        hardware.insert(
+            "processor".to_owned(),
+            format!("{:?}", info.revision.processor),
+        );
+        hardware.insert(
+            "memory".to_owned(),
+            format!("{} MB", info.revision.memory.mib()),
+        );
+        hardware.insert("manufacturer".to_owned(), format!("{}", info.revision.mfg));
+
+        hardware
+    }
+
+    fn hostname() -> String {
+        match fs::read_to_string("/proc/sys/kernel/hostname") {
+            Ok(content) => content.trim_end().to_owned(),
+            Err(e) => {
+                log::error!("Could not read hostname: {}", e);
+                "<unknown>".to_owned()
+            }
+        }
+    }
+
+    fn os_version() -> Option<String> {
+        let content = match fs::read_to_string("/etc/os-release") {
+            Ok(content) => content,
+            Err(e) => {
+                log::error!("could not read /etc/os-release: {}", e);
+                return None;
+            }
+        };
+
+        for line in content.lines() {
+            if let Some((key, value)) = line.split_once('=') {
+                if key == "PRETTY_NAME" {
+                    return Some(value.trim().trim_matches('"').to_owned());
+                }
+            }
+        }
+
+        log::error!("no PRETTY_NAME field in /etc/os-release");
+        None
+    }
+
+    /// Returns the running kernel version from /proc/sys/kernel/osrelease
+    /// (same as `uname -r`), e.g. "6.6.31+rpt-rpi-v8". Logs and returns None on failure.
+    fn kernel_version() -> Option<String> {
+        match fs::read_to_string("/proc/sys/kernel/osrelease") {
+            Ok(content) => Some(content.trim_end().to_owned()),
+            Err(e) => {
+                log::error!("could not read /proc/sys/kernel/osrelease: {}", e);
+                None
+            }
         }
     }
 }
@@ -147,7 +239,7 @@ impl message::Message<AddComponent> for InstanceInfoPublisher {
         msg: AddComponent,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.components.insert(msg.name, msg.version);
+        self.versions.insert(msg.name, msg.version);
         self.refresh();
     }
 }

@@ -5,6 +5,7 @@ use tokio::time::sleep;
 use common::{
     bus::{client, metadata},
     components::{registry, remote},
+    instance_info,
     utils::actors::SpawnedActors,
 };
 use plugin_runtime::runtime::{Config, ConfigValue};
@@ -62,6 +63,13 @@ async fn main() {
 
     components::init_actor(&mut actors).await;
     components::init_plugins().await;
+
+    instance_info::init_actors(&mut actors).await;
+
+    let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new()
+        .expect("could not get instance info publisher handler");
+    instance_info_handle.set_type("core");
+    instance_info_handle.add_component("core", env!("CARGO_PKG_VERSION"));
 
     create_component().await;
 

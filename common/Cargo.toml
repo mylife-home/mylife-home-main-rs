@@ -15,9 +15,10 @@ log = { workspace = true }
 mqttbytes = { workspace = true }
 pretty_env_logger = { workspace = true }
 regex = { workspace = true }
+rpi-info = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_millis = { workspace = true }
+serde_with = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["codec"] }
