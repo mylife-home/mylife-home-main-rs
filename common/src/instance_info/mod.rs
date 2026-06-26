@@ -8,7 +8,10 @@ use std::{
 
 use crate::{
     bus::metadata::MetadataHandle,
-    utils::actors::{ActorHandle, SpawnedActor, SpawnedActors},
+    utils::{
+        self,
+        actors::{ActorHandle, SpawnedActor, SpawnedActors},
+    },
 };
 
 pub mod types;
@@ -21,8 +24,12 @@ pub struct InstanceInfoPublisherHandle(ActorHandle<InstanceInfoPublisher>);
 
 impl InstanceInfoPublisherHandle {
     /// Create a new access
-    pub fn new() -> anyhow::Result<Self> {
-        Ok(Self(ActorHandle::from_name(INSTANCE_INFO_PUBLISHER_NAME)?))
+    pub fn new() -> Self {
+        // Needed at init, so we can fail on error
+        Self(
+            ActorHandle::from_name(INSTANCE_INFO_PUBLISHER_NAME)
+                .expect("could not get instance info publisher handler"),
+        )
     }
 
     /// Set type (ui, studio, ...)
@@ -90,8 +97,6 @@ impl Actor for InstanceInfoPublisher {
             versions.insert("kernel".to_owned(), version);
         }
 
-        versions.insert("common".to_owned(), env!("CARGO_PKG_VERSION").to_owned());
-
         Ok(Self {
             scheduler,
             metadata,
@@ -123,13 +128,21 @@ impl InstanceInfoPublisher {
             return;
         };
 
+        let hostname = match utils::hostname() {
+            Ok(value) => value,
+            Err(e) => {
+                log::error!("could not read hostname: {}", e);
+                "<unknown>".to_owned()
+            }
+        };
+
         let info = types::InstanceInfo {
             r#type: r#type.clone(),
             hardware: self.hardware_info.clone(),
             versions: self.versions.clone(),
             system_uptime: SystemTime::now(),
             instance_uptime: self.instance_uptime,
-            hostname: Self::hostname(),
+            hostname,
             capabilities: self.capabilities.iter().cloned().collect(),
 
             wifi: None,
@@ -172,16 +185,6 @@ impl InstanceInfoPublisher {
         hardware.insert("manufacturer".to_owned(), format!("{}", info.revision.mfg));
 
         hardware
-    }
-
-    fn hostname() -> String {
-        match fs::read_to_string("/proc/sys/kernel/hostname") {
-            Ok(content) => content.trim_end().to_owned(),
-            Err(e) => {
-                log::error!("Could not read hostname: {}", e);
-                "<unknown>".to_owned()
-            }
-        }
     }
 
     fn os_version() -> Option<String> {

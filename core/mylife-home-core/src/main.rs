@@ -1,10 +1,8 @@
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashMap, time::Duration};
 
 use tokio::time::sleep;
 
 use common::{
-    bus::{client, metadata},
-    components::{registry, remote},
     instance_info,
     utils::actors::SpawnedActors,
 };
@@ -25,51 +23,29 @@ async fn main() {
     pretty_env_logger::init();
     modules::init();
 
-    let instance_name = Arc::new("common-demo-client".to_owned());
     let server_address = "rpi-dev-home-main:1883".to_owned();
 
     let mut actors = SpawnedActors::new();
 
-    client::init_pubsubs(&mut actors).await;
-    metadata::init_pubsubs(&mut actors).await;
-    registry::init_pubsubs(&mut actors).await;
-
-    client::init_actor(
-        &mut actors,
-        client::ClientConfig {
-            instance_name: instance_name.clone(),
-            server_address,
-        },
-    )
-    .await;
-
-    metadata::init_actor(
-        &mut actors,
-        metadata::MetadataConfig {
-            instance_name: instance_name.clone(),
-            listen_remote: true,
-        },
-    )
-    .await;
-
-    registry::init_actor(&mut actors).await;
-    remote::init_actor(
-        &mut actors,
-        remote::RemoteConfig {
-            instance_name: instance_name.clone(),
-        },
-    )
-    .await;
+    common::init(&mut actors, "core", server_address).await;
 
     components::init_actor(&mut actors).await;
     components::init_plugins().await;
 
-    instance_info::init_actors(&mut actors).await;
-
-    let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new()
-        .expect("could not get instance info publisher handler");
-    instance_info_handle.set_type("core");
+    let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
     instance_info_handle.add_component("core", env!("CARGO_PKG_VERSION"));
+
+    // build module list
+    let mut modules = HashMap::new();
+
+    for plugin in modules::registry().plugins() {
+        let meta = plugin.metadata();
+        modules.insert(meta.module(), meta.version());
+    }
+
+    for (name, version) in modules {
+        instance_info_handle.add_component(&format!("core-plugin.{}", name), version);
+    }
 
     create_component().await;
 
