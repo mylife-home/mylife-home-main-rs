@@ -1,4 +1,5 @@
 use regex::Regex;
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::{fmt, num::ParseIntError, ops::RangeInclusive, str};
 
 /// Type represents the type of a member, which can be Range, Text, Float, Bool, Enum or Complex.
@@ -151,6 +152,25 @@ impl fmt::Display for Type {
             Type::Enum(list) => write!(f, "enum{{{}}}", list.join(",")),
             Type::Complex => write!(f, "complex"),
         }
+    }
+}
+
+impl Serialize for Type {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Type {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(de::Error::custom)
     }
 }
 

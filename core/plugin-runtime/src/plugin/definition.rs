@@ -67,8 +67,10 @@ impl<T: Default + Clone + TypedInto<Value>> State<T> {
     /// Sets the value and notifies the bound listener. Panics if the state
     /// has not been bound to the runtime yet.
     pub fn set(&mut self, value: T) {
-        let StateRuntimeData { listener, r#type } =
-            self.runtime.as_ref().expect("Unbound state changed!");
+        let Some(StateRuntimeData { listener, r#type }) = self.runtime.as_ref() else {
+            // stat not bound, trigger during configure() or init()
+            return;
+        };
 
         self.value = value;
         let value = self.value.clone().typed_into(r#type);

@@ -3,8 +3,9 @@ use std::{any::type_name, borrow::Cow, fmt, marker::PhantomData};
 use anyhow::Context;
 use async_trait::async_trait;
 use kameo::{
-    Actor,
+    Actor, Reply,
     actor::{ActorRef, Spawn},
+    error::SendError,
     message,
 };
 use kameo_actors::pubsub::{self, PubSub};
@@ -44,7 +45,7 @@ impl<Actor: kameo::Actor> ActorHandle<Actor> {
     }
 
     /// Synchronously send a message to an actor, and log on error
-    pub fn tell_sync<Message>(&self, msg: Message)
+    pub fn send<Message>(&self, msg: Message)
     where
         Actor: message::Message<Message>,
         Message: Send + 'static,
@@ -52,6 +53,21 @@ impl<Actor: kameo::Actor> ActorHandle<Actor> {
         if let Err(e) = self.actor_ref.tell(msg).try_send() {
             log::error!("Could not send message to actor '{}': {}", self.name, e);
         }
+    }
+
+    /// Call the actor, waiting for its reply
+    pub async fn call<Message>(
+        &self,
+        msg: Message,
+    ) -> Result<
+        <<Actor as message::Message<Message>>::Reply as Reply>::Ok,
+        SendError<Message, <<Actor as message::Message<Message>>::Reply as Reply>::Error>,
+    >
+    where
+        Actor: message::Message<Message>,
+        Message: Send + 'static,
+    {
+        self.actor_ref.ask(msg).try_send().await
     }
 }
 
@@ -67,7 +83,7 @@ impl<Message: Send + Clone + 'static> PublisherHandle<Message> {
 
     /// Publish a message to the PubSub
     pub fn publish(&self, msg: Message) {
-        self.0.tell_sync(pubsub::Publish(msg));
+        self.0.send(pubsub::Publish(msg));
     }
 }
 
@@ -82,7 +98,7 @@ impl<M: Send + Clone + 'static> SubscriberHandle<M> {
 
     /// Subscribe to the PubSub
     pub fn subscribe<A: Actor + message::Message<M>>(&self, actor_ref: ActorRef<A>) {
-        self.0.tell_sync(pubsub::Subscribe(actor_ref));
+        self.0.send(pubsub::Subscribe(actor_ref));
     }
 }
 

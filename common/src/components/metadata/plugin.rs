@@ -1,8 +1,11 @@
+use serde::{Deserialize, Serialize};
+
 use super::Type;
 use std::collections::HashMap;
 
 /// PluginUsage represents the usage of a plugin, which can be Sensor, Actuator, Logic or Ui.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum PluginUsage {
     /// Sensor represents a plugin that provides data, such as a temperature sensor or a motion sensor.
     Sensor,
@@ -18,8 +21,10 @@ pub enum PluginUsage {
 }
 
 /// PluginMetadata contains all the information about a plugin, including its members and config items.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", from = "PluginMetadataShadow")]
 pub struct PluginMetadata {
+    #[serde(skip_serializing)]
     id: String,
     name: String,
     module: String,
@@ -95,8 +100,36 @@ impl PluginMetadata {
     }
 }
 
+/// Mirror of PluginMetadata without the computed id, used only for deserialization.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginMetadataShadow {
+    name: String,
+    module: String,
+    usage: PluginUsage,
+    version: String,
+    description: Option<String>,
+    members: HashMap<String, Member>,
+    config: HashMap<String, ConfigItem>,
+}
+
+impl From<PluginMetadataShadow> for PluginMetadata {
+    fn from(s: PluginMetadataShadow) -> Self {
+        PluginMetadata::new(
+            s.name,
+            s.module,
+            s.usage,
+            s.version,
+            s.description,
+            s.members,
+            s.config,
+        )
+    }
+}
+
 /// MemberType represents the type of a plugin member, which can be an Action or a State.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum MemberType {
     /// Action represents a plugin member that can be invoked to perform an action, such as turning on a light or setting a temperature.
     Action,
@@ -106,7 +139,8 @@ pub enum MemberType {
 }
 
 /// Member represents a member of a plugin, which can be an action or a state, and has a type and a value type.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Member {
     description: Option<String>,
     member_type: MemberType,
@@ -140,7 +174,8 @@ impl Member {
 }
 
 /// ConfigType represents the type of a configuration item, which can be String, Bool, Integer or Float.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum ConfigType {
     /// String represents a configuration item that accepts a string value, such as a device name or an API key.
     String,
@@ -156,7 +191,8 @@ pub enum ConfigType {
 }
 
 /// ConfigItem represents a configuration item of a plugin, which has a description and a value type.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConfigItem {
     description: Option<String>,
     value_type: ConfigType,

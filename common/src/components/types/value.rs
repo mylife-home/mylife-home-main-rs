@@ -57,6 +57,33 @@ impl Value {
             None
         }
     }
+
+    /// Indicate if the value is valid for the type
+    pub fn is_valid(&self, ty: &metadata::Type) -> bool {
+        match ty {
+            metadata::Type::Range(range) => {
+                if let Some(value) = self.as_range() {
+                    range.contains(&value)
+                } else {
+                    false
+                }
+            }
+
+            metadata::Type::Text => self.as_text().is_some(),
+            metadata::Type::Float => self.as_float().is_some(),
+            metadata::Type::Bool => self.as_bool().is_some(),
+
+            metadata::Type::Enum(values) => {
+                if let Some(value) = self.as_enum() {
+                    values.iter().any(|v| v == value)
+                } else {
+                    false
+                }
+            }
+
+            metadata::Type::Complex => false,
+        }
+    }
 }
 
 pub trait TypedFrom<T>: Sized {

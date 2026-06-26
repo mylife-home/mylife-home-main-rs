@@ -30,6 +30,12 @@ const INSTANCE_ONLINE_PUBSUB_NAME: &str = "bus.client.instance-online";
 
 const ONLINE_DOMAIN: &str = "online";
 
+#[derive(Debug)]
+pub struct ClientConfig {
+    pub instance_name: Arc<String>,
+    pub server_address: String,
+}
+
 /// Client access to the client actor
 #[derive(Debug, Clone)]
 pub struct ClientHandle {
@@ -52,7 +58,7 @@ impl ClientHandle {
 
     /// Publish a message to MQTT
     pub fn publish(&self, topic: Topic, payload: Bytes, retain: bool) {
-        self.actor.tell_sync(Publish {
+        self.actor.send(Publish {
             topic,
             payload,
             retain,
@@ -66,12 +72,12 @@ impl ClientHandle {
 
     /// Subscribe to an MQTT topic
     pub fn subscribe(&self, subscription: Subscription) {
-        self.actor.tell_sync(Subscribe(subscription));
+        self.actor.send(Subscribe(subscription));
     }
 
     /// Unsubscribe to an MQTT topic
     pub fn unsubscribe(&self, subscription: Subscription) {
-        self.actor.tell_sync(Unsubscribe(subscription));
+        self.actor.send(Unsubscribe(subscription));
     }
 
     /// Get the PubSub for incoming MQTT messages
@@ -108,7 +114,7 @@ pub async fn init_actor(actors: &mut SpawnedActors, config: ClientConfig) {
 
 /// Client manages the MQTT connection, providing an interface for the bus to interact with the MQTT layer.
 #[derive(Debug)]
-pub struct Client {
+struct Client {
     instance_name: Arc<String>,
 
     mqtt_client: Option<MqttClient>,
@@ -120,12 +126,6 @@ pub struct Client {
     on_message: PublisherHandle<Message>,
     on_online: PublisherHandle<Online>,
     on_instance_online: PublisherHandle<InstanceOnline>,
-}
-
-#[derive(Debug)]
-pub struct ClientConfig {
-    pub instance_name: Arc<String>,
-    pub server_address: String,
 }
 
 impl Actor for Client {

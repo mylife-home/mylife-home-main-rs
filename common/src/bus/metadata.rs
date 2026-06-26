@@ -21,6 +21,7 @@ const METADATA_NAME: &str = "bus.metadata";
 /// Name of the PubSub actor that delivers remote metadata update
 const REMOTE_UPDATE_PUBSUB_NAME: &str = "bus.metadata.remote-update";
 
+#[derive(Debug)]
 pub struct MetadataConfig {
     pub instance_name: Arc<String>,
     pub listen_remote: bool,
@@ -46,7 +47,7 @@ impl MetadataHandle {
     pub fn set<T: Serialize>(&self, path: &str, value: &T) -> anyhow::Result<()> {
         let buff = serde_json::to_vec(value)?;
 
-        self.actor.tell_sync(LocalUpdate {
+        self.actor.send(LocalUpdate {
             path: path.to_owned(),
             value: Some(Bytes::from_owner(buff)),
         });
@@ -56,7 +57,7 @@ impl MetadataHandle {
 
     /// Clear metadata on the local instance
     pub fn clear(&self, path: &str) {
-        self.actor.tell_sync(LocalUpdate {
+        self.actor.send(LocalUpdate {
             path: path.to_owned(),
             value: None,
         });
@@ -81,7 +82,7 @@ pub async fn init_actor(actors: &mut SpawnedActors, config: MetadataConfig) {
 }
 
 #[derive(Debug)]
-pub struct Metadata {
+struct Metadata {
     instance_name: Arc<String>,
     metadata: HashMap<String, Bytes>,
     remote: Option<Remote>,
@@ -101,6 +102,7 @@ impl Actor for Metadata {
 
             client.on_instance_online().subscribe(actor_ref.clone());
             client.on_message().subscribe(actor_ref.clone());
+            client.on_online().subscribe(actor_ref.clone());
 
             Some(remote)
         } else {
@@ -196,7 +198,7 @@ impl message::Message<LocalUpdate> for Metadata {
 impl Metadata {
     fn publish(&self, path: &str, value: Option<Bytes>) {
         let topic = TopicBuilder::local(&self.instance_name, DOMAIN)
-            .segment(path)
+            .segments(path.split('/'))
             .build();
 
         if let Some(payload) = value {

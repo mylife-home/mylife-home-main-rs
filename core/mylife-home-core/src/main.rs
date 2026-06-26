@@ -1,65 +1,72 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use tokio::time::sleep;
 
 use common::{
-    bus::{self, Transport},
-    components::{Components, ComponentsMessage, ShutdownMessage},
-    utils::mailbox::MailboxHandle,
+    instance_info,
+    utils::actors::SpawnedActors,
 };
-use plugin_runtime::runtime::{Config, ConfigValue, Value};
+use plugin_runtime::runtime::{Config, ConfigValue};
 
-use crate::components::{LocalComponents, LocalComponentsMailboxHandleExt, LocalPlugins};
+use crate::components::LocalComponentsHandle;
 
 mod components;
 mod modules;
 
 mod modules_include {
     #![allow(unused_imports)]
-
     use plugin_logic_base::*;
 }
 
-const INSTANCE_NAME: &str = "core-test-instance";
-const SERVER_ADDRESS: &str = "rpi-dev-home-main:1883";
-
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() {
     pretty_env_logger::init();
-
     modules::init();
 
-    let mut components = Components::new();
-    let components_sender = components.get_mailbox_handle();
-    components.add_handler(LocalPlugins::new());
-    components.add_handler(LocalComponents::new());
-    let components_handle = components.start();
+    let server_address = "rpi-dev-home-main:1883".to_owned();
 
-    let mut transport = Transport::new(INSTANCE_NAME.to_owned(), SERVER_ADDRESS.to_owned())?;
-    let bus_sender = transport.get_mailbox_handle();
-    let transport_handle = transport.start();
+    let mut actors = SpawnedActors::new();
 
-    create_component(&components_sender).await;
+    common::init(&mut actors, "core", server_address).await;
 
-    sleep(Duration::from_secs(10)).await;
-    println!("Will shutdown");
+    components::init_actor(&mut actors).await;
+    components::init_plugins().await;
 
-    bus_sender.send(Box::new(bus::ShutdownMessage));
-    components_sender.send(Box::new(ShutdownMessage));
+    let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
+    instance_info_handle.add_component("core", env!("CARGO_PKG_VERSION"));
 
-    let (components_res, transport_res) = tokio::join!(components_handle, transport_handle);
-    components_res.expect("failed to join components");
-    transport_res.expect("failed to join transport");
+    // build module list
+    let mut modules = HashMap::new();
 
-    Ok(())
+    for plugin in modules::registry().plugins() {
+        let meta = plugin.metadata();
+        modules.insert(meta.module(), meta.version());
+    }
+
+    for (name, version) in modules {
+        instance_info_handle.add_component(&format!("core-plugin.{}", name), version);
+    }
+
+    create_component().await;
+
+    sleep(Duration::from_secs(5000)).await;
+
+    delete_component().await;
+
+    sleep(Duration::from_secs(5)).await;
+
+    // shutdown
+    actors.terminate().await;
 }
 
-async fn create_component(mailbox_sender: &MailboxHandle<Box<dyn ComponentsMessage>>) {
+async fn create_component() {
     let mut config = Config::new();
     config.insert("config".to_string(), ConfigValue::Bool(false));
 
-    mailbox_sender
-        .component_create(
+    let handle = LocalComponentsHandle::new().expect("failed to create handle");
+
+    handle
+        .component_add(
             "comp-id".to_owned(),
             "logic-base.value-binary".to_owned(),
             config,
@@ -68,40 +75,11 @@ async fn create_component(mailbox_sender: &MailboxHandle<Box<dyn ComponentsMessa
         .expect("could not create component");
 }
 
-#[allow(dead_code)]
-fn old_main() -> anyhow::Result<()> {
-    pretty_env_logger::init();
+async fn delete_component() {
+    let handle = LocalComponentsHandle::new().expect("failed to create handle");
 
-    modules::init();
-
-    let mut component = modules::registry()
-        .plugin("logic-base.value-binary")
-        .unwrap()
-        .create(
-            "comp-id",
-            Box::new(|| {
-                println!("WAKE ASKED");
-            }),
-            Box::new(|name, value| {
-                println!("STATE CHANGE: {} -> {:?}", name, value);
-            }),
-        );
-
-    let mut config = Config::new();
-    config.insert("config".to_string(), ConfigValue::Bool(false));
-
-    println!("configure");
-    component.configure(&config)?;
-
-    println!("init");
-    component.init()?;
-    println!("after init: state = {:?}", component.get_state("state"));
-
-    println!("execute_action on");
-    component.execute_action("on", Value::Bool(true))?;
-
-    println!("execute_action off");
-    component.execute_action("off", Value::Bool(true))?;
-
-    Ok(())
+    handle
+        .component_remove("comp-id".to_owned())
+        .await
+        .expect("could not delete component");
 }
