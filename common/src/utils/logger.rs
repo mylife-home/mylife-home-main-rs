@@ -6,11 +6,17 @@ use std::{
     },
 };
 
-use tracing::field::{Field, Visit};
-use tracing::{Event, Subscriber};
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::layer::{Context, Layer};
-use tracing_subscriber::prelude::*;
+use tracing::{
+    Event, Metadata, Subscriber,
+    field::{Field, Visit},
+};
+use tracing_subscriber::{
+    EnvFilter,
+    filter::FilterExt,
+    layer::{Context, Filter, Layer},
+    prelude::*,
+    registry::LookupSpan,
+};
 
 /// A consumer of fanned-out log events (MQTT forwarder, syslog, ...).
 /// `emit` is called synchronously from the layer, so impls must not block:
@@ -59,14 +65,10 @@ pub fn init(console: bool) {
     let fanout = FanoutLayer {
         sinks: SINKS.clone(),
     };
+    let registry = tracing_subscriber::registry().with(fanout);
 
-    let registry = tracing_subscriber::registry()
-        .with(EnvFilter::from_default_env()) // honors RUST_LOG
-        .with(fanout);
-
-    // Console is its own fmt layer: proper formatting (level, target, fields) for free.
     if console {
-        registry.with(tracing_subscriber::fmt::layer()).init();
+        registry.with(console_layer()).init();
     } else {
         registry.init();
     }
@@ -155,5 +157,21 @@ impl Visit for FieldVisitor {
 
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
         self.push(field, LogValue::Str(format!("{:?}", value)));
+    }
+}
+
+fn console_layer<S>() -> impl Layer<S>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    let filter = EventsOnly.and(EnvFilter::from_default_env());
+    tracing_subscriber::fmt::layer().with_filter(filter)
+}
+
+struct EventsOnly;
+
+impl<S> Filter<S> for EventsOnly {
+    fn enabled(&self, meta: &Metadata<'_>, _: &Context<'_, S>) -> bool {
+        meta.is_event()
     }
 }
