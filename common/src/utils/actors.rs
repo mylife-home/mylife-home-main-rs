@@ -113,43 +113,6 @@ pub async fn spawn_pubsub<Message: 'static>(name: &'static str) -> SpawnedActor 
     actor
 }
 
-#[derive(Actor)]
-struct TracingActor<T: fmt::Debug + Send + 'static> {
-    name: String,
-    _data: PhantomData<T>,
-}
-
-impl<T: fmt::Debug + Send + 'static> message::Message<T> for TracingActor<T> {
-    type Reply = ();
-
-    async fn handle(
-        &mut self,
-        msg: T,
-        _ctx: &mut message::Context<Self, Self::Reply>,
-    ) -> Self::Reply {
-        log::trace!("PubSub {} -> {:?}", self.name, msg);
-    }
-}
-
-pub async fn trace_pubsub<T: fmt::Debug + Send + 'static>(name: &str) -> SpawnedActor {
-    let pubsub = ActorRef::<pubsub::PubSub<T>>::lookup(name)
-        .expect("lookup error")
-        .expect("pubsub not found");
-
-    let (tracer, tracer_ref) = SpawnedActor::start::<TracingActor<T>>(TracingActor::<T> {
-        name: name.to_owned(),
-        _data: PhantomData,
-    })
-    .await;
-
-    pubsub
-        .tell(pubsub::Subscribe(tracer_ref))
-        .try_send()
-        .expect("could not subscribe");
-
-    tracer
-}
-
 pub struct SpawnedActor(Box<dyn UntypedSpawnedActor>);
 
 impl SpawnedActor {
