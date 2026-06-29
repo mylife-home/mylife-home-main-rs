@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
-use log::debug;
+use tracing::debug;
 
 use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{MylifePluginHooks, State, WakeHandle};

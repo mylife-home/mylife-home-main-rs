@@ -42,7 +42,7 @@ impl LocalComponentHandle {
     /// Terminate local component
     pub async fn terminate(&self) {
         if let Err(e) = self.actor_ref.stop_gracefully().await {
-            log::error!("cannot stop component actor '{}': {}", self.id, e);
+            tracing::error!("cannot stop component actor '{}': {}", self.id, e);
             return;
         }
 
@@ -53,7 +53,7 @@ impl LocalComponentHandle {
                 }
                 HookError::Error(e) => {
                     // cannot reuse Arc<anyhow::Error>
-                    log::error!("component '{}' failed to shutdown: {}", self.id, e);
+                    tracing::error!("component '{}' failed to shutdown: {}", self.id, e);
                 }
             }
         }
@@ -114,12 +114,12 @@ impl Actor for LocalComponent {
 
             move || {
                 let Some(ref_self) = weak_ref_self.upgrade() else {
-                    log::error!("cannot wake component '{}': cannot get actor ref", id);
+                    tracing::error!("cannot wake component '{}': cannot get actor ref", id);
                     return;
                 };
 
                 if let Err(e) = ref_self.tell(ComponentWakeMessage).try_send() {
-                    log::error!("cannot wake component '{}': cannot send message: {}", id, e);
+                    tracing::error!("cannot wake component '{}': cannot send message: {}", id, e);
                 }
             }
         };
@@ -136,7 +136,7 @@ impl Actor for LocalComponent {
 
         if let Err(e) = component_impl.configure(&config) {
             if let Err(e) = registry.component_remove(id.clone()).await {
-                log::error!(
+                tracing::error!(
                     "could not remove component '{}' that failed during configure: {}",
                     id,
                     e
@@ -148,7 +148,7 @@ impl Actor for LocalComponent {
 
         if let Err(e) = component_impl.init() {
             if let Err(e) = registry.component_remove(id.clone()).await {
-                log::error!(
+                tracing::error!(
                     "could not remove component '{}' that failed during init: {}",
                     id,
                     e
@@ -208,7 +208,7 @@ impl message::Message<ComponentExecuteAction> for LocalComponent {
             .component_impl
             .execute_action(msg.name(), msg.value().clone())
         {
-            log::error!(
+            tracing::error!(
                 "failed to execute action '{}' on component '{}' with value '{:?}': {}",
                 msg.name(),
                 self.id,

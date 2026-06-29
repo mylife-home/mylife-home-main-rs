@@ -124,14 +124,14 @@ impl Actor for InstanceInfoPublisher {
 impl InstanceInfoPublisher {
     fn refresh(&mut self) {
         let Some(r#type) = &self.r#type else {
-            log::warn!("type not set, will not emit instance-info");
+            tracing::warn!("type not set, will not emit instance-info");
             return;
         };
 
         let hostname = match utils::hostname() {
             Ok(value) => value,
-            Err(e) => {
-                log::error!("could not read hostname: {}", e);
+            Err(error) => {
+                tracing::error!(?error, "could not read hostname");
                 "<unknown>".to_owned()
             }
         };
@@ -149,7 +149,7 @@ impl InstanceInfoPublisher {
         };
 
         if let Err(e) = self.metadata.set("instance-info", &info) {
-            log::error!("cannot set instance info: {}", e);
+            tracing::error!("cannot set instance info: {}", e);
         }
     }
 
@@ -164,7 +164,7 @@ impl InstanceInfoPublisher {
                 return hardware;
             }
             Err(e) => {
-                log::debug!("could not read /proc/cpuinfo: {}", e);
+                tracing::debug!("could not read /proc/cpuinfo: {}", e);
                 hardware.insert("main".to_owned(), env::consts::ARCH.to_owned());
                 return hardware;
             }
@@ -191,7 +191,7 @@ impl InstanceInfoPublisher {
         let content = match fs::read_to_string("/etc/os-release") {
             Ok(content) => content,
             Err(e) => {
-                log::error!("could not read /etc/os-release: {}", e);
+                tracing::error!("could not read /etc/os-release: {}", e);
                 return None;
             }
         };
@@ -204,7 +204,7 @@ impl InstanceInfoPublisher {
             }
         }
 
-        log::error!("no PRETTY_NAME field in /etc/os-release");
+        tracing::error!("no PRETTY_NAME field in /etc/os-release");
         None
     }
 
@@ -214,7 +214,7 @@ impl InstanceInfoPublisher {
         match fs::read_to_string("/proc/sys/kernel/osrelease") {
             Ok(content) => Some(content.trim_end().to_owned()),
             Err(e) => {
-                log::error!("could not read /proc/sys/kernel/osrelease: {}", e);
+                tracing::error!("could not read /proc/sys/kernel/osrelease: {}", e);
                 None
             }
         }

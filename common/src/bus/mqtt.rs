@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
 use futures::sink::SinkExt;
-use log::warn;
 use mqttbytes::QoS;
 use mqttbytes::v4::{
     Connect, ConnectReturnCode, Disconnect, Packet, PingReq, PingResp, Publish, Subscribe,
@@ -361,7 +360,7 @@ impl IoWorker {
                             self.emit_event(MqttEvent::Disconnected { reason: String::from("connection closed by peer") });
                         }
                         Some(Ok(packet)) => {
-                            log::trace!("<< {:?}", packet);
+                            tracing::trace!(?packet, "<<");
                             if let Err(error) = self.handle_incoming_packet(packet).await {
                                 self.emit_event(MqttEvent::Error(Arc::new(error)));
                                 self.connected = false;
@@ -463,23 +462,23 @@ impl IoWorker {
                 retain,
             } => {
                 let packet = self.build_publish_packet(topic, payload, retain);
-                log::trace!(">> {:?}", packet);
+                tracing::trace!(?packet, ">>");
                 stream.send(packet).await?;
             }
             MqttCommand::Subscribe { paths } => {
                 self.pending_subscription_paths = Some(paths.clone());
                 let packet = self.build_subscribe_packet(paths);
-                log::trace!(">> {:?}", packet);
+                tracing::trace!(?packet, ">>");
                 stream.send(packet).await?;
             }
             MqttCommand::Unsubscribe { paths } => {
                 let packet = self.build_unsubscribe_packet(paths);
-                log::trace!(">> {:?}", packet);
+                tracing::trace!(?packet, ">>");
                 stream.send(packet).await?;
             }
             MqttCommand::Shutdown => {
                 let packet = Packet::Disconnect;
-                log::trace!(">> {:?}", packet);
+                tracing::trace!(?packet, ">>");
                 stream.send(packet).await?;
                 self.shutting_down = true;
             }
@@ -506,9 +505,9 @@ impl IoWorker {
                 });
 
                 if publish.qos != QoS::AtMostOnce {
-                    warn!(
-                        "received QoS {:?} publish from broker; broker-side QoS handling is not fully implemented yet",
-                        publish.qos
+                    tracing::warn!(
+                        qos = ?publish.qos,
+                        "received QoS publish from broker; broker-side QoS handling is not fully implemented yet"
                     );
                 }
             }
@@ -535,7 +534,7 @@ impl IoWorker {
                 });
             }
             other => {
-                warn!("received unsupported packet from broker: {other:?}");
+                tracing::warn!(packet = ?other, "received unsupported packet from broker");
             }
         }
 

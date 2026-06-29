@@ -207,19 +207,20 @@ impl message::Message<Subscribe> for Client {
         let topic = msg.0.as_str();
 
         let Some(mqtt_client) = &self.mqtt_client else {
-            log::error!(
-                "failed to subscribe to topic {}: mqtt client not set",
-                topic
+            tracing::error!(
+                error = "mqtt client not set",
+                topic,
+                "failed to subscribe to topic"
             );
             return;
         };
 
         if self.subscriptions.insert(topic.to_owned()) {
-            if let Err(e) = mqtt_client.subscribe(vec![topic.to_owned()]) {
-                log::error!("failed to subscribe to topic {}: {}", topic, e);
+            if let Err(error) = mqtt_client.subscribe(vec![topic.to_owned()]) {
+                tracing::error!(?error, topic, "failed to subscribe to topic");
             }
 
-            log::trace!("Subscribed to '{}'", topic);
+            tracing::trace!(topic, "subscribed to topic");
         }
     }
 }
@@ -235,19 +236,20 @@ impl message::Message<Unsubscribe> for Client {
         let topic = msg.0.as_str();
 
         let Some(mqtt_client) = &self.mqtt_client else {
-            log::error!(
-                "failed to unsubscribe from topic {}: mqtt client not set",
-                topic
+            tracing::error!(
+                error = "mqtt client not set",
+                topic,
+                "failed to unsubscribe from topic"
             );
             return;
         };
 
         if self.subscriptions.remove(topic) {
-            if let Err(e) = mqtt_client.unsubscribe(vec![topic.to_owned()]) {
-                log::error!("failed to unsubscribe from topic {}: {}", topic, e);
+            if let Err(error) = mqtt_client.unsubscribe(vec![topic.to_owned()]) {
+                tracing::error!(?error, topic, "failed to unsubscribe from topic");
             }
 
-            log::trace!("Unsubscribed from '{}'", topic);
+            tracing::trace!(topic, "unsubscribed from topic");
         }
     }
 }
@@ -269,7 +271,7 @@ impl Client {
                 }
                 Err(e) => match e {
                     broadcast::error::RecvError::Lagged(count) => {
-                        log::warn!("MQTT event channel lagged, skipped {} messages", count);
+                        tracing::warn!(count, "MQTT event channel lagged, skipped messages");
                     }
                     broadcast::error::RecvError::Closed => {
                         panic!("MQTT event channel closed");
@@ -282,8 +284,8 @@ impl Client {
     async fn process_event(&mut self, event: MqttEvent) {
         match event {
             MqttEvent::Connected => {
-                if let Err(e) = self.clear_resident_state().await {
-                    log::error!("Failed to clear resident state: {}", e);
+                if let Err(error) = self.clear_resident_state().await {
+                    tracing::error!(?error, "Failed to clear resident state");
                     return;
                 }
 
@@ -296,13 +298,13 @@ impl Client {
                 self.on_online.publish(Online(true));
                 self.resume_subscriptions();
 
-                log::info!("MQTT client connected");
+                tracing::info!("MQTT client connected");
             }
 
             MqttEvent::Disconnected { reason } => {
                 self.clear_instance_online();
                 self.on_online.publish(Online(false));
-                log::info!("MQTT client disconnected: {}", reason);
+                tracing::info!(reason, "MQTT client disconnected");
             }
 
             MqttEvent::Message {
@@ -315,8 +317,8 @@ impl Client {
                 self.on_message.publish(msg);
             }
 
-            MqttEvent::Error(e) => {
-                log::error!("got mqtt error: {}", e);
+            MqttEvent::Error(error) => {
+                tracing::error!(?error, "got mqtt error");
             }
         }
     }
@@ -350,7 +352,7 @@ impl Client {
                 }
                 Ok(Err(e)) => match e {
                     broadcast::error::RecvError::Lagged(count) => {
-                        log::warn!("MQTT event channel lagged, skipped {} messages", count);
+                        tracing::warn!("MQTT event channel lagged, skipped {} messages", count);
                         continue;
                     }
                     broadcast::error::RecvError::Closed => {
@@ -359,7 +361,7 @@ impl Client {
                 },
                 Err(_) => {
                     // timeout, no message received for 1 second, consider resident state cleared
-                    log::trace!("Resident state cleared");
+                    tracing::trace!("resident state cleared");
                     return Ok(());
                 }
             }
@@ -369,15 +371,16 @@ impl Client {
     /// Publish a message to a topic, sending a publish request to the MQTT client.
     fn publish(&self, topic: Topic, payload: Bytes, retain: bool) {
         let Some(mqtt_client) = &self.mqtt_client else {
-            log::error!(
-                "failed to publish message to topic {}: mqtt client not set",
-                topic
+            tracing::error!(
+                error = "mqtt client not set",
+                %topic,
+                "failed to publish message to topic"
             );
             return;
         };
 
-        if let Err(e) = mqtt_client.publish(topic.to_string(), payload, retain) {
-            log::error!("failed to publish message to topic {}: {}", topic, e);
+        if let Err(error) = mqtt_client.publish(topic.to_string(), payload, retain) {
+            tracing::error!(?error, %topic, "failed to publish message to topic");
         }
     }
 
@@ -392,7 +395,7 @@ impl Client {
 
     fn resume_subscriptions(&self) {
         let Some(mqtt_client) = &self.mqtt_client else {
-            log::error!("mqtt client not set; cannot resume subscriptions");
+            tracing::error!("mqtt client not set; cannot resume subscriptions");
             return;
         };
 
@@ -405,12 +408,9 @@ impl Client {
                 .into_string(),
         );
 
-        if let Err(e) = mqtt_client.subscribe(subscriptions) {
-            log::error!(
-                "failed to subscribe to topics {:?}: {}",
-                self.subscriptions.iter().cloned().collect::<Vec<_>>(),
-                e
-            );
+        if let Err(error) = mqtt_client.subscribe(subscriptions) {
+            let topics = self.subscriptions.iter().cloned().collect::<Vec<_>>();
+            tracing::error!(?error, ?topics, "failed to subscribe to topics");
         }
     }
 
@@ -437,8 +437,8 @@ impl Client {
         } else {
             match encoding::read_bool(msg.payload()) {
                 Ok(value) => value,
-                Err(e) => {
-                    log::error!("Error reading online value ({:?}): {}", msg.payload(), e);
+                Err(error) => {
+                    tracing::error!(?error, payload = ?msg.payload(), "error reading online value");
                     return;
                 }
             }
@@ -470,8 +470,8 @@ struct TempSubscription<'a> {
 
 impl<'a> TempSubscription<'a> {
     pub fn new(client: &'a MqttClient, topic: String) -> Self {
-        if let Err(e) = client.subscribe(vec![topic.clone()]) {
-            log::error!("failed to subscribe to topic {}: {}", topic, e);
+        if let Err(error) = client.subscribe(vec![topic.clone()]) {
+            tracing::error!(?error, topic, "failed to subscribe to topic");
         }
 
         Self { client, topic }
@@ -480,8 +480,12 @@ impl<'a> TempSubscription<'a> {
 
 impl Drop for TempSubscription<'_> {
     fn drop(&mut self) {
-        if let Err(e) = self.client.unsubscribe(vec![self.topic.clone()]) {
-            log::error!("failed to unsubscribe from topic {}: {}", self.topic, e);
+        if let Err(error) = self.client.unsubscribe(vec![self.topic.clone()]) {
+            tracing::error!(
+                ?error,
+                topic = self.topic,
+                "failed to unsubscribe from topic"
+            );
         }
     }
 }

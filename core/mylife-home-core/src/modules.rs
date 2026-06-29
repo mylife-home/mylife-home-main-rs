@@ -1,8 +1,5 @@
-use log::debug;
 use plugin_runtime::{PluginRegistration, runtime::MylifePluginRuntime};
 use std::{collections::HashMap, sync::OnceLock};
-
-const LOG_TARGET: &str = "mylife:home:core:modules";
 
 #[derive(Debug)]
 pub struct Registry {
@@ -35,18 +32,14 @@ pub fn init() {
 
         registry.plugins.insert(id.clone(), runtime);
 
-        debug!(
-            target: LOG_TARGET,
-            "Loaded plugin '{}'",
-            id
-        );
+        tracing::debug!(plugin_id = id, "loaded plugin");
     }
 
     REGISTRY
         .set(registry)
-        .expect("Registry already initialized");
+        .expect("registry already initialized");
 }
 
 pub fn registry() -> &'static Registry {
-    REGISTRY.get().expect("Registry not initialized")
+    REGISTRY.get().expect("registry not initialized")
 }

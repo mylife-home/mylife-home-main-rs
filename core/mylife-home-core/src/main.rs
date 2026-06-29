@@ -3,7 +3,8 @@ use std::{collections::HashMap, time::Duration};
 use tokio::time::sleep;
 
 use common::{
-    instance_info, utils::{actors::SpawnedActors, config, logger},
+    instance_info,
+    utils::{actors::SpawnedActors, config, logger},
 };
 use plugin_runtime::runtime::{Config, ConfigValue};
 

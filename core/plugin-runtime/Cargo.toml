@@ -11,10 +11,10 @@ edition = "2024"
 anyhow = { workspace = true }
 common = { path = "../../common" }
 convert_case = { workspace = true }
-log = { workspace = true }
 lazy_static = { workspace = true }
 regex = { workspace = true }
 inventory = { workspace = true }
+tracing = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }

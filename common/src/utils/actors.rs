@@ -51,7 +51,7 @@ impl<Actor: kameo::Actor> ActorHandle<Actor> {
         Message: Send + 'static,
     {
         if let Err(e) = self.actor_ref.tell(msg).try_send() {
-            log::error!("Could not send message to actor '{}': {}", self.name, e);
+            tracing::error!("Could not send message to actor '{}': {}", self.name, e);
         }
     }
 
@@ -170,13 +170,13 @@ where
 
     async fn terminate(&self) {
         self.0.stop_gracefully().await.unwrap_or_else(|e| {
-            log::error!("could not stop actor '{}': {}", "bus.client", e);
+            tracing::error!("could not stop actor '{}': {}", "bus.client", e);
         });
 
         self.0
             .wait_for_shutdown_with_result(|res| {
                 if let Err(e) = res {
-                    log::error!("could not stop actor '{}': {}", "bus.client", e);
+                    tracing::error!("could not stop actor '{}': {}", "bus.client", e);
                 }
             })
             .await;

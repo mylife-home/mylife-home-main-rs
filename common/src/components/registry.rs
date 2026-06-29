@@ -162,7 +162,11 @@ impl Registry {
 
         instance_data.add_plugin(plugin.clone())?;
 
-        log::debug!("plugin '{}:{}' added", instance_name, plugin.id());
+        tracing::debug!(
+            instance = %instance_name,
+            plugin_id = plugin.id(),
+            "plugin added"
+        );
 
         self.on_update
             .publish(RegistryUpdated::PluginAdded(PluginAdded {
@@ -190,7 +194,7 @@ impl Registry {
             self.instances.remove(&instance_name);
         }
 
-        log::debug!("plugin '{}:{}' removed", instance_name, plugin_id);
+        tracing::debug!(instance = %instance_name, plugin_id, "plugin removed");
 
         self.on_update
             .publish(RegistryUpdated::PluginRemoved(PluginRemoved {
@@ -232,10 +236,10 @@ impl Registry {
             ),
         );
 
-        log::debug!(
-            "component '{}' registered for instance '{}'",
-            component_id,
-            instance_name
+        tracing::debug!(
+            instance = %instance_name,
+            %component_id,
+            "component registered"
         );
 
         self.on_update
@@ -271,10 +275,10 @@ impl Registry {
             self.instances.remove(&instance_name);
         }
 
-        log::debug!(
-            "component '{}' unregistered for instance '{}'",
-            component_id,
-            instance_name
+        tracing::debug!(
+            instance = %instance_name,
+            %component_id,
+            "component unregistered"
         );
 
         self.on_update
@@ -291,7 +295,7 @@ impl Registry {
         let component_id = Arc::new(component_id);
 
         let Some(component_data) = self.components.get_mut(&component_id) else {
-            log::error!("component '{}' not found", component_id);
+            tracing::error!(%component_id, "component not found");
             return;
         };
 
@@ -300,7 +304,7 @@ impl Registry {
 
     fn handle_state_change(&mut self, component_id: Arc<String>, state: &str, value: Value) {
         let Some(component_data) = self.components.get_mut(&component_id) else {
-            log::error!("component '{}' not found", component_id);
+            tracing::error!(%component_id, "component not found");
             return;
         };
 
@@ -785,7 +789,7 @@ impl ComponentData {
 
     pub fn execute_action(&mut self, name: &str, value: Value) {
         let Some(member) = self.plugin.members().get(name) else {
-            log::error!(
+            tracing::error!(
                 "action '{}' does not exist on component '{}'",
                 name,
                 self.component_id
@@ -794,7 +798,7 @@ impl ComponentData {
         };
 
         if member.member_type() != MemberType::Action {
-            log::error!(
+            tracing::error!(
                 "action '{}' does not exist on component '{}'",
                 name,
                 self.component_id
@@ -803,7 +807,7 @@ impl ComponentData {
         }
 
         if !value.is_valid(member.value_type()) {
-            log::error!(
+            tracing::error!(
                 "action '{}' on component '{}' is of type '{}', value '{:?}' is not compatible",
                 name,
                 self.component_id,
@@ -813,7 +817,7 @@ impl ComponentData {
             return;
         }
 
-        log::trace!(
+        tracing::trace!(
             "component action: {}:{} -> {:?}",
             self.component_id,
             name,
@@ -829,7 +833,7 @@ impl ComponentData {
             })
             .try_send()
         {
-            log::error!(
+            tracing::error!(
                 "could not send action to actor component '{}': {}",
                 self.component_id,
                 e
@@ -839,7 +843,7 @@ impl ComponentData {
 
     pub fn handle_state_change(&mut self, name: &str, value: Value) {
         let Some(member) = self.plugin.members().get(name) else {
-            log::error!(
+            tracing::error!(
                 "state '{}' does not exist on component '{}'",
                 name,
                 self.component_id
@@ -848,7 +852,7 @@ impl ComponentData {
         };
 
         if member.member_type() != MemberType::State {
-            log::error!(
+            tracing::error!(
                 "state '{}' does not exist on component '{}'",
                 name,
                 self.component_id
@@ -857,7 +861,7 @@ impl ComponentData {
         }
 
         if !value.is_valid(member.value_type()) {
-            log::error!(
+            tracing::error!(
                 "state '{}' on component '{}' is of type '{}', value '{:?}' is not compatible",
                 name,
                 self.component_id,
@@ -872,10 +876,10 @@ impl ComponentData {
             .get_mut(name)
             .expect("data inconsistency: state missing") = Some(value.clone());
 
-        if log::log_enabled!(log::Level::Trace) {
+        if tracing::enabled!(tracing::Level::TRACE) {
             let state_complete = self.state.iter().all(|(_, v)| v.is_some());
 
-            log::trace!(
+            tracing::trace!(
                 "component state changed: {}:{} -> {:?} (complete={})",
                 self.component_id,
                 name,

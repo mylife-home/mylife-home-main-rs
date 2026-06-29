@@ -7,11 +7,11 @@ edition = "2024"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
+chrono = { workspace = true }
 futures = { workspace = true }
 kameo = { workspace = true }
 kameo_actors = { workspace = true }
 lazy_static = { workspace = true }
-log = { workspace = true }
 mqttbytes = { workspace = true }
 pretty_env_logger = { workspace = true }
 regex = { workspace = true }
@@ -23,3 +23,5 @@ tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-th
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["codec"] }
 toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }

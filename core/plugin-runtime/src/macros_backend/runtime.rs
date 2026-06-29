@@ -1,5 +1,4 @@
 use anyhow::Context;
-use log::trace;
 use std::{collections::HashMap, fmt, sync::Arc};
 
 use crate::{
@@ -149,7 +148,7 @@ impl<PluginType: MylifePlugin> ComponentImpl<PluginType> {
             (state.register)(
                 &mut self.component,
                 Box::new(move |value: Value| {
-                    trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{id}] state '{name}' changed to {value:?}");
+                    tracing::trace!(component_id = id, state = name, ?value, "state changed");
                     state_change(&name, &value);
                 }),
             );
@@ -167,12 +166,12 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
     }
 
     fn configure(&mut self, config: &Config) -> anyhow::Result<()> {
-        trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{}] configure with {config:?}", self.id);
+        tracing::trace!(component_id = self.id, ?config, "configure");
 
         for (name, setter) in self.access.configs.iter() {
             let value = config
                 .get(name)
-                .context(format!("Config '{name}' not found"))?
+                .context(format!("config '{name}' not found"))?
                 .clone();
 
             setter(&mut self.component, value)?;
@@ -201,17 +200,22 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
             .access
             .states
             .get(name)
-            .unwrap_or_else(|| panic!("State '{}' not found on component '{}'", name, self.id));
+            .unwrap_or_else(|| panic!("state '{}' not found on component '{}'", name, self.id));
         (state.getter)(&self.component)
     }
 
-    fn execute_action(&mut self, name: &str, action: Value) -> anyhow::Result<()> {
+    fn execute_action(&mut self, name: &str, value: Value) -> anyhow::Result<()> {
         let handler =
             self.access.actions.get(name).unwrap_or_else(|| {
-                panic!("Action '{}' not found on component '{}'", name, self.id)
+                panic!("action '{}' not found on component '{}'", name, self.id)
             });
 
-        trace!(target: "mylife:home:core:plugin-runtime:macros-backend:runtime", "[{}] execute action '{name}' with {action:?}", self.id);
-        handler(&mut self.component, action)
+        tracing::trace!(
+            component_id = self.id,
+            action = name,
+            ?value,
+            "execute action"
+        );
+        handler(&mut self.component, value)
     }
 }

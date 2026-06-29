@@ -185,11 +185,11 @@ impl message::Message<LocalUpdate> for Metadata {
         if let Some(value) = msg.value {
             self.metadata.insert(msg.path.clone(), value.clone());
             self.publish(&msg.path, Some(value));
-            log::trace!("set '{}'", msg.path);
+            tracing::trace!(path = msg.path, "set");
         } else {
             if self.metadata.remove(&msg.path).is_some() {
                 self.publish(&msg.path, None);
-                log::trace!("clear '{}'", msg.path);
+                tracing::trace!(path = msg.path, "clear");
             }
         }
     }
@@ -253,16 +253,16 @@ impl Remote {
         }
 
         if topic.remaining.len() == 0 {
-            log::warn!("Malformed metadata topic: '{}', ignored", msg.topic());
+            tracing::warn!(topic = msg.topic(), "malformed metadata topic, ignored");
             return;
         };
 
         let path = topic.remaining;
 
         let Some(paths) = self.metadata.get_mut(topic.instance) else {
-            log::warn!(
-                "Got metadata update for non-existant instance: '{}', ignored",
-                msg.topic()
+            tracing::warn!(
+                instance = topic.instance,
+                "got metadata update for non-existant instance, ignored"
             );
             return;
         };
@@ -287,12 +287,13 @@ impl Remote {
             value: value.map(|value| Arc::new(value.clone())),
         });
 
-        log::trace!(
-            "{} metadata {}:{}",
-            if value.is_some() { "set" } else { "clear" },
-            instance,
-            path
-        );
+        if tracing::enabled!(tracing::Level::TRACE) {
+            if value.is_some() {
+                tracing::trace!(instance, path, "set metadata");
+            } else {
+                tracing::trace!(instance, path, "clear metadata");
+            }
+        }
     }
 }
 
