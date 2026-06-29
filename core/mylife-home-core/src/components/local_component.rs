@@ -41,8 +41,12 @@ impl LocalComponentHandle {
 
     /// Terminate local component
     pub async fn terminate(&self) {
-        if let Err(e) = self.actor_ref.stop_gracefully().await {
-            tracing::error!("cannot stop component actor '{}': {}", self.id, e);
+        if let Err(error) = self.actor_ref.stop_gracefully().await {
+            tracing::error!(
+                ?error,
+                component_id = self.id,
+                "cannot stop component actor"
+            );
             return;
         }
 
@@ -51,9 +55,13 @@ impl LocalComponentHandle {
                 HookError::Panicked(p) => {
                     panic!("component '{}' actor panicked at shutdown: {}", self.id, p);
                 }
-                HookError::Error(e) => {
+                HookError::Error(error) => {
                     // cannot reuse Arc<anyhow::Error>
-                    tracing::error!("component '{}' failed to shutdown: {}", self.id, e);
+                    tracing::error!(
+                        ?error,
+                        component_id = self.id,
+                        "component failed to shutdown"
+                    );
                 }
             }
         }
@@ -114,12 +122,20 @@ impl Actor for LocalComponent {
 
             move || {
                 let Some(ref_self) = weak_ref_self.upgrade() else {
-                    tracing::error!("cannot wake component '{}': cannot get actor ref", id);
+                    tracing::error!(
+                        error = "cannot get actor ref",
+                        component_id = id,
+                        "cannot wake component"
+                    );
                     return;
                 };
 
-                if let Err(e) = ref_self.tell(ComponentWakeMessage).try_send() {
-                    tracing::error!("cannot wake component '{}': cannot send message: {}", id, e);
+                if let Err(error) = ref_self.tell(ComponentWakeMessage).try_send() {
+                    tracing::error!(
+                        ?error,
+                        component_id = id,
+                        "cannot wake component: cannot send message"
+                    );
                 }
             }
         };
@@ -135,11 +151,11 @@ impl Actor for LocalComponent {
         let mut component_impl = plugin.create(&id, Box::new(waker), Box::new(state_change));
 
         if let Err(e) = component_impl.configure(&config) {
-            if let Err(e) = registry.component_remove(id.clone()).await {
+            if let Err(error) = registry.component_remove(id.clone()).await {
                 tracing::error!(
-                    "could not remove component '{}' that failed during configure: {}",
-                    id,
-                    e
+                    ?error,
+                    component_id = id,
+                    "can not remove component that failed during configure",
                 );
             }
 
@@ -147,11 +163,11 @@ impl Actor for LocalComponent {
         }
 
         if let Err(e) = component_impl.init() {
-            if let Err(e) = registry.component_remove(id.clone()).await {
+            if let Err(error) = registry.component_remove(id.clone()).await {
                 tracing::error!(
-                    "could not remove component '{}' that failed during init: {}",
-                    id,
-                    e
+                    ?error,
+                    component_id = id,
+                    "can not remove component that failed during init",
                 );
             }
 
@@ -204,16 +220,16 @@ impl message::Message<ComponentExecuteAction> for LocalComponent {
         msg: ComponentExecuteAction,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        if let Err(e) = self
+        if let Err(error) = self
             .component_impl
             .execute_action(msg.name(), msg.value().clone())
         {
             tracing::error!(
-                "failed to execute action '{}' on component '{}' with value '{:?}': {}",
-                msg.name(),
-                self.id,
-                msg.value(),
-                e
+                ?error,
+                component = self.id,
+                action = msg.name(),
+                value = ?msg.value(),
+                "failed to execute action",
             );
         }
     }
