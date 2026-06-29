@@ -3,7 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use tokio::time::sleep;
 
 use common::{
-    instance_info, utils::{actors::SpawnedActors, config},
+    instance_info, utils::{actors::SpawnedActors, config, logger},
 };
 use plugin_runtime::runtime::{Config, ConfigValue};
 
@@ -19,7 +19,7 @@ mod modules_include {
 
 #[tokio::main]
 async fn main() {
-    pretty_env_logger::init();
+    logger::init(true);
     modules::init();
     config::init("core.toml");
 
