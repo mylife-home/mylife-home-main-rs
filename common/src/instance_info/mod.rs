@@ -148,8 +148,8 @@ impl InstanceInfoPublisher {
             wifi: None,
         };
 
-        if let Err(e) = self.metadata.set("instance-info", &info) {
-            tracing::error!("cannot set instance info: {}", e);
+        if let Err(error) = self.metadata.set("instance-info", &info) {
+            tracing::error!(?error, "cannot set instance info");
         }
     }
 
@@ -163,8 +163,8 @@ impl InstanceInfoPublisher {
                 hardware.insert("main".to_owned(), env::consts::ARCH.to_owned());
                 return hardware;
             }
-            Err(e) => {
-                tracing::debug!("could not read /proc/cpuinfo: {}", e);
+            Err(error) => {
+                tracing::debug!(?error, "could not read /proc/cpuinfo");
                 hardware.insert("main".to_owned(), env::consts::ARCH.to_owned());
                 return hardware;
             }
@@ -190,8 +190,8 @@ impl InstanceInfoPublisher {
     fn os_version() -> Option<String> {
         let content = match fs::read_to_string("/etc/os-release") {
             Ok(content) => content,
-            Err(e) => {
-                tracing::error!("could not read /etc/os-release: {}", e);
+            Err(error) => {
+                tracing::error!(?error, "could not read /etc/os-release");
                 return None;
             }
         };
@@ -213,8 +213,8 @@ impl InstanceInfoPublisher {
     fn kernel_version() -> Option<String> {
         match fs::read_to_string("/proc/sys/kernel/osrelease") {
             Ok(content) => Some(content.trim_end().to_owned()),
-            Err(e) => {
-                tracing::error!("could not read /proc/sys/kernel/osrelease: {}", e);
+            Err(error) => {
+                tracing::error!(?error, "could not read /proc/sys/kernel/osrelease");
                 None
             }
         }

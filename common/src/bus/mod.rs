@@ -6,6 +6,7 @@ use crate::utils::{actors::SpawnedActors, config};
 
 pub mod client;
 pub mod encoding;
+// pub mod logger;
 pub mod metadata;
 pub mod mqtt;
 

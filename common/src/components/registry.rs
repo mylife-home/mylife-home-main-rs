@@ -789,42 +789,23 @@ impl ComponentData {
 
     pub fn execute_action(&mut self, name: &str, value: Value) {
         let Some(member) = self.plugin.members().get(name) else {
-            tracing::error!(
-                "action '{}' does not exist on component '{}'",
-                name,
-                self.component_id
-            );
+            tracing::error!(component_id = %self.component_id, action = name, "action does not exist on component");
             return;
         };
 
         if member.member_type() != MemberType::Action {
-            tracing::error!(
-                "action '{}' does not exist on component '{}'",
-                name,
-                self.component_id
-            );
+            tracing::error!(component_id = %self.component_id, action = name, "action does not exist on component");
             return;
         }
 
         if !value.is_valid(member.value_type()) {
-            tracing::error!(
-                "action '{}' on component '{}' is of type '{}', value '{:?}' is not compatible",
-                name,
-                self.component_id,
-                member.value_type(),
-                value
-            );
+            tracing::error!(component_id = %self.component_id, action = name, r#type = %member.value_type(), ?value, "action does not accept value");
             return;
         }
 
-        tracing::trace!(
-            "component action: {}:{} -> {:?}",
-            self.component_id,
-            name,
-            value
-        );
+        tracing::trace!(component_id = %self.component_id, action = name, ?value, "execute component action");
 
-        if let Err(e) = self
+        if let Err(error) = self
             .on_action
             .tell(ComponentExecuteAction {
                 component_id: self.component_id.clone(),
@@ -833,41 +814,23 @@ impl ComponentData {
             })
             .try_send()
         {
-            tracing::error!(
-                "could not send action to actor component '{}': {}",
-                self.component_id,
-                e
-            );
+            tracing::error!(?error, component_id = %self.component_id, "could not send action to actor component");
         }
     }
 
     pub fn handle_state_change(&mut self, name: &str, value: Value) {
         let Some(member) = self.plugin.members().get(name) else {
-            tracing::error!(
-                "state '{}' does not exist on component '{}'",
-                name,
-                self.component_id
-            );
+            tracing::error!(component_id = %self.component_id, state = name, "state does not exist on component");
             return;
         };
 
         if member.member_type() != MemberType::State {
-            tracing::error!(
-                "state '{}' does not exist on component '{}'",
-                name,
-                self.component_id
-            );
+            tracing::error!(component_id = %self.component_id, state = name, "state does not exist on component");
             return;
         }
 
         if !value.is_valid(member.value_type()) {
-            tracing::error!(
-                "state '{}' on component '{}' is of type '{}', value '{:?}' is not compatible",
-                name,
-                self.component_id,
-                member.value_type(),
-                value
-            );
+            tracing::error!(component_id = %self.component_id, state = name, r#type = %member.value_type(), ?value, "state does not accept value");
             return;
         }
 
@@ -879,13 +842,7 @@ impl ComponentData {
         if tracing::enabled!(tracing::Level::TRACE) {
             let state_complete = self.state.iter().all(|(_, v)| v.is_some());
 
-            tracing::trace!(
-                "component state changed: {}:{} -> {:?} (complete={})",
-                self.component_id,
-                name,
-                value,
-                state_complete,
-            );
+            tracing::trace!(component_id = %self.component_id, state = name, ?value, state_complete, "component state changed");
         }
 
         self.on_update

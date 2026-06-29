@@ -153,23 +153,24 @@ impl message::Message<client::Message> for Remote {
         let member_name = parts[1];
 
         if topic.instance == *self.instance_name {
-            if let Err(e) = self.execute_local_action(component_id, member_name, msg.payload()) {
+            if let Err(error) = self.execute_local_action(component_id, member_name, msg.payload())
+            {
                 tracing::error!(
-                    "Cannot execute local component '{}' action '{}': {}",
+                    ?error,
                     component_id,
-                    member_name,
-                    e
+                    action = member_name,
+                    "cannot execute local component action"
                 );
             }
         } else {
-            if let Err(e) =
+            if let Err(error) =
                 self.handle_state_change(topic.instance, component_id, member_name, msg.payload())
             {
                 tracing::error!(
-                    "Cannot update component '{}' state '{}': {}",
+                    ?error,
                     component_id,
-                    member_name,
-                    e
+                    state = member_name,
+                    "cannot update local component state"
                 );
             }
         }
@@ -190,11 +191,11 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                     let plugin = plugin_data.plugin();
 
                     let path = format!("plugins/{}", plugin.id());
-                    if let Err(e) = self.metadata.set(&path, plugin.deref()) {
+                    if let Err(error) = self.metadata.set(&path, plugin.deref()) {
                         tracing::error!(
-                            "could not set metadata for plugin '{}': {}",
-                            plugin.id(),
-                            e
+                            ?error,
+                            plugin_id = plugin.id(),
+                            "could not set metadata for plugin"
                         );
                     }
                 }
@@ -220,8 +221,12 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                         plugin: plugin.id().to_owned(),
                     };
 
-                    if let Err(e) = self.metadata.set(&path, &comp_meta) {
-                        tracing::error!("could not set metadata for component '{}': {}", id, e);
+                    if let Err(error) = self.metadata.set(&path, &comp_meta) {
+                        tracing::error!(
+                            ?error,
+                            component_id = id,
+                            "could not set metadata for component"
+                        );
                     }
 
                     self.local_components
@@ -253,20 +258,20 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                 if state_data.instance().is_none() {
                     let Some(member) = state_data.plugin().members().get(state_data.state()) else {
                         tracing::error!(
-                            "got state change for non-existant state '{}' on local component '{}' with plugin '{}'",
-                            state_data.state(),
-                            state_data.component_id(),
-                            state_data.plugin().id()
+                            plugin_id = state_data.plugin().id(),
+                            component_id = state_data.component_id(),
+                            state = state_data.state(),
+                            "got state change for non-existant state on local component",
                         );
                         return;
                     };
 
                     if member.member_type() != MemberType::State {
                         tracing::error!(
-                            "got state change for invalid state '{}' on local component '{}' with plugin '{}'",
-                            state_data.state(),
-                            state_data.component_id(),
-                            state_data.plugin().id()
+                            plugin_id = state_data.plugin().id(),
+                            component_id = state_data.component_id(),
+                            state = state_data.state(),
+                            "got state change for invalid state on local component",
                         );
                         return;
                     }
@@ -280,8 +285,8 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                     let Some(component) = self.local_components.get_mut(state_data.component_id())
                     else {
                         tracing::error!(
-                            "local component '{}' state does not exist",
-                            state_data.component_id()
+                            component_id = state_data.component_id(),
+                            "local component state does not exist",
                         );
                         return;
                     };
@@ -323,12 +328,12 @@ impl message::Message<registry::ComponentExecuteAction> for Remote {
         msg: registry::ComponentExecuteAction,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        if let Err(e) = self.execute_action(msg.component_id(), msg.name(), msg.value()) {
+        if let Err(error) = self.execute_action(msg.component_id(), msg.name(), msg.value()) {
             tracing::error!(
-                "Cannot execute component '{}' action '{}': {}",
-                msg.component_id(),
-                msg.name(),
-                e
+                ?error,
+                component_id = msg.component_id(),
+                action = msg.name(),
+                "cannot execute component action",
             );
         }
     }
@@ -338,21 +343,21 @@ impl Remote {
     async fn add_remote_plugin(&mut self, id: &str, msg: &RemoteUpdate) {
         let plugin = match msg.read_value::<PluginMetadata>() {
             Ok(plugin) => Arc::new(plugin),
-            Err(e) => {
+            Err(error) => {
                 tracing::error!(
-                    "Cannot read plugin metadata: '{}:{}': {}",
-                    msg.instance(),
-                    id,
-                    e
+                    ?error,
+                    instance = msg.instance(),
+                    plugin_id = id,
+                    "Cannot read plugin metadata"
                 );
                 return;
             }
         };
         if plugin.id() != id {
             tracing::error!(
-                "plugin id mismatch: (metadata key = '{}', metadata value = '{}'",
-                id,
-                plugin.id()
+                metadata_key = id,
+                metadata_value = plugin.id(),
+                "plugin id mismatch",
             );
             return;
         }
@@ -362,16 +367,16 @@ impl Remote {
             id: id.to_owned(),
         };
 
-        if let Err(e) = self
+        if let Err(error) = self
             .registry
             .plugin_add(Some(key.instance.clone()), plugin.clone())
             .await
         {
             tracing::error!(
-                "cannot add plugin to registry '{}:{}': {}",
-                msg.instance(),
-                id,
-                e
+                ?error,
+                instance = msg.instance(),
+                plugin_id = id,
+                "cannot add plugin to registry"
             );
             return;
         }
@@ -394,7 +399,12 @@ impl Remote {
             .collect();
 
         for pending in pendings {
-            tracing::trace!("create pending component {:?}", pending);
+            tracing::trace!(
+                instance = pending.instance,
+                component_id = pending.id,
+                plugin_id = pending.plugin_id,
+                "create pending component"
+            );
 
             self.do_add_component(pending.instance, pending.plugin_id, pending.id)
                 .await;
@@ -408,21 +418,21 @@ impl Remote {
     async fn add_remote_component(&mut self, id: &str, msg: &RemoteUpdate) {
         let component = match msg.read_value::<ComponentMetadata>() {
             Ok(component) => component,
-            Err(e) => {
+            Err(error) => {
                 tracing::error!(
-                    "Cannot read component metadata: '{}:{}': {}",
-                    msg.instance(),
-                    id,
-                    e
+                    ?error,
+                    instance = msg.instance(),
+                    component_id = id,
+                    "Cannot read component metadata",
                 );
                 return;
             }
         };
         if component.id != id {
             tracing::error!(
-                "component id mismatch: (metadata key = '{}', metadata value = '{}'",
-                id,
-                component.id
+                metadata_key = id,
+                metadata_value = component.id,
+                "component id mismatch",
             );
             return;
         }
@@ -439,7 +449,12 @@ impl Remote {
                 plugin_id: plugin_key.id,
             };
 
-            tracing::trace!("add pending component: {:?}", pending);
+            tracing::trace!(
+                instance = pending.instance,
+                component_id = pending.id,
+                plugin_id = pending.plugin_id,
+                "add pending component"
+            );
             self.remote_pending_components.push(pending);
             return;
         };
@@ -449,20 +464,20 @@ impl Remote {
     }
 
     async fn remove_remote_component(&mut self, id: &str, msg: &RemoteUpdate) {
-        if let Err(e) = self.registry.component_remove(id.to_owned()).await {
+        if let Err(error) = self.registry.component_remove(id.to_owned()).await {
             tracing::error!(
-                "cannot remove component from registry '{}:{}': {}",
-                msg.instance(),
-                id,
-                e
+                ?error,
+                instance = msg.instance(),
+                component_id = id,
+                "cannot remove component from registry"
             );
             return;
         }
 
         let Some(component) = self.remote_components.remove(id) else {
             tracing::error!(
-                "data inconsistency: registry remove component but not found locally: '{}'",
-                id
+                component_id = id,
+                "data inconsistency: registry remove component but not found locally"
             );
             return;
         };
@@ -471,10 +486,10 @@ impl Remote {
             .unsubscribe(self.component_subscription(Some(&component.instance), id));
 
         tracing::trace!(
-            "unref plugin '{}:{}' from component '{}'",
-            &component.instance,
-            &component.plugin_id,
-            id
+            instance = component.instance,
+            component_id = id,
+            plugin_id = component.plugin_id,
+            "unref plugin"
         );
         self.unref_plugin(&component.instance, &component.plugin_id)
             .await;
@@ -504,12 +519,12 @@ impl Remote {
             .await
         {
             Ok(handle) => handle,
-            Err(e) => {
+            Err(error) => {
                 tracing::error!(
-                    "cannot add component to registry '{}:{}': {}",
+                    ?error,
                     instance,
                     component_id,
-                    e
+                    "cannot add component to registry",
                 );
                 return;
             }
@@ -522,19 +537,18 @@ impl Remote {
             plugin.usage += 1;
 
             tracing::trace!(
-                "ref plugin '{}:{}' from component '{}:{}' -> {}",
                 instance,
                 plugin_id,
-                instance,
                 component_id,
-                plugin.usage
+                usage = plugin.usage,
+                "ref plugin",
             );
         } else {
             tracing::error!(
-                "plugin '{}' not found for component '{}:{}'",
-                plugin_id,
                 instance,
-                component_id
+                plugin_id,
+                component_id,
+                "plugin not found for component",
             );
         }
 
@@ -584,36 +598,44 @@ impl Remote {
 
         let Some(data) = self.remote_plugins.get_mut(&key) else {
             tracing::error!(
-                "cannot remove non existant plugin '{}:{}'",
-                key.instance,
-                key.id,
+                instance = key.instance,
+                plugin_id = key.id,
+                "cannot remove non existant plugin",
             );
             return;
         };
 
         if data.usage == 0 {
-            tracing::error!("plugin '{}:{}' usage is 0", key.instance, key.id);
+            tracing::error!(
+                instance = key.instance,
+                plugin_id = key.id,
+                "plugin usage is 0"
+            );
             return;
         }
 
         data.usage -= 1;
 
         let Some(data) = self.remote_plugins.get_mut(&key) else {
-            tracing::error!("plugin not found '{}:{}'", key.instance, key.id);
+            tracing::error!(
+                instance = key.instance,
+                plugin_id = key.id,
+                "plugin not found"
+            );
             return;
         };
 
         if data.usage == 0 {
-            if let Err(e) = self
+            if let Err(error) = self
                 .registry
                 .plugin_remove(Some(key.instance.clone()), key.id.clone())
                 .await
             {
                 tracing::error!(
-                    "cannot remove plugin from registry '{}:{}': {}",
+                    ?error,
                     instance,
-                    id,
-                    e
+                    plugin_id = id,
+                    "cannot remove plugin from registry",
                 );
                 return;
             }

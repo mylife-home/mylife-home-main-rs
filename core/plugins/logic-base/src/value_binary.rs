@@ -3,12 +3,8 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
-use tracing::debug;
-
 use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{MylifePluginHooks, State, WakeHandle};
-
-const LOG_TARGET: &str = "mylife:home:core:plugins:logic-base:value-binary";
 
 #[derive(MylifePlugin, Debug)]
 #[mylife_plugin(description = "step relay", usage = "logic")] // name=
@@ -38,7 +34,11 @@ impl MylifePluginHooks for ValueBinary {
     fn init(&mut self) -> anyhow::Result<()> {
         self.state.set(self.config);
 
-        debug!(target: LOG_TARGET, "[{}] initial state = {}", self.id.as_str(), self.state.get());
+        tracing::debug!(
+            component_id = self.id,
+            state = self.state.get(),
+            "initial state"
+        );
 
         Ok(())
     }

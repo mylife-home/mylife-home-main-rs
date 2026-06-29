@@ -1,4 +1,4 @@
-use std::{any::type_name, borrow::Cow, fmt, marker::PhantomData};
+use std::{any::type_name, borrow::Cow, fmt};
 
 use anyhow::Context;
 use async_trait::async_trait;
@@ -50,8 +50,8 @@ impl<Actor: kameo::Actor> ActorHandle<Actor> {
         Actor: message::Message<Message>,
         Message: Send + 'static,
     {
-        if let Err(e) = self.actor_ref.tell(msg).try_send() {
-            tracing::error!("Could not send message to actor '{}': {}", self.name, e);
+        if let Err(error) = self.actor_ref.tell(msg).try_send() {
+            tracing::error!(?error, name = %self.name, "could not send message to actor");
         }
     }
 
@@ -169,14 +169,14 @@ where
     }
 
     async fn terminate(&self) {
-        self.0.stop_gracefully().await.unwrap_or_else(|e| {
-            tracing::error!("could not stop actor '{}': {}", "bus.client", e);
+        self.0.stop_gracefully().await.unwrap_or_else(|error| {
+            tracing::error!(?error, name = type_name::<TActor>(), "could not stop actor");
         });
 
         self.0
             .wait_for_shutdown_with_result(|res| {
-                if let Err(e) = res {
-                    tracing::error!("could not stop actor '{}': {}", "bus.client", e);
+                if let Err(error) = res {
+                    tracing::error!(?error, name = type_name::<TActor>(), "could not stop actor");
                 }
             })
             .await;
