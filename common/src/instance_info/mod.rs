@@ -6,8 +6,10 @@ use std::{
 };
 
 use crate::{
-    bus::metadata::MetadataHandle, utils::{
-        self, actors::{ActorHandle, SchedulerHandle, SpawnedActor, SpawnedActors},
+    bus::metadata::MetadataHandle,
+    utils::{
+        self,
+        actors::{ActorHandle, SchedulerHandle, SpawnedActor, SpawnedActors},
     },
 };
 
@@ -79,7 +81,9 @@ impl Actor for InstanceInfoPublisher {
         let metadata = MetadataHandle::new()?;
         let scheduler = SchedulerHandle::new()?;
 
-        scheduler.set_interval(actor_ref.downgrade(), Duration::from_secs(60), Refresh).await?;
+        scheduler
+            .set_interval(actor_ref.downgrade(), Duration::from_secs(60), Refresh)
+            .await?;
 
         let mut versions = HashMap::new();
 
