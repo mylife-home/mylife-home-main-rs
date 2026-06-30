@@ -1,16 +1,15 @@
-use std::{alloc::System, collections::HashMap, process, sync::Arc, time::SystemTime};
+use std::{process, sync::Arc, time::SystemTime};
 
 use bytes::Bytes;
 use kameo::{message, prelude::*};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 
 use crate::{
-    bus::{
-        client::{self, ClientHandle, Subscription, TopicBuilder},
-        encoding,
-    },
-    utils::actors::{
-        ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub,
+    bus::client::{self, ClientHandle, Subscription, TopicBuilder},
+    utils::{
+        self,
+        actors::{ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, spawn_pubsub},
+        logger::{LogEvent, LogSink, LogValue, LoggerHandle},
     },
 };
 
@@ -42,15 +41,18 @@ pub async fn init_actor(actors: &mut SpawnedActors, config: LoggerConfig) {
 #[derive(Debug)]
 struct Logger {
     client: ClientHandle,
-    log_publisher: PublisherHandle<LogRecord>,
-    instance_name: Arc<String>,
-    pid: u32,
-    listen_remote: bool,
+    publisher: LogPublisher,
+    remote: Option<Remote>,
+    logger: Option<LoggerHandle>,
+    online: bool,
+    offline_queue: Vec<SysLogRecord>,
 }
 
 impl Logger {
-    fn build_subscription() -> Subscription {
-        TopicBuilder::any_instance(DOMAIN).build()
+    fn flush(&mut self) {
+        for record in self.offline_queue.drain(..) {
+            self.publisher.publish(record);
+        }
     }
 }
 
@@ -59,18 +61,25 @@ impl Actor for Logger {
     type Error = anyhow::Error;
 
     async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
-        let _self = Self {
-            client: ClientHandle::new()?,
-            log_publisher: PublisherHandle::from_name(REMOTE_RECORDS_PUBSUB_NAME)?,
-            instance_name: config.instance_name,
-            pid: process::id(),
-            listen_remote: config.listen_remote,
+        let sys_logger = SysLogger(ActorHandle::from_ref(actor_ref.clone(), LOGGER_NAME));
+        let logger = utils::logger::add_logger(Box::new(sys_logger));
+
+        let remote = if config.listen_remote {
+            Some(Remote::new(actor_ref.clone())?)
+        } else {
+            None
         };
 
-        if _self.listen_remote {
-            _self.client.subscribe(Self::build_subscription());
-            _self.client.on_message().subscribe(actor_ref);
-        }
+        let _self = Self {
+            client: ClientHandle::new()?,
+            publisher: LogPublisher::new(config.instance_name)?,
+            remote,
+            logger: Some(logger),
+            online: false,
+            offline_queue: Vec::new(),
+        };
+
+        _self.client.on_online().subscribe(actor_ref);
 
         Ok(_self)
     }
@@ -80,11 +89,31 @@ impl Actor for Logger {
         _actor_ref: WeakActorRef<Self>,
         _reason: ActorStopReason,
     ) -> Result<(), Self::Error> {
-        if self.listen_remote {
-            self.client.unsubscribe(Self::build_subscription());
-        }
+        // Drop the logger
+        self.logger = None;
+
+        // Drop the remote
+        self.remote = None;
+
+        self.offline_queue.clear();
 
         Ok(())
+    }
+}
+
+impl message::Message<client::Online> for Logger {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: client::Online,
+        _ctx: &mut message::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.online = msg.is_online();
+
+        if self.online {
+            self.flush();
+        }
     }
 }
 
@@ -94,8 +123,141 @@ impl message::Message<client::Message> for Logger {
     async fn handle(
         &mut self,
         msg: client::Message,
-        _ctx: &mut Context<Self, Self::Reply>,
+        _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let Some(remote) = &self.remote else {
+            tracing::error!("got message without remote");
+            return;
+        };
+
+        remote.on_message(msg);
+    }
+}
+
+impl message::Message<SysLogRecord> for Logger {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        record: SysLogRecord,
+        _ctx: &mut message::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        if self.online {
+            self.publisher.publish(record);
+        } else {
+            // Note: we may miss some logs when we become offline (the mqtt send queue will be discarded)
+            self.offline_queue.push(record);
+        }
+    }
+}
+
+#[derive(Debug)]
+struct LogPublisher {
+    client: ClientHandle,
+    instance_name: Arc<String>,
+    pid: u32,
+}
+
+impl LogPublisher {
+    pub fn new(instance_name: Arc<String>) -> anyhow::Result<Self> {
+        Ok(Self {
+            client: ClientHandle::new()?,
+            instance_name,
+            pid: process::id(),
+        })
+    }
+
+    pub fn publish(&self, record: SysLogRecord) {
+        let mut fields = record.event.fields;
+
+        let mut message = if let Some(LogValue::Str(message)) = fields
+            .extract_if(.., |(key, _value)| key == "message")
+            .next()
+            .map(|(_key, value)| value)
+        {
+            message
+        } else {
+            "??".to_owned()
+        };
+
+        let error = if let Some(LogValue::Str(error)) = fields
+            .extract_if(.., |(key, _value)| key == "error")
+            .next()
+            .map(|(_key, value)| value)
+        {
+            Some(LogError {
+                name: "Error".to_owned(),
+                message: error,
+                stack: "".to_owned(),
+            })
+        } else {
+            None
+        };
+
+        let parts: Vec<_> = fields
+            .into_iter()
+            .map(|(key, value)| match value {
+                LogValue::Bool(value) => format!("{}:{}", key, value),
+                LogValue::I64(value) => format!("{}:{}", key, value),
+                LogValue::U64(value) => format!("{}:{}", key, value),
+                LogValue::F64(value) => format!("{}:{}", key, value),
+                LogValue::Str(value) => format!("{}:'{}'", key, value),
+            })
+            .collect();
+
+        if !parts.is_empty() {
+            message += " - ";
+            message += &parts.join(", ");
+        }
+
+        // TODO: format KV
+        let record = LogRecord {
+            name: record.event.target,
+            instance_name: (*self.instance_name).clone(),
+            pid: self.pid,
+            level: record.event.level.into(),
+            msg: message,
+            err: error,
+            time: record.time,
+            v: 0,
+        };
+
+        let topic = TopicBuilder::local(&self.instance_name, DOMAIN).build();
+        let payload = match serde_json::to_vec(&record) {
+            Ok(payload) => Bytes::from_owner(payload),
+            Err(error) => {
+                tracing::error!(?error, ?record, "cannot serialize log record");
+                return;
+            }
+        };
+        self.client.publish(topic, payload, false);
+    }
+}
+
+#[derive(Debug)]
+struct Remote {
+    client: ClientHandle,
+    publisher: PublisherHandle<LogRecord>,
+}
+
+impl Remote {
+    pub fn new(actor_ref: ActorRef<Logger>) -> anyhow::Result<Self> {
+        let _self = Self {
+            client: ClientHandle::new()?,
+            publisher: PublisherHandle::from_name(REMOTE_RECORDS_PUBSUB_NAME)?,
+        };
+
+        _self.client.subscribe(Self::build_subscription());
+        _self.client.on_message().subscribe(actor_ref);
+
+        Ok(_self)
+    }
+
+    fn build_subscription() -> Subscription {
+        TopicBuilder::any_instance(DOMAIN).build()
+    }
+
+    pub fn on_message(&self, msg: client::Message) {
         let Some(topic) = msg.parse_topic() else {
             return;
         };
@@ -108,72 +270,49 @@ impl message::Message<client::Message> for Logger {
         let record = match serde_json::from_slice::<LogRecord>(msg.payload()) {
             Ok(record) => record,
             Err(error) => {
-                tracing::error!(?error, instance; "unable to read log record");
+                tracing::error!(?error, instance, "unable to read log record");
                 return;
             }
         };
 
         if instance != record.instance_name {
-            tracing::warn!(record_instance = record.instance_name, topic_instance = instance; "got log record and topic instance name mismatch");
+            tracing::warn!(
+                record_instance = record.instance_name,
+                topic_instance = instance,
+                "got log record and topic instance name mismatch"
+            );
         }
 
-        self.log_publisher.publish(record);
+        self.publisher.publish(record);
     }
 }
 
-impl message::Message<SysLogRecord> for Logger {
-    type Reply = ();
-
-    async fn handle(
-        &mut self,
-        record: SysLogRecord,
-        _ctx: &mut Context<Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.log_publisher.publish(LogRecord {
-            name: record.name.unwrap_or_else("unknown"),
-            instance_name: self.instance_name.clone(),
-            pid: self.pid,
-            level: record.level,
-            msg: record.msg,
-            err: (),
-            time: record.time,
-            v: 0,
-        });
+impl Drop for Remote {
+    fn drop(&mut self) {
+        self.client.unsubscribe(Self::build_subscription());
     }
 }
 
 #[derive(Debug)]
 struct SysLogger(ActorHandle<Logger>);
 
-impl tracing::Log for SysLogger {
-    fn enabled(&self, metadata: &tracing::Metadata) -> bool {
-        // Log to max DEBUG
-        metadata.level() <= tracing::Level::Debug
-    }
-
-    fn log(&self, record: &tracing::Record) {
-        if !self.enabled(record.metadata()) {
+impl LogSink for SysLogger {
+    fn emit(&self, event: &LogEvent) {
+        // Log to max DEBUG.
+        if event.level > tracing::Level::DEBUG {
             return;
         }
 
         self.0.send(SysLogRecord {
-            name: record.module_path().map(|s| s.to_owned()),
-            level: record.level(),
-            msg: format!("{}", record.args()),
+            event: event.clone(),
             time: SystemTime::now(),
         });
-    }
-
-    fn flush(&self) {
-        // Nothing to do
     }
 }
 
 #[derive(Debug, Clone)]
 struct SysLogRecord {
-    name: Option<String>,
-    level: tracing::Level,
-    msg: String,
+    event: LogEvent,
     time: SystemTime,
 }
 
@@ -211,6 +350,18 @@ pub enum LogLevel {
 
     /// Logging from external libraries used by your app or very detailed application logging.
     Trace = 10,
+}
+
+impl From<tracing::Level> for LogLevel {
+    fn from(value: tracing::Level) -> Self {
+        match value {
+            tracing::Level::ERROR => LogLevel::Error,
+            tracing::Level::WARN => LogLevel::Warn,
+            tracing::Level::INFO => LogLevel::Info,
+            tracing::Level::DEBUG => LogLevel::Debug,
+            tracing::Level::TRACE => LogLevel::Trace,
+        }
+    }
 }
 
 impl Serialize for LogLevel {

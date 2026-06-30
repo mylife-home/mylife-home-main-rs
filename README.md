@@ -21,7 +21,7 @@ Then each plugin can have a MessageSender instance, which can be used in another
 ## TODO
 
 common:
-- logging service
+- logging service -> test remote
 - rpc service
 core:
 - bindings

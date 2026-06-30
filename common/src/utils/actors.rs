@@ -35,6 +35,12 @@ impl<Actor: kameo::Actor> Clone for ActorHandle<Actor> {
 }
 
 impl<Actor: kameo::Actor> ActorHandle<Actor> {
+    /// Create a handle to an actor given its ref
+    pub fn from_ref(actor_ref: ActorRef<Actor>, name: impl Into<Cow<'static, str>>) -> Self {
+        let name = name.into();
+        Self { name, actor_ref }
+    }
+
     /// Create a handle to an actor given its registry name
     pub fn from_name(name: impl Into<Cow<'static, str>>) -> anyhow::Result<Self> {
         let name = name.into();

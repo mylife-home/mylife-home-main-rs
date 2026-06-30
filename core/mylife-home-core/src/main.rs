@@ -3,7 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use tokio::time::sleep;
 
 use common::{
-    instance_info,
+    ActorsConfig, instance_info,
     utils::{actors::SpawnedActors, config, logger},
 };
 use plugin_runtime::runtime::{Config, ConfigValue};
@@ -26,7 +26,15 @@ async fn main() {
 
     let mut actors = SpawnedActors::new();
 
-    common::init(&mut actors, "core", true).await;
+    common::init(
+        &mut actors,
+        "core",
+        &ActorsConfig {
+            listen_remote_metadata: true,
+            listen_remote_logs: false,
+        },
+    )
+    .await;
 
     components::init_actor(&mut actors).await;
     components::init_plugins().await;

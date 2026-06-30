@@ -2,7 +2,7 @@ use std::{
     fmt,
     sync::{
         Arc, LazyLock, RwLock,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -28,7 +28,7 @@ pub trait LogSink: Send + Sync {
 
 /// A typed structured-log value, preserving the type tracing captured rather
 /// than stringifying it. Sinks decide how to render or serialize each variant.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum LogValue {
     Bool(bool),
     I64(i64),
@@ -39,7 +39,7 @@ pub enum LogValue {
 }
 
 /// Owned, library-neutral form of an event, built once and shared with every sink.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LogEvent {
     pub level: tracing::Level,
     pub target: String,
@@ -47,8 +47,8 @@ pub struct LogEvent {
 }
 
 struct Sinks {
-    list: RwLock<Vec<(u64, Box<dyn LogSink>)>>,
-    next_id: AtomicU64,
+    list: RwLock<Vec<(LoggerId, Box<dyn LogSink>)>>,
+    next_id: AtomicUsize,
 }
 
 /// Shared sink registry. The fan-out layer holds one clone; the free functions
@@ -56,7 +56,7 @@ struct Sinks {
 static SINKS: LazyLock<Arc<Sinks>> = LazyLock::new(|| {
     Arc::new(Sinks {
         list: RwLock::new(Vec::new()),
-        next_id: AtomicU64::new(0),
+        next_id: AtomicUsize::new(0),
     })
 });
 
@@ -74,19 +74,45 @@ pub fn init(console: bool) {
     }
 }
 
+/// Identifier of a registered logger
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+struct LoggerId(usize);
+
+#[derive(Debug)]
+pub struct LoggerHandle(Option<LoggerId>);
+
+impl LoggerHandle {
+    fn new(logger_id: LoggerId) -> Self {
+        Self(Some(logger_id))
+    }
+
+    /// Mark the logger as static and never release it
+    pub fn make_static(&mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for LoggerHandle {
+    fn drop(&mut self) {
+        if let Some(logger_id) = self.0.take() {
+            remove_logger(logger_id);
+        }
+    }
+}
+
 /// Adds a sink and returns its id. Safe to call after `init`, from any thread.
-pub fn add_logger(sink: Box<dyn LogSink>) -> u64 {
-    let id = SINKS.next_id.fetch_add(1, Ordering::Relaxed);
+pub fn add_logger(sink: Box<dyn LogSink>) -> LoggerHandle {
+    let id = LoggerId(SINKS.next_id.fetch_add(1, Ordering::Relaxed));
     SINKS
         .list
         .write()
         .expect("could not acquire write lock")
         .push((id, sink));
-    id
+
+    LoggerHandle::new(id)
 }
 
-/// Removes a sink by id, flushing it before dropping.
-pub fn remove_logger(id: u64) {
+fn remove_logger(id: LoggerId) {
     let mut list = SINKS.list.write().expect("could not acquire write lock");
     if let Some(pos) = list.iter().position(|(sid, _)| *sid == id) {
         let (_, sink) = list.remove(pos);
