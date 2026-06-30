@@ -5,8 +5,14 @@ use kameo::{message, prelude::*};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 
 use crate::{
-    bus::client::{self, ClientHandle, Subscription, TopicBuilder}, utils::{
-        self, actors::{ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub}, logger::{LogEvent, LogSink, LogValue, LoggerHandle as SysLoggerHandle},
+    bus::client::{self, ClientHandle, Subscription, TopicBuilder},
+    utils::{
+        self,
+        actors::{
+            ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle,
+            spawn_pubsub,
+        },
+        logger::{LogEvent, LogSink, LogValue, LoggerHandle as SysLoggerHandle},
     },
 };
 
