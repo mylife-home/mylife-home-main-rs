@@ -14,6 +14,7 @@ kameo_actors = { workspace = true }
 lazy_static = { workspace = true }
 mqttbytes = { workspace = true }
 pretty_env_logger = { workspace = true }
+rand = { workspace = true }
 regex = { workspace = true }
 rpi-info = { workspace = true }
 serde = { workspace = true }
