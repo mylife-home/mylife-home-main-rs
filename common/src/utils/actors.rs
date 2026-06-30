@@ -1,14 +1,20 @@
-use std::{any::type_name, borrow::Cow, fmt};
+use std::{any::type_name, borrow::Cow, fmt, time::Duration};
 
 use anyhow::Context;
 use async_trait::async_trait;
 use kameo::{
     Actor, Reply,
-    actor::{ActorRef, Spawn},
+    actor::{ActorRef, Spawn, WeakActorRef},
     error::SendError,
     message,
 };
-use kameo_actors::pubsub::{self, PubSub};
+use kameo_actors::{
+    pubsub::{self, PubSub},
+    scheduler::{self, Scheduler},
+};
+use tokio::task::AbortHandle;
+
+const SCHEDULER_NAME: &str = "scheduler";
 
 /// Handle to an actor
 pub struct ActorHandle<Actor: kameo::Actor> {
@@ -109,12 +115,64 @@ impl<M: Send + Clone + 'static> SubscriberHandle<M> {
 }
 
 pub async fn spawn_pubsub<Message: 'static>(name: &'static str) -> SpawnedActor {
-    let (actor, _) = SpawnedActor::start::<pubsub::PubSub<Message>>(
-        pubsub::PubSub::<Message>::new(kameo_actors::DeliveryStrategy::Guaranteed),
-    )
+    let (actor, _) = SpawnedActor::start::<PubSub<Message>>(PubSub::<Message>::new(
+        kameo_actors::DeliveryStrategy::Guaranteed,
+    ))
     .await;
 
     actor.register(name);
+
+    actor
+}
+
+#[derive(Debug, Clone)]
+pub struct SchedulerHandle(ActorHandle<Scheduler>);
+
+impl SchedulerHandle {
+    /// Create a handle to the scheduler
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self(ActorHandle::from_name(SCHEDULER_NAME)?))
+    }
+
+    pub async fn set_timeout<A, M>(
+        &self,
+        actor_ref: WeakActorRef<A>,
+        duration: Duration,
+        message: M,
+    ) -> anyhow::Result<AbortHandle>
+    where
+        A: Actor + message::Message<M>,
+        M: Send + Sync + 'static,
+    {
+        let handle = self
+            .0
+            .call(scheduler::SetTimeout::new(actor_ref, duration, message))
+            .await?;
+        Ok(handle)
+    }
+
+    pub async fn set_interval<A, M>(
+        &self,
+        actor_ref: WeakActorRef<A>,
+        duration: Duration,
+        message: M,
+    ) -> anyhow::Result<AbortHandle>
+    where
+        A: Actor + message::Message<M>,
+        M: Send + Sync + Clone + 'static,
+    {
+        let handle = self
+            .0
+            .call(scheduler::SetInterval::new(actor_ref, duration, message))
+            .await?;
+        Ok(handle)
+    }
+}
+
+pub async fn spawn_scheduler() -> SpawnedActor {
+    let (actor, _) = SpawnedActor::start::<Scheduler>(Scheduler::new()).await;
+
+    actor.register(SCHEDULER_NAME);
 
     actor
 }

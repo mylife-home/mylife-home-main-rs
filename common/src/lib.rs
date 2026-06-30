@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::utils::actors::SpawnedActors;
+use crate::utils::actors::{SpawnedActors, spawn_scheduler};
 
 pub mod bus;
 pub mod components;
@@ -16,6 +16,8 @@ pub struct ActorsConfig {
 pub async fn init(actors: &mut SpawnedActors, r#type: &str, config: &ActorsConfig) {
     let hostname = utils::hostname().expect("could not read hostname");
     let instance_name = Arc::new(format!("{}-{}", hostname, r#type));
+
+    actors.add(spawn_scheduler().await);
 
     bus::init(actors, instance_name.clone(), config).await;
     components::init(actors, instance_name.clone(), r#type).await;

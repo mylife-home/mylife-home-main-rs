@@ -1,5 +1,4 @@
 use kameo::{Actor, message, prelude::*};
-use kameo_actors::scheduler::{Scheduler, SetInterval};
 use std::{
     collections::{HashMap, HashSet},
     env, fs,
@@ -7,10 +6,8 @@ use std::{
 };
 
 use crate::{
-    bus::metadata::MetadataHandle,
-    utils::{
-        self,
-        actors::{ActorHandle, SpawnedActor, SpawnedActors},
+    bus::metadata::MetadataHandle, utils::{
+        self, actors::{ActorHandle, SchedulerHandle, SpawnedActor, SpawnedActors},
     },
 };
 
@@ -65,7 +62,6 @@ pub async fn init_actors(actors: &mut SpawnedActors) {
 
 #[derive(Debug)]
 struct InstanceInfoPublisher {
-    scheduler: ActorRef<Scheduler>,
     metadata: MetadataHandle,
 
     r#type: Option<String>,
@@ -81,11 +77,9 @@ impl Actor for InstanceInfoPublisher {
 
     async fn on_start(_config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         let metadata = MetadataHandle::new()?;
+        let scheduler = SchedulerHandle::new()?;
 
-        let scheduler = Scheduler::spawn(Scheduler::new());
-
-        let interval = SetInterval::new(actor_ref.downgrade(), Duration::from_secs(60), Refresh);
-        scheduler.tell(interval).await?;
+        scheduler.set_interval(actor_ref.downgrade(), Duration::from_secs(60), Refresh).await?;
 
         let mut versions = HashMap::new();
 
@@ -98,7 +92,6 @@ impl Actor for InstanceInfoPublisher {
         }
 
         Ok(Self {
-            scheduler,
             metadata,
             r#type: None,
             versions,
@@ -107,17 +100,6 @@ impl Actor for InstanceInfoPublisher {
             instance_uptime: SystemTime::now(),
             hardware_info: Self::get_hardware_info(),
         })
-    }
-
-    async fn on_stop(
-        &mut self,
-        _actor_ref: WeakActorRef<Self>,
-        _reason: ActorStopReason,
-    ) -> Result<(), Self::Error> {
-        self.scheduler.stop_gracefully().await?;
-        self.scheduler.wait_for_shutdown().await;
-
-        Ok(())
     }
 }
 
