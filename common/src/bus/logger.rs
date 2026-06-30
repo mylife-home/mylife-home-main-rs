@@ -5,11 +5,8 @@ use kameo::{message, prelude::*};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 
 use crate::{
-    bus::client::{self, ClientHandle, Subscription, TopicBuilder},
-    utils::{
-        self,
-        actors::{ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, spawn_pubsub},
-        logger::{LogEvent, LogSink, LogValue, LoggerHandle},
+    bus::client::{self, ClientHandle, Subscription, TopicBuilder}, utils::{
+        self, actors::{ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub}, logger::{LogEvent, LogSink, LogValue, LoggerHandle as SysLoggerHandle},
     },
 };
 
@@ -24,6 +21,26 @@ const REMOTE_RECORDS_PUBSUB_NAME: &str = "bus.logger.remote-records";
 pub struct LoggerConfig {
     pub instance_name: Arc<String>,
     pub listen_remote: bool,
+}
+
+/// Client access to the logger actor
+#[derive(Debug, Clone)]
+pub struct LoggerHandle {
+    on_remote_record: SubscriberHandle<LogRecord>,
+}
+
+impl LoggerHandle {
+    /// Create a new access
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self {
+            on_remote_record: SubscriberHandle::from_name(REMOTE_RECORDS_PUBSUB_NAME)?,
+        })
+    }
+
+    /// Get the PubSub for remote logger records
+    pub fn on_remote_record(&self) -> &SubscriberHandle<LogRecord> {
+        &self.on_remote_record
+    }
 }
 
 pub async fn init_pubsubs(actors: &mut SpawnedActors) {
@@ -43,7 +60,7 @@ struct Logger {
     client: ClientHandle,
     publisher: LogPublisher,
     remote: Option<Remote>,
-    logger: Option<LoggerHandle>,
+    logger: Option<SysLoggerHandle>,
     online: bool,
     offline_queue: Vec<SysLogRecord>,
 }
