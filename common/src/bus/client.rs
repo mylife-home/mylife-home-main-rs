@@ -514,7 +514,7 @@ impl Message {
     }
 
     /// Get the payload of the message.
-    pub fn payload(&self) -> &Bytes {
+    pub fn payload(&self) -> &Arc<Bytes> {
         &self.payload
     }
 
@@ -594,6 +594,10 @@ impl InstanceOnline {
 pub struct Topic(String);
 
 impl Topic {
+    pub fn from_raw(value: String) -> Self {
+        Self(value)
+    }
+
     /// Borrows the topic as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
