@@ -20,9 +20,6 @@ Then each plugin can have a MessageSender instance, which can be used in another
 
 ## TODO
 
-common:
-- logging service -> test remote
-- rpc service
 core:
 - bindings
 - component manager: rpc service + store
