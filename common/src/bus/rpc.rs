@@ -5,17 +5,19 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::Context;
 use async_trait::async_trait;
 use bytes::Bytes;
 use kameo::{Actor, message, prelude::*};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
+use thiserror::Error;
 
 use crate::{
     bus::client::{self, ClientHandle, Topic, TopicBuilder},
-    utils::actors::{ActorHandle, SchedulerHandle, SpawnedActor, SpawnedActors},
+    utils::actors::{
+        ActorHandle, CallError, HandleLookupError, SchedulerHandle, SpawnedActor, SpawnedActors,
+    },
 };
 
 const DOMAIN: &str = "rpc";
@@ -32,13 +34,24 @@ pub struct RpcConfig {
     pub instance_name: Arc<String>,
 }
 
+/// Error that occurs during RPC client operations
+#[derive(Debug, Error)]
+pub enum RpcClientError {
+    #[error("cannot serialize request: {0}")]
+    Serialization(#[source] serde_json::Error),
+    #[error("cannot deserialize reply: {0}")]
+    Deserialization(#[source] serde_json::Error),
+    #[error("call error: {0}")]
+    CallError(#[from] CallError<RpcCallError>),
+}
+
 /// Client access to the RPC actor
 #[derive(Debug, Clone)]
 pub struct RpcHandle(ActorHandle<Rpc>);
 
 impl RpcHandle {
     /// Create a new access
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new() -> Result<Self, HandleLookupError> {
         Ok(Self(ActorHandle::from_name(RPC_NAME)?))
     }
 
@@ -47,7 +60,7 @@ impl RpcHandle {
         &self,
         address: impl Into<String>,
         implementation: Impl,
-    ) -> anyhow::Result<()>
+    ) -> Result<(), CallError<RpcServiceAddError>>
     where
         Impl: RpcService<Request = Request, Reply = Reply> + 'static,
         Request: DeserializeOwned + 'static,
@@ -64,7 +77,10 @@ impl RpcHandle {
     }
 
     /// Unregister an RPC service
-    pub async fn unregister_service(&self, address: impl Into<String>) -> anyhow::Result<()> {
+    pub async fn unregister_service(
+        &self,
+        address: impl Into<String>,
+    ) -> Result<(), CallError<RpcServiceRemoveError>> {
         self.0
             .call(ServiceRemove {
                 address: address.into(),
@@ -80,12 +96,12 @@ impl RpcHandle {
         address: impl Into<String>,
         data: &Request,
         timeout: Option<Duration>,
-    ) -> anyhow::Result<Reply>
+    ) -> Result<Reply, RpcClientError>
     where
         Request: Serialize + 'static,
         Reply: DeserializeOwned + 'static,
     {
-        let input = serde_json::to_value(&data)?;
+        let input = serde_json::to_value(&data).map_err(|e| RpcClientError::Serialization(e))?;
 
         let output = self
             .0
@@ -97,7 +113,7 @@ impl RpcHandle {
             })
             .await?;
 
-        Ok(serde_json::from_value(output)?)
+        Ok(serde_json::from_value(output).map_err(|e| RpcClientError::Deserialization(e))?)
     }
 }
 
@@ -181,8 +197,14 @@ impl message::Message<client::Message> for Rpc {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum RpcServiceAddError {
+    #[error("service with address '{0}' does already exist")]
+    AlreadyExists(String),
+}
+
 impl message::Message<ServiceAdd> for Rpc {
-    type Reply = anyhow::Result<()>;
+    type Reply = Result<(), RpcServiceAddError>;
 
     async fn handle(
         &mut self,
@@ -190,7 +212,7 @@ impl message::Message<ServiceAdd> for Rpc {
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
         if self.services.contains_key(&msg.address) {
-            anyhow::bail!("service with address '{}' does already exist", msg.address);
+            return Err(RpcServiceAddError::AlreadyExists(msg.address));
         }
 
         self.services.insert(
@@ -204,8 +226,14 @@ impl message::Message<ServiceAdd> for Rpc {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum RpcServiceRemoveError {
+    #[error("service with address '{0}' not found")]
+    NotFound(String),
+}
+
 impl message::Message<ServiceRemove> for Rpc {
-    type Reply = anyhow::Result<()>;
+    type Reply = Result<(), RpcServiceRemoveError>;
 
     async fn handle(
         &mut self,
@@ -213,15 +241,29 @@ impl message::Message<ServiceRemove> for Rpc {
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
         if self.services.remove(&msg.address).is_none() {
-            anyhow::bail!("service with address '{}' does not exist", msg.address);
+            return Err(RpcServiceRemoveError::NotFound(msg.address));
         }
 
         Ok(())
     }
 }
 
+#[derive(Debug, Error)]
+pub enum RpcCallError {
+    #[error("cannot serialize request: {0}")]
+    RequestSerializationError(#[source] serde_json::Error),
+    #[error("cannot deserialize reply: {0}")]
+    ReplyDeserializationError(#[source] serde_json::Error),
+    #[error("remote error: {0}")]
+    RemoteError(#[from] RemoteError),
+    #[error("timeout during rpc call")]
+    Timeout,
+    #[error("rpc actor stopping during rpc call")]
+    ActorStopping,
+}
+
 impl message::Message<Call> for Rpc {
-    type Reply = DelegatedReply<anyhow::Result<Value>>;
+    type Reply = DelegatedReply<Result<Value, RpcCallError>>;
 
     async fn handle(
         &mut self,
@@ -488,7 +530,7 @@ where
 
 struct ClientCall {
     client: ClientHandle,
-    reply_sender: Option<ReplySender<anyhow::Result<Value>>>,
+    reply_sender: Option<ReplySender<Result<Value, RpcCallError>>>,
     reply_topic: Topic,
     timeout: Instant,
     terminated: bool,
@@ -508,7 +550,7 @@ impl ClientCall {
         address: String,
         input: Value,
         timeout: Duration,
-    ) -> anyhow::Result<ClientCall> {
+    ) -> Result<ClientCall, RpcCallError> {
         let timeout = Instant::now()
             .checked_add(timeout)
             .expect("time math error");
@@ -526,8 +568,9 @@ impl ClientCall {
             reply_topic: reply_topic.to_string(),
         };
 
-        let payload =
-            Bytes::from_owner(serde_json::to_vec(&request).context("cannot serialize request")?);
+        let payload = Bytes::from_owner(
+            serde_json::to_vec(&request).map_err(|e| RpcCallError::RequestSerializationError(e))?,
+        );
 
         client.subscribe(reply_topic.clone().into());
 
@@ -542,7 +585,10 @@ impl ClientCall {
         })
     }
 
-    pub fn set_reply_sender(&mut self, reply_sender: Option<ReplySender<anyhow::Result<Value>>>) {
+    pub fn set_reply_sender(
+        &mut self,
+        reply_sender: Option<ReplySender<Result<Value, RpcCallError>>>,
+    ) {
         self.reply_sender = reply_sender;
     }
 
@@ -555,11 +601,12 @@ impl ClientCall {
         self.send_reply(res);
     }
 
-    fn process_message(&self, payload: &Bytes) -> anyhow::Result<Value> {
-        let reply: RpcReply = serde_json::from_slice(payload)?;
+    fn process_message(&self, payload: &Bytes) -> Result<Value, RpcCallError> {
+        let reply: RpcReply = serde_json::from_slice(payload)
+            .map_err(|e| RpcCallError::ReplyDeserializationError(e))?;
 
         if let Some(error) = reply.error {
-            return Err(RemoteError::from(error)).context("rpc remote error");
+            return Err(RpcCallError::RemoteError(RemoteError::from(error)));
         }
 
         let output = if let Some(output) = reply.output {
@@ -574,21 +621,19 @@ impl ClientCall {
 
     pub fn on_timeout_check(&mut self) {
         if self.timeout < Instant::now() {
-            self.send_reply(Err(anyhow::Error::msg("timeout during rpc call")));
+            self.send_reply(Err(RpcCallError::Timeout));
         }
     }
 
     pub fn on_actor_stop(&mut self) {
-        self.send_reply(Err(anyhow::Error::msg(
-            "rpc actor stopping during rpc call",
-        )));
+        self.send_reply(Err(RpcCallError::ActorStopping));
     }
 
     pub fn is_terminated(&self) -> bool {
         self.terminated
     }
 
-    fn send_reply(&mut self, res: anyhow::Result<Value>) {
+    fn send_reply(&mut self, res: Result<Value, RpcCallError>) {
         if let Some(reply_sender) = self.reply_sender.take() {
             reply_sender.send(res);
         }
