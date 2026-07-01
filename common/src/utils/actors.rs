@@ -6,7 +6,7 @@ use kameo::{
     Actor, Reply,
     actor::{ActorRef, Spawn, WeakActorRef},
     error::SendError,
-    message,
+    mailbox, message,
 };
 use kameo_actors::{
     pubsub::{self, PubSub},
@@ -185,7 +185,7 @@ impl SpawnedActor {
         TActor: Actor,
         <TActor as Actor>::Error: fmt::Display,
     {
-        let actor_ref = TActor::spawn(args);
+        let actor_ref = TActor::spawn_with_mailbox(args, mailbox::unbounded());
 
         actor_ref
             .wait_for_startup_with_result(|res| {
