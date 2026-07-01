@@ -5,14 +5,14 @@ use std::{
 };
 
 use kameo::{message, prelude::*};
+use thiserror::Error;
 
 use crate::{
     components::{
         metadata::{MemberType, PluginMetadata},
         types::Value,
-    },
-    utils::actors::{
-        ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub,
+    }, utils::actors::{
+        ActorHandle, CallError, HandleLookupError, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub,
     },
 };
 
@@ -28,7 +28,7 @@ pub struct RegistryHandle {
 
 impl RegistryHandle {
     /// Create a new access
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new() -> Result<Self, HandleLookupError> {
         Ok(Self {
             actor: ActorHandle::from_name(REGISTRY_NAME)?,
             on_update: SubscriberHandle::from_name(UPDATE_PUBSUB_NAME)?,
@@ -40,7 +40,7 @@ impl RegistryHandle {
         &self,
         instance: Option<String>,
         plugin: Arc<PluginMetadata>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), CallError<PluginAddError>> {
         self.actor.call(PluginAdd { instance, plugin }).await?;
 
         Ok(())
@@ -51,7 +51,7 @@ impl RegistryHandle {
         &self,
         instance: Option<String>,
         plugin_id: String,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), CallError<PluginRemoveError>> {
         self.actor
             .call(PluginRemove {
                 instance,
@@ -69,7 +69,7 @@ impl RegistryHandle {
         plugin_id: String,
         component_id: String,
         on_action: Recipient<ComponentExecuteAction>,
-    ) -> anyhow::Result<ComponentHandle> {
+    ) -> Result<ComponentHandle, CallError<ComponentAddError>> {
         self.actor
             .call(ComponentAdd {
                 instance,
@@ -83,7 +83,7 @@ impl RegistryHandle {
     }
 
     /// Remove a component, waiting for the registry reply
-    pub async fn component_remove(&self, component_id: String) -> anyhow::Result<()> {
+    pub async fn component_remove(&self, component_id: String) -> Result<(), CallError<ComponentRemoveError>> {
         self.actor.call(ComponentRemove { component_id }).await?;
 
         Ok(())
@@ -152,7 +152,7 @@ impl Registry {
         &mut self,
         instance_name: Option<String>,
         plugin: Arc<PluginMetadata>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), PluginAddError> {
         let instance_name = InstanceName::from(instance_name);
 
         let instance_data = self
@@ -181,11 +181,14 @@ impl Registry {
         &mut self,
         instance_name: Option<String>,
         plugin_id: &str,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), PluginRemoveError> {
         let instance_name = InstanceName::from(instance_name);
 
         let Some(instance_data) = self.instances.get_mut(&instance_name) else {
-            anyhow::bail!("plugin '{}:{}' not found", instance_name, plugin_id);
+            return Err(PluginRemoveError::not_found(
+                instance_name.to_string(),
+                plugin_id.to_owned(),
+            ));
         };
 
         let plugin = instance_data.remove_plugin(plugin_id)?;
@@ -211,16 +214,20 @@ impl Registry {
         plugin_id: String,
         component_id: String,
         on_action: Recipient<ComponentExecuteAction>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), ComponentAddError> {
         let instance_name = InstanceName::from(instance_name);
         let component_id = Arc::new(component_id);
 
         if self.components.contains_key(&component_id) {
-            anyhow::bail!("component '{}' already registered", component_id);
+            return Err(ComponentAddError::already_exists(component_id.to_string()));
         }
 
         let Some(instance_data) = self.instances.get_mut(&instance_name) else {
-            anyhow::bail!("plugin '{}:{}' does not exist", instance_name, component_id);
+            return Err(ComponentAddError::plugin_not_found(
+                component_id.to_string(),
+                instance_name.to_string(),
+                plugin_id,
+            ));
         };
 
         let plugin = instance_data.add_component(&plugin_id, component_id.clone())?;
@@ -252,11 +259,11 @@ impl Registry {
         Ok(())
     }
 
-    fn remove_component(&mut self, component_id: String) -> anyhow::Result<()> {
+    fn remove_component(&mut self, component_id: String) -> Result<(), ComponentRemoveError> {
         let component_id = Arc::new(component_id);
 
         let Some(component_data) = self.components.get(&component_id) else {
-            anyhow::bail!("component '{}' not found", component_id)
+            return Err(ComponentRemoveError::not_found(component_id.to_string()));
         };
 
         let plugin = component_data.plugin().clone();
@@ -315,7 +322,7 @@ impl Registry {
 impl Actor for Registry {
     type Args = ();
 
-    type Error = anyhow::Error;
+    type Error = HandleLookupError;
 
     async fn on_start(_args: Self::Args, _actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         Ok(Self {
@@ -337,8 +344,33 @@ impl Actor for Registry {
     }
 }
 
+#[derive(Debug, Error)]
+#[error("failed to add plugin '{instance}:{plugin_id}': {kind}")]
+pub struct PluginAddError {
+    instance: String,
+    plugin_id: String,
+    #[source]
+    kind: PluginAddErrorKind,
+}
+
+impl PluginAddError {
+    fn already_exists(instance: impl Into<String>, plugin_id: impl Into<String>) -> Self {
+        Self {
+            instance: instance.into(),
+            plugin_id: plugin_id.into(),
+            kind: PluginAddErrorKind::AlreadyExists,
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+enum PluginAddErrorKind {
+    #[error("plugin already exists")]
+    AlreadyExists,
+}
+
 impl message::Message<PluginAdd> for Registry {
-    type Reply = anyhow::Result<()>;
+    type Reply = Result<(), PluginAddError>;
 
     async fn handle(
         &mut self,
@@ -349,8 +381,43 @@ impl message::Message<PluginAdd> for Registry {
     }
 }
 
+#[derive(Debug, Error)]
+#[error("failed to remove plugin '{instance}:{plugin_id}': {kind}")]
+pub struct PluginRemoveError {
+    instance: String,
+    plugin_id: String,
+    #[source]
+    kind: PluginRemoveErrorKind,
+}
+
+impl PluginRemoveError {
+    fn not_found(instance: impl Into<String>, plugin_id: impl Into<String>) -> Self {
+        Self {
+            instance: instance.into(),
+            plugin_id: plugin_id.into(),
+            kind: PluginRemoveErrorKind::NotFound,
+        }
+    }
+
+    fn used(instance: impl Into<String>, plugin_id: impl Into<String>) -> Self {
+        Self {
+            instance: instance.into(),
+            plugin_id: plugin_id.into(),
+            kind: PluginRemoveErrorKind::Used,
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+enum PluginRemoveErrorKind {
+    #[error("plugin not found")]
+    NotFound,
+    #[error("plugin is used by components")]
+    Used,
+}
+
 impl message::Message<PluginRemove> for Registry {
-    type Reply = anyhow::Result<()>;
+    type Reply = Result<(), PluginRemoveError>;
 
     async fn handle(
         &mut self,
@@ -361,8 +428,50 @@ impl message::Message<PluginRemove> for Registry {
     }
 }
 
+#[derive(Debug, Error)]
+#[error("failed to add component '{component_id}': {kind}")]
+pub struct ComponentAddError {
+    component_id: String,
+    #[source]
+    kind: ComponentAddErrorKind,
+}
+
+impl ComponentAddError {
+    fn already_exists(component_id: impl Into<String>) -> Self {
+        Self {
+            component_id: component_id.into(),
+            kind: ComponentAddErrorKind::AlreadyExists,
+        }
+    }
+
+    fn plugin_not_found(
+        component_id: impl Into<String>,
+        instance: impl Into<String>,
+        plugin_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            component_id: component_id.into(),
+            kind: ComponentAddErrorKind::PluginNotFound {
+                instance: instance.into(),
+                plugin_id: plugin_id.into(),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ComponentAddErrorKind {
+    #[error("component already exists")]
+    AlreadyExists,
+    #[error("plugin '{instance}:{plugin_id}' does not exist")]
+    PluginNotFound {
+        instance: String,
+        plugin_id: String
+    },
+}
+
 impl message::Message<ComponentAdd> for Registry {
-    type Reply = anyhow::Result<()>;
+    type Reply = Result<(), ComponentAddError>;
 
     async fn handle(
         &mut self,
@@ -373,8 +482,31 @@ impl message::Message<ComponentAdd> for Registry {
     }
 }
 
+#[derive(Debug, Error)]
+#[error("failed to remove component '{component_id}': {kind}")]
+pub struct ComponentRemoveError {
+    component_id: String,
+    #[source]
+    kind: ComponentRemoveErrorKind,
+}
+
+impl ComponentRemoveError {
+    fn not_found(component_id: impl Into<String>) -> Self {
+        Self {
+            component_id: component_id.into(),
+            kind: ComponentRemoveErrorKind::NotFound,
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ComponentRemoveErrorKind {
+    #[error("component not found")]
+    NotFound,
+}
+
 impl message::Message<ComponentRemove> for Registry {
-    type Reply = anyhow::Result<()>;
+    type Reply = Result<(), ComponentRemoveError>;
 
     async fn handle(
         &mut self,
@@ -645,13 +777,13 @@ impl InstanceData {
         &mut self,
         plugin_id: &str,
         component_id: Arc<String>,
-    ) -> anyhow::Result<Arc<PluginMetadata>> {
+    ) -> Result<Arc<PluginMetadata>, ComponentAddError> {
         let Some(plugin) = self.plugins.get_mut(plugin_id) else {
-            anyhow::bail!(
-                "plugin '{}:{}' does not exist",
-                self.instance_name,
-                plugin_id
-            );
+            return Err(ComponentAddError::plugin_not_found(
+                component_id.to_string(),
+                self.instance_name.to_string(),
+                plugin_id.to_owned(),
+            ));
         };
 
         plugin.add_component();
@@ -669,11 +801,11 @@ impl InstanceData {
         self.components.remove(component_id);
     }
 
-    pub fn add_plugin(&mut self, plugin: Arc<PluginMetadata>) -> anyhow::Result<()> {
+    pub fn add_plugin(&mut self, plugin: Arc<PluginMetadata>) -> Result<(), PluginAddError> {
         let id = plugin.id().to_owned();
 
         if self.plugins.contains_key(&id) {
-            anyhow::bail!("plugin '{}:{}' does already exist", self.instance_name, id);
+            return Err(PluginAddError::already_exists(self.instance_name.to_string(), id));
         }
 
         self.plugins
@@ -681,17 +813,19 @@ impl InstanceData {
         Ok(())
     }
 
-    pub fn remove_plugin(&mut self, plugin_id: &str) -> anyhow::Result<Arc<PluginMetadata>> {
+    pub fn remove_plugin(&mut self, plugin_id: &str) -> Result<Arc<PluginMetadata>, PluginRemoveError> {
         let Some(plugin) = self.plugins.get(plugin_id) else {
-            anyhow::bail!(
-                "plugin '{}:{}' does not exist",
-                self.instance_name,
-                plugin_id
-            );
+            return Err(PluginRemoveError::not_found(
+                self.instance_name.to_string(),
+                plugin_id.to_owned(),
+            ));
         };
 
         if plugin.used() {
-            anyhow::bail!("plugin '{}:{}' is used", self.instance_name, plugin_id);
+            return Err(PluginRemoveError::used(
+                self.instance_name.to_string(),
+                plugin_id.to_owned(),
+            ));
         }
 
         let plugin = plugin.metadata().clone();
