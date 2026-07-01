@@ -45,7 +45,7 @@ impl RpcHandle {
     /// Register a new RPC service
     pub async fn register_service<Impl, Request, Reply>(
         &self,
-        address: String,
+        address: impl Into<String>,
         implementation: Impl,
     ) -> anyhow::Result<()>
     where
@@ -55,7 +55,7 @@ impl RpcHandle {
     {
         self.0
             .call(ServiceAdd {
-                address,
+                address: address.into(),
                 service: Box::new(TypedServiceAddImpl::new(implementation)),
             })
             .await?;
@@ -64,16 +64,20 @@ impl RpcHandle {
     }
 
     /// Unregister an RPC service
-    pub async fn unregister_service(&self, address: String) -> anyhow::Result<()> {
-        self.0.call(ServiceRemove { address }).await?;
+    pub async fn unregister_service(&self, address: impl Into<String>) -> anyhow::Result<()> {
+        self.0
+            .call(ServiceRemove {
+                address: address.into(),
+            })
+            .await?;
 
         Ok(())
     }
 
     pub async fn call<Request, Reply>(
         &self,
-        target_instance: String,
-        address: String,
+        target_instance: impl Into<String>,
+        address: impl Into<String>,
         data: &Request,
         timeout: Option<Duration>,
     ) -> anyhow::Result<Reply>
@@ -86,8 +90,8 @@ impl RpcHandle {
         let output = self
             .0
             .call(Call {
-                target_instance,
-                address,
+                target_instance: target_instance.into(),
+                address: address.into(),
                 input,
                 timeout,
             })
