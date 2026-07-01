@@ -1,22 +1,22 @@
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
-use anyhow::Context;
 use bytes::Bytes;
 use kameo::{message, prelude::*};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::{
     bus::{
         client::{self, ClientHandle, Subscription, Topic, TopicBuilder},
-        encoding,
+        encoding::{self, DecodingError},
         metadata::{self, MetadataHandle, RemoteUpdate},
     },
     components::{
-        metadata::{MemberType, PluginMetadata},
+        metadata::{MemberType, PluginMetadata, Type},
         registry::{self, ComponentExecuteAction, ComponentHandle, RegistryHandle},
         types::Value,
     },
-    utils::actors::{SpawnedActor, SpawnedActors},
+    utils::actors::{HandleLookupError, SpawnedActor, SpawnedActors},
 };
 
 const DOMAIN: &str = "components";
@@ -52,7 +52,7 @@ struct Remote {
 
 impl Actor for Remote {
     type Args = RemoteConfig;
-    type Error = anyhow::Error;
+    type Error = HandleLookupError;
 
     async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         let client = ClientHandle::new()?;
@@ -337,6 +337,62 @@ impl message::Message<registry::ComponentExecuteAction> for Remote {
             );
         }
     }
+}
+
+#[derive(Debug, Error)]
+enum ExecuteActionError {
+    #[error("component not found")]
+    ComponentNotFound,
+    #[error("plugin '{instance}:{plugin_id}' not found")]
+    PluginNotFound { instance: String, plugin_id: String },
+    #[error("member '{member}' not found on plugin '{instance}:{plugin_id}'")]
+    MemberNotFound {
+        instance: String,
+        plugin_id: String,
+        member: String,
+    },
+}
+
+#[derive(Debug, Error)]
+enum HandleStateError {
+    #[error("component not found")]
+    ComponentNotFound,
+    #[error(
+        "component '{component_id}' is on instance '{expected_instance}', but is now updated from instance '{actual_instance}'"
+    )]
+    InstanceMismatch {
+        component_id: String,
+        expected_instance: String,
+        actual_instance: String,
+    },
+    #[error("plugin '{instance}:{plugin_id}' not found")]
+    PluginNotFound { instance: String, plugin_id: String },
+    #[error("member '{member}' not found on plugin '{instance}:{plugin_id}'")]
+    MemberNotFound {
+        instance: String,
+        plugin_id: String,
+        member: String,
+    },
+    #[error("cannot read state '{state}' value '{value:?}' of type '{ty}': {error}")]
+    ValueReadError {
+        state: String,
+        value: Bytes,
+        ty: Type,
+        #[source]
+        error: DecodingError,
+    },
+}
+
+#[derive(Debug, Error)]
+enum ExecuteLocalActionError {
+    #[error("component not found")]
+    ComponentNotFound,
+    #[error("member not found")]
+    MemberNotFound,
+    #[error("member is not an action")]
+    MemberNotAction,
+    #[error("cannot read value: {0}")]
+    ValueReadError(#[from] DecodingError),
 }
 
 impl Remote {
@@ -649,38 +705,38 @@ impl Remote {
         component_id: &str,
         action: &str,
         value: &Value,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), ExecuteActionError> {
         let component = self
             .remote_components
             .get(component_id)
-            .context("component does not exist")?;
+            .ok_or(ExecuteActionError::ComponentNotFound)?;
 
         let plugin_key = RemotePluginKey {
             instance: component.instance.clone(),
             id: component.plugin_id.clone(),
         };
 
-        let plugin = self.remote_plugins.get(&plugin_key).with_context(|| {
-            format!(
-                "plugin not found '{}:{}'",
-                plugin_key.instance, plugin_key.id
-            )
+        let plugin = self.remote_plugins.get(&plugin_key).ok_or_else(|| {
+            ExecuteActionError::PluginNotFound {
+                instance: plugin_key.instance.clone(),
+                plugin_id: plugin_key.id.clone(),
+            }
         })?;
 
-        let member = plugin.metadata.members().get(action).with_context(|| {
-            format!(
-                "member '{}' not found on plugin '{}:{}'",
-                action, plugin_key.instance, plugin_key.id
-            )
+        let member = plugin.metadata.members().get(action).ok_or_else(|| {
+            ExecuteActionError::MemberNotFound {
+                instance: plugin_key.instance.clone(),
+                plugin_id: plugin_key.id.clone(),
+                member: action.to_owned(),
+            }
         })?;
 
         if member.member_type() != MemberType::Action {
-            anyhow::bail!(
-                "member '{}' not found on plugin '{}:{}'",
-                action,
-                plugin_key.instance,
-                plugin_key.id
-            );
+            return Err(ExecuteActionError::MemberNotFound {
+                instance: plugin_key.instance,
+                plugin_id: plugin_key.id,
+                member: action.to_owned(),
+            });
         }
 
         let buffer = encoding::write_value(member.value_type(), value);
@@ -696,19 +752,18 @@ impl Remote {
         component_id: &str,
         state: &str,
         value: &Bytes,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), HandleStateError> {
         let component = self
             .remote_components
             .get(component_id)
-            .context("component does not exist")?;
+            .ok_or(HandleStateError::ComponentNotFound)?;
 
         if component.instance != instance_name {
-            anyhow::bail!(
-                "component '{}' is on instance '{}', but is now updated from instance '{}'",
-                component_id,
-                component.instance,
-                instance_name
-            );
+            return Err(HandleStateError::InstanceMismatch {
+                component_id: component_id.to_owned(),
+                expected_instance: component.instance.clone(),
+                actual_instance: instance_name.to_owned(),
+            });
         }
 
         let plugin_key = RemotePluginKey {
@@ -716,36 +771,36 @@ impl Remote {
             id: component.plugin_id.clone(),
         };
 
-        let plugin = self.remote_plugins.get(&plugin_key).with_context(|| {
-            format!(
-                "plugin not found '{}:{}'",
-                plugin_key.instance, plugin_key.id
-            )
+        let plugin = self.remote_plugins.get(&plugin_key).ok_or_else(|| {
+            HandleStateError::PluginNotFound {
+                instance: plugin_key.instance.clone(),
+                plugin_id: plugin_key.id.clone(),
+            }
         })?;
 
-        let member = plugin.metadata.members().get(state).with_context(|| {
-            format!(
-                "member '{}' not found on plugin '{}:{}'",
-                state, plugin_key.instance, plugin_key.id
-            )
+        let member = plugin.metadata.members().get(state).ok_or_else(|| {
+            HandleStateError::MemberNotFound {
+                instance: plugin_key.instance.clone(),
+                plugin_id: plugin_key.id.clone(),
+                member: state.to_owned(),
+            }
         })?;
 
         if member.member_type() != MemberType::State {
-            anyhow::bail!(
-                "member '{}' not found on plugin '{}:{}'",
-                state,
-                plugin_key.instance,
-                plugin_key.id
-            );
+            return Err(HandleStateError::MemberNotFound {
+                instance: plugin_key.instance,
+                plugin_id: plugin_key.id,
+                member: state.to_owned(),
+            });
         }
 
-        let value = encoding::read_value(member.value_type(), value).with_context(|| {
-            format!(
-                "cannot read state '{}' value '{:?}' of type '{}'",
-                state,
-                value,
-                member.value_type()
-            )
+        let value = encoding::read_value(member.value_type(), value).map_err(|e| {
+            HandleStateError::ValueReadError {
+                state: state.to_owned(),
+                value: value.clone(),
+                ty: member.value_type().clone(),
+                error: e,
+            }
         })?;
 
         component.handle.state_changed(state.to_owned(), value);
@@ -758,18 +813,18 @@ impl Remote {
         component_id: &str,
         action: &str,
         value: &Bytes,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), ExecuteLocalActionError> {
         let component = self
             .local_components
             .get(component_id)
-            .context("component not found")?;
+            .ok_or(ExecuteLocalActionError::ComponentNotFound)?;
         let member = component
             .plugin
             .members()
             .get(action)
-            .context("member not found")?;
+            .ok_or(ExecuteLocalActionError::MemberNotFound)?;
         if member.member_type() != MemberType::Action {
-            anyhow::bail!("member is not an action");
+            return Err(ExecuteLocalActionError::MemberNotAction);
         }
 
         let value = encoding::read_value(member.value_type(), value)?;
