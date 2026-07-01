@@ -201,8 +201,8 @@ fn process_config(plugin_name: &syn::Ident, attr: &attributes::MylifeConfig) -> 
     let target_ident = &attr.ident;
 
     let setter = quote! {
-        |target: &mut #plugin_name, arg: plugin_runtime::runtime::ConfigValue| -> ::anyhow::Result<()> {
-            target.#target_ident = arg.try_into()?;
+        |target: &mut #plugin_name, arg: plugin_runtime::runtime::ConfigValue| -> std::result::Result<(), plugin_runtime::runtime::ConfigError> {
+            target.#target_ident = arg.try_into().map_err(|error| plugin_runtime::runtime::ConfigError::type_mismatch(#name, error))?;
 
             std::result::Result::Ok(())
         }
@@ -297,14 +297,15 @@ fn process_action(
     };
 
     let executor = quote! {
-        |target: &mut #plugin_name, arg: plugin_runtime::runtime::Value| -> ::anyhow::Result<()> {
+        |target: &mut #plugin_name, arg: plugin_runtime::runtime::Value| -> std::result::Result<(), plugin_runtime::runtime::PluginError> {
             use plugin_runtime::runtime::TypedTryInto;
 
             lazy_static::lazy_static! {
                 static ref RUNTIME_TYPE: plugin_runtime::metadata::Type = #r#type;
             }
 
-            let value: #var_type = arg.typed_try_into(&RUNTIME_TYPE)?;
+            let ty: &plugin_runtime::metadata::Type = &RUNTIME_TYPE;
+            let value: #var_type = arg.typed_try_into(ty).expect(&format!("Cannot convert action argument to type '{}'", ty));
             target.#target_ident(value)#end_ident;
 
             std::result::Result::Ok(())

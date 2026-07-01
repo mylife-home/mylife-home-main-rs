@@ -9,12 +9,14 @@ use std::{fmt, sync::Arc};
 /// MylifePluginHooks defines the lifecycle hooks a plugin author implements.
 /// These are the author-facing entry points, wrapped by the runtime machinery.
 pub trait MylifePluginHooks: Sized {
+    type Error: std::error::Error + Send + Sync + 'static;
+
     /// Creates a new instance with the given component id.
     fn new(id: &str, waker: WakeHandle) -> Self;
 
     /// Starts the instance once its config has been applied. Called after
     /// configuration, before any action is handled.
-    fn init(&mut self) -> anyhow::Result<()> {
+    fn init(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
 

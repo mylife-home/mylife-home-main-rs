@@ -1,9 +1,8 @@
-use anyhow::Context;
 use std::{collections::HashMap, fmt, sync::Arc};
 
 use crate::{
     MylifePlugin, WakeHandle,
-    runtime::{MylifeComponent, MylifePluginRuntime},
+    runtime::{ConfigError, MylifeComponent, MylifePluginRuntime, PluginError},
 };
 use common::components::{
     metadata::PluginMetadata,
@@ -63,7 +62,7 @@ pub struct StateRuntime<PluginType> {
 
 /// Applies a config value to the plugin instance.
 pub type ConfigRuntimeSetter<PluginType> =
-    fn(target: &mut PluginType, config: ConfigValue) -> anyhow::Result<()>;
+    fn(target: &mut PluginType, config: ConfigValue) -> Result<(), ConfigError>;
 /// Installs the listener invoked whenever a state member changes.
 pub type StateRuntimeRegister<PluginType> =
     fn(target: &mut PluginType, listener: Box<dyn Fn(Value) + Send + Sync>) -> ();
@@ -71,7 +70,7 @@ pub type StateRuntimeRegister<PluginType> =
 pub type StateRuntimeGetter<PluginType> = fn(target: &PluginType) -> Value;
 /// Executes an action on the plugin instance.
 pub type ActionRuntimeExecutor<PluginType> =
-    fn(target: &mut PluginType, action: Value) -> anyhow::Result<()>;
+    fn(target: &mut PluginType, action: Value) -> Result<(), PluginError>;
 
 /// PluginRuntimeAccess is the generated dispatch table for a plugin type: the
 /// typed setters, getters, and executors that bridge the erased Value world to
@@ -163,13 +162,13 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
         &self.plugin_metadata
     }
 
-    fn configure(&mut self, config: &Config) -> anyhow::Result<()> {
+    fn configure(&mut self, config: &Config) -> Result<(), ConfigError> {
         tracing::trace!(component_id = self.id, ?config, "configure");
 
         for (name, setter) in self.access.configs.iter() {
             let value = config
                 .get(name)
-                .context(format!("config '{name}' not found"))?
+                .ok_or_else(|| ConfigError::key_not_found(name))?
                 .clone();
 
             setter(&mut self.component, value)?;
@@ -178,8 +177,8 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
         Ok(())
     }
 
-    fn init(&mut self) -> anyhow::Result<()> {
-        self.component.init()?;
+    fn init(&mut self) -> Result<(), PluginError> {
+        self.component.init().map_err(PluginError::new)?;
 
         // Register after init, so that state changes are not trigger before.
         // The component actor will then publish all state at once.
@@ -202,7 +201,7 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
         (state.getter)(&self.component)
     }
 
-    fn execute_action(&mut self, name: &str, value: Value) -> anyhow::Result<()> {
+    fn execute_action(&mut self, name: &str, value: Value) -> Result<(), PluginError> {
         let handler =
             self.access.actions.get(name).unwrap_or_else(|| {
                 panic!("action '{}' not found on component '{}'", name, self.id)
@@ -214,6 +213,7 @@ impl<PluginType: MylifePlugin> MylifeComponent for ComponentImpl<PluginType> {
             ?value,
             "execute action"
         );
+
         handler(&mut self.component, value)
     }
 }

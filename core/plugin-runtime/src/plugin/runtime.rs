@@ -1,9 +1,55 @@
-use std::{fmt::Debug, sync::Arc};
+use std::{convert::Infallible, fmt::Debug, sync::Arc};
 
 use common::components::metadata;
 
 // re-exports for plugins
 pub use common::components::types::*;
+use thiserror::Error;
+
+/// ConfigError occurs when a config value fails to apply to a plugin instance.
+#[derive(Error, Debug)]
+pub enum ConfigError {
+    #[error("config key not found: '{0}'")]
+    KeyNotFound(String),
+
+    #[error("config value type mismatch for key '{key}': {error}")]
+    TypeMismatch {
+        key: String,
+        #[source]
+        error: ConfigValueConversionError,
+    },
+}
+
+impl ConfigError {
+    pub fn key_not_found(key: impl Into<String>) -> Self {
+        ConfigError::KeyNotFound(key.into())
+    }
+
+    pub fn type_mismatch(key: impl Into<String>, error: ConfigValueConversionError) -> Self {
+        ConfigError::TypeMismatch {
+            key: key.into(),
+            error,
+        }
+    }
+}
+
+/// PluginError occurs when something goes wrong in a plugin instance.
+#[derive(Error, Debug)]
+#[error(transparent)]
+pub struct PluginError(Box<dyn std::error::Error + Send + Sync + 'static>);
+
+impl PluginError {
+    /// Creates a new PluginError from a boxed error.
+    pub fn new<E: std::error::Error + Send + Sync + 'static>(error: E) -> Self {
+        PluginError(Box::new(error))
+    }
+}
+
+impl From<Infallible> for PluginError {
+    fn from(e: Infallible) -> Self {
+        match e {}
+    }
+}
 
 /// MylifePluginRuntime represents a plugin type: it carries the plugin
 /// metadata and acts as a factory for component instances.
@@ -30,10 +76,10 @@ pub trait MylifeComponent: Send {
     fn plugin(&self) -> &Arc<metadata::PluginMetadata>;
 
     /// Applies the instance configuration. Called once before init.
-    fn configure(&mut self, config: &Config) -> anyhow::Result<()>;
+    fn configure(&mut self, config: &Config) -> Result<(), ConfigError>;
 
     /// Starts the component once configured. Called before any action.
-    fn init(&mut self) -> anyhow::Result<()>;
+    fn init(&mut self) -> Result<(), PluginError>;
 
     /// Hook invoked by the actor to let the component drive its asynchronous
     /// work (network, timers, ...) outside of synchronous action handling.
@@ -43,5 +89,5 @@ pub trait MylifeComponent: Send {
     fn get_state(&self, name: &str) -> Value;
 
     /// Executes an action on the component.
-    fn execute_action(&mut self, name: &str, value: Value) -> anyhow::Result<()>;
+    fn execute_action(&mut self, name: &str, value: Value) -> Result<(), PluginError>;
 }

@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     fmt, mem,
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -22,6 +23,8 @@ pub struct ValueBinary {
 
 // impl Drop if terminate needed
 impl MylifePluginHooks for ValueBinary {
+    type Error = Infallible;
+
     fn new(id: &str, waker: WakeHandle) -> Self {
         ValueBinary {
             id: String::from(id),
@@ -31,7 +34,7 @@ impl MylifePluginHooks for ValueBinary {
         }
     }
 
-    fn init(&mut self) -> anyhow::Result<()> {
+    fn init(&mut self) -> Result<(), Self::Error> {
         self.state.set(self.config);
 
         tracing::debug!(
@@ -51,9 +54,9 @@ impl MylifePluginHooks for ValueBinary {
 
 #[mylife_actions]
 impl ValueBinary {
-    // can return anyhow::Result<()> or nothing
+    // can return Result<(), Self::Error> or nothing
     #[mylife_action(description = "set value to on")] // type=, name=
-    fn on(&mut self, arg: bool) -> anyhow::Result<()> {
+    fn on(&mut self, arg: bool) -> Result<(), Infallible> {
         if arg {
             //self.state.set(true);
             // showcase async work
