@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{
     MylifePlugin, MylifePluginHooks, State, WakeHandle,
@@ -21,11 +23,13 @@ struct PluginName {
 
 // impl Drop si besoin de terminate
 impl MylifePluginHooks for PluginName {
+    type Error = Infallible;
+    
     fn new(_id: &str, _waker: WakeHandle) -> Self {
         PluginName::default()
     }
 
-    fn init(&mut self) -> anyhow::Result<()> {
+    fn init(&mut self) -> Result<(), Infallible> {
         Ok(())
     }
 }

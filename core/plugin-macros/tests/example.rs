@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{
     MylifePlugin, MylifePluginHooks, State, WakeHandle,
@@ -35,6 +37,8 @@ struct ExamplePlugin {
 }
 
 impl MylifePluginHooks for ExamplePlugin {
+    type Error = Infallible;
+
     fn new(id: &str, _waker: WakeHandle) -> Self {
         ExamplePlugin {
             id: String::from(id),
@@ -43,7 +47,7 @@ impl MylifePluginHooks for ExamplePlugin {
         }
     }
 
-    fn init(&mut self) -> anyhow::Result<()> {
+    fn init(&mut self) -> Result<(), Infallible> {
         // This is executed after configuration has been set
         Ok(())
     }
@@ -72,13 +76,13 @@ impl ExamplePlugin {
 // Can be another impl or same impl
 #[mylife_actions]
 impl ExamplePlugin {
-    // can return anyhow::Result<()>
+    // can return Result<(), Self::Error>
     #[mylife_action(
         name = "action2", // Optional, infered from function name
         description = "action description", // Optional
         r#type = "bool"
     )]
-    fn action2(&mut self, _arg: bool) -> anyhow::Result<()> {
+    fn action2(&mut self, _arg: bool) -> Result<(), Infallible> {
         // Do something
         Ok(())
     }

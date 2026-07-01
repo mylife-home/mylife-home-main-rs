@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use plugin_macros::MylifePlugin;
 use plugin_runtime::{
     MylifePlugin, MylifePluginHooks, State, WakeHandle,
@@ -46,11 +48,13 @@ struct TestPlugin {
 }
 
 impl MylifePluginHooks for TestPlugin {
+    type Error = Infallible;
+    
     fn new(_id: &str, _waker: WakeHandle) -> Self {
         TestPlugin::default()
     }
 
-    fn init(&mut self) -> anyhow::Result<()> {
+    fn init(&mut self) -> Result<(), Infallible> {
         Ok(())
     }
 }
@@ -66,7 +70,7 @@ fn test_typing() {
         PluginUsage::Logic,
     );
 
-    expected.add_state("stateRange", Some("state description"), Type::Range(0, 42));
+    expected.add_state("stateRange", Some("state description"), Type::Range(0..=42));
     expected.add_state("stateText", Some("state description"), Type::Text);
     expected.add_state("stateFloat", Some("state description"), Type::Float);
     expected.add_state("stateBool", Some("state description"), Type::Bool);
