@@ -56,15 +56,16 @@ impl RpcHandle {
     }
 
     /// Register a new RPC service
-    pub async fn register_service<Impl, Request, Reply>(
+    pub async fn register_service<Impl, Request, Reply, Error>(
         &self,
         address: impl Into<String>,
         implementation: Impl,
     ) -> Result<(), CallError<RpcServiceAddError>>
     where
-        Impl: RpcService<Request = Request, Reply = Reply> + 'static,
+        Impl: RpcService<Request = Request, Reply = Reply, Error = Error> + 'static,
         Request: DeserializeOwned + 'static,
         Reply: Serialize + 'static,
+        Error: std::error::Error + 'static,
     {
         self.0
             .call(ServiceAdd {
@@ -132,6 +133,15 @@ struct Rpc {
     client_calls: Vec<ClientCall>,
 }
 
+/// Error that occurs when the rpc actor fails to start or operate correctly.
+#[derive(Debug, Error)]
+pub enum RpcActorError {
+    #[error("Failed to lookup actor handle: {0}")]
+    HandleLookupError(#[from] HandleLookupError),
+    #[error("Failed to set interval: {0}")]
+    SchedulerError(#[from] CallError),
+}
+
 impl Rpc {
     fn clean_client_calls(&mut self) {
         self.client_calls.retain(|call| !call.is_terminated());
@@ -140,7 +150,7 @@ impl Rpc {
 
 impl Actor for Rpc {
     type Args = RpcConfig;
-    type Error = anyhow::Error;
+    type Error = RpcActorError;
 
     async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         let client = ClientHandle::new()?;
@@ -343,11 +353,12 @@ struct TimeoutCheck;
 pub trait RpcService: Sync + Send {
     type Request;
     type Reply;
+    type Error;
 
     fn handle(
         &self,
         request: Self::Request,
-    ) -> impl Future<Output = anyhow::Result<Self::Reply>> + Send;
+    ) -> impl Future<Output = Result<Self::Reply, Self::Error>> + Send;
 }
 
 trait ServiceAddImpl: fmt::Debug + Send + Sync {
@@ -359,28 +370,31 @@ trait ServiceAddImpl: fmt::Debug + Send + Sync {
     ) -> Box<dyn ServiceHandler>;
 }
 
-struct TypedServiceAddImpl<Request, Reply, Impl>(Option<Impl>)
+struct TypedServiceAddImpl<Request, Reply, Error, Impl>(Option<Impl>)
 where
-    Impl: RpcService<Request = Request, Reply = Reply> + 'static,
-    Request: DeserializeOwned + 'static,
-    Reply: Serialize + 'static;
-
-impl<Request, Reply, Impl> TypedServiceAddImpl<Request, Reply, Impl>
-where
-    Impl: RpcService<Request = Request, Reply = Reply> + 'static,
+    Impl: RpcService<Request = Request, Reply = Reply, Error = Error> + 'static,
     Request: DeserializeOwned + 'static,
     Reply: Serialize + 'static,
+    Error: std::error::Error + 'static;
+
+impl<Request, Reply, Error, Impl> TypedServiceAddImpl<Request, Reply, Error, Impl>
+where
+    Impl: RpcService<Request = Request, Reply = Reply, Error = Error> + 'static,
+    Request: DeserializeOwned + 'static,
+    Reply: Serialize + 'static,
+    Error: std::error::Error + 'static,
 {
     pub fn new(implementation: Impl) -> Self {
         Self(Some(implementation))
     }
 }
 
-impl<Request, Reply, Impl> fmt::Debug for TypedServiceAddImpl<Request, Reply, Impl>
+impl<Request, Reply, Error, Impl> fmt::Debug for TypedServiceAddImpl<Request, Reply, Error, Impl>
 where
-    Impl: RpcService<Request = Request, Reply = Reply> + 'static,
+    Impl: RpcService<Request = Request, Reply = Reply, Error = Error> + 'static,
     Request: DeserializeOwned + 'static,
     Reply: Serialize + 'static,
+    Error: std::error::Error + 'static,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TypedServiceAddImpl")
@@ -388,11 +402,13 @@ where
     }
 }
 
-impl<Request, Reply, Impl> ServiceAddImpl for TypedServiceAddImpl<Request, Reply, Impl>
+impl<Request, Reply, Error, Impl> ServiceAddImpl
+    for TypedServiceAddImpl<Request, Reply, Error, Impl>
 where
-    Impl: RpcService<Request = Request, Reply = Reply> + 'static,
+    Impl: RpcService<Request = Request, Reply = Reply, Error = Error> + 'static,
     Request: DeserializeOwned + 'static,
     Reply: Serialize + 'static,
+    Error: std::error::Error + 'static,
 {
     fn create_handler(
         &mut self,
@@ -415,11 +431,12 @@ trait ServiceHandler: Send + Sync {
     fn on_message(self: Arc<Self>, msg: &client::Message);
 }
 
-struct TypedServiceHandler<Request, Reply, Impl>
+struct TypedServiceHandler<Request, Reply, Error, Impl>
 where
-    Impl: RpcService<Request = Request, Reply = Reply> + 'static,
+    Impl: RpcService<Request = Request, Reply = Reply, Error = Error> + 'static,
     Request: DeserializeOwned + 'static,
     Reply: Serialize + 'static,
+    Error: std::error::Error + 'static,
 {
     client: ClientHandle,
     address: String,
@@ -427,11 +444,12 @@ where
     implementation: Impl,
 }
 
-impl<Request, Reply, Impl> Drop for TypedServiceHandler<Request, Reply, Impl>
+impl<Request, Reply, Error, Impl> Drop for TypedServiceHandler<Request, Reply, Error, Impl>
 where
-    Impl: RpcService<Request = Request, Reply = Reply> + 'static,
+    Impl: RpcService<Request = Request, Reply = Reply, Error = Error> + 'static,
     Request: DeserializeOwned + 'static,
     Reply: Serialize + 'static,
+    Error: std::error::Error + 'static,
 {
     fn drop(&mut self) {
         self.client.unsubscribe(self.topic.clone().into());
@@ -439,11 +457,13 @@ where
 }
 
 #[async_trait]
-impl<Request, Reply, Impl> ServiceHandler for TypedServiceHandler<Request, Reply, Impl>
+impl<Request, Reply, Error, Impl> ServiceHandler
+    for TypedServiceHandler<Request, Reply, Error, Impl>
 where
-    Impl: RpcService<Request = Request, Reply = Reply> + 'static,
+    Impl: RpcService<Request = Request, Reply = Reply, Error = Error> + 'static,
     Request: DeserializeOwned + 'static,
     Reply: Serialize + 'static,
+    Error: std::error::Error + 'static,
 {
     fn on_message(self: Arc<Self>, msg: &client::Message) {
         if msg.topic() == self.topic.as_str() {
@@ -456,11 +476,22 @@ where
     }
 }
 
-impl<Request, Reply, Impl> TypedServiceHandler<Request, Reply, Impl>
+#[derive(Debug, Error)]
+enum RpcServiceCallError<E: std::error::Error> {
+    #[error("cannot deserialize request: {0}")]
+    Deserialization(#[source] serde_json::Error),
+    #[error("cannot serialize reply: {0}")]
+    Serialization(#[source] serde_json::Error),
+    #[error("handler error: {0}")]
+    HandlerError(#[source] E),
+}
+
+impl<Request, Reply, Error, Impl> TypedServiceHandler<Request, Reply, Error, Impl>
 where
-    Impl: RpcService<Request = Request, Reply = Reply> + 'static,
+    Impl: RpcService<Request = Request, Reply = Reply, Error = Error> + 'static,
     Request: DeserializeOwned + 'static,
     Reply: Serialize + 'static,
+    Error: std::error::Error + 'static,
 {
     pub fn new(
         client: ClientHandle,
@@ -519,10 +550,16 @@ where
             .publish(Topic::from_raw(reply_topic), payload, false);
     }
 
-    async fn handle_request(&self, input: Value) -> anyhow::Result<Value> {
-        let request = serde_json::from_value::<Request>(input)?;
-        let reply = self.implementation.handle(request).await?;
-        let output = serde_json::to_value(reply)?;
+    async fn handle_request(&self, input: Value) -> Result<Value, RpcServiceCallError<Error>> {
+        let request = serde_json::from_value::<Request>(input)
+            .map_err(|e| RpcServiceCallError::Deserialization(e))?;
+        let reply = self
+            .implementation
+            .handle(request)
+            .await
+            .map_err(|e| RpcServiceCallError::HandlerError(e))?;
+        let output =
+            serde_json::to_value(reply).map_err(|e| RpcServiceCallError::Serialization(e))?;
 
         Ok(output)
     }
@@ -675,14 +712,20 @@ struct RpcError {
     stacktrace: String,
 }
 
-impl From<anyhow::Error> for RpcError {
-    fn from(error: anyhow::Error) -> Self {
-        // anyhow::Error
-        // - Display formats error message only
-        // - Debug formats all the chain
+impl<E: std::error::Error + 'static> From<RpcServiceCallError<E>> for RpcError {
+    fn from(error: RpcServiceCallError<E>) -> Self {
+        // capture the error chain
+        use std::error::Error;
+        let mut stacktrace = format!("{}", error);
+        let mut source = error.source();
+        while let Some(err) = source {
+            stacktrace.push_str(&format!("\ncaused by: {}", err));
+            source = err.source();
+        }
+
         RpcError {
             message: format!("{}", error),
-            stacktrace: format!("{:?}", error),
+            stacktrace,
         }
     }
 }

@@ -76,7 +76,7 @@ struct InstanceInfoPublisher {
     hardware_info: HashMap<String, String>,
 }
 
-/// Error that occurs when the client actor fails to start or operate correctly.
+/// Error that occurs when the instance info publisher actor fails to start or operate correctly.
 #[derive(Debug, Error)]
 pub enum InstanceInfoPublisherActorError {
     #[error("Failed to lookup actor handle: {0}")]

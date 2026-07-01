@@ -11,8 +11,10 @@ use crate::{
     components::{
         metadata::{MemberType, PluginMetadata},
         types::Value,
-    }, utils::actors::{
-        ActorHandle, CallError, HandleLookupError, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub,
+    },
+    utils::actors::{
+        ActorHandle, CallError, HandleLookupError, PublisherHandle, SpawnedActor, SpawnedActors,
+        SubscriberHandle, spawn_pubsub,
     },
 };
 
@@ -83,7 +85,10 @@ impl RegistryHandle {
     }
 
     /// Remove a component, waiting for the registry reply
-    pub async fn component_remove(&self, component_id: String) -> Result<(), CallError<ComponentRemoveError>> {
+    pub async fn component_remove(
+        &self,
+        component_id: String,
+    ) -> Result<(), CallError<ComponentRemoveError>> {
         self.actor.call(ComponentRemove { component_id }).await?;
 
         Ok(())
@@ -464,10 +469,7 @@ pub enum ComponentAddErrorKind {
     #[error("component already exists")]
     AlreadyExists,
     #[error("plugin '{instance}:{plugin_id}' does not exist")]
-    PluginNotFound {
-        instance: String,
-        plugin_id: String
-    },
+    PluginNotFound { instance: String, plugin_id: String },
 }
 
 impl message::Message<ComponentAdd> for Registry {
@@ -805,7 +807,10 @@ impl InstanceData {
         let id = plugin.id().to_owned();
 
         if self.plugins.contains_key(&id) {
-            return Err(PluginAddError::already_exists(self.instance_name.to_string(), id));
+            return Err(PluginAddError::already_exists(
+                self.instance_name.to_string(),
+                id,
+            ));
         }
 
         self.plugins
@@ -813,7 +818,10 @@ impl InstanceData {
         Ok(())
     }
 
-    pub fn remove_plugin(&mut self, plugin_id: &str) -> Result<Arc<PluginMetadata>, PluginRemoveError> {
+    pub fn remove_plugin(
+        &mut self,
+        plugin_id: &str,
+    ) -> Result<Arc<PluginMetadata>, PluginRemoveError> {
         let Some(plugin) = self.plugins.get(plugin_id) else {
             return Err(PluginRemoveError::not_found(
                 self.instance_name.to_string(),
