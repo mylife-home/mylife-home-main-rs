@@ -8,12 +8,12 @@ edition = "2024"
 [lib]
 
 [dependencies]
-anyhow = { workspace = true }
 common = { path = "../../common" }
 convert_case = { workspace = true }
 lazy_static = { workspace = true }
 regex = { workspace = true }
 inventory = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [build-dependencies]

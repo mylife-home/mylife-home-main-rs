@@ -9,8 +9,8 @@ use crate::{
     utils::{
         self,
         actors::{
-            ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle,
-            spawn_pubsub,
+            ActorHandle, HandleLookupError, PublisherHandle, SpawnedActor, SpawnedActors,
+            SubscriberHandle, spawn_pubsub,
         },
         logger::{LogEvent, LogSink, LogValue, LoggerHandle as SysLoggerHandle},
     },
@@ -37,7 +37,7 @@ pub struct LoggerHandle {
 
 impl LoggerHandle {
     /// Create a new access
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new() -> Result<Self, HandleLookupError> {
         Ok(Self {
             on_remote_record: SubscriberHandle::from_name(REMOTE_RECORDS_PUBSUB_NAME)?,
         })
@@ -81,7 +81,7 @@ impl Logger {
 
 impl Actor for Logger {
     type Args = LoggerConfig;
-    type Error = anyhow::Error;
+    type Error = HandleLookupError;
 
     async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         let sys_logger = SysLogger(ActorHandle::from_ref(actor_ref.clone(), LOGGER_NAME));
@@ -182,7 +182,7 @@ struct LogPublisher {
 }
 
 impl LogPublisher {
-    pub fn new(instance_name: Arc<String>) -> anyhow::Result<Self> {
+    pub fn new(instance_name: Arc<String>) -> Result<Self, HandleLookupError> {
         Ok(Self {
             client: ClientHandle::new()?,
             instance_name,
@@ -264,7 +264,7 @@ struct Remote {
 }
 
 impl Remote {
-    pub fn new(actor_ref: ActorRef<Logger>) -> anyhow::Result<Self> {
+    pub fn new(actor_ref: ActorRef<Logger>) -> Result<Self, HandleLookupError> {
         let _self = Self {
             client: ClientHandle::new()?,
             publisher: PublisherHandle::from_name(REMOTE_RECORDS_PUBSUB_NAME)?,

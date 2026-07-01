@@ -1,6 +1,6 @@
 // Note : this also test runtime, but is easier to implement here than in plugin_runtime
 
-use std::sync::Mutex;
+use std::{convert::Infallible, sync::Mutex};
 
 use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{
@@ -51,11 +51,13 @@ struct TestPlugin {
 }
 
 impl MylifePluginHooks for TestPlugin {
+    type Error = Infallible;
+    
     fn new(_id: &str, _waker: WakeHandle) -> Self {
         TestPlugin::default()
     }
 
-    fn init(&mut self) -> anyhow::Result<()> {
+    fn init(&mut self) -> Result<(), Infallible> {
         HISTORY.add(HistoryItem::Init(self.config_value.clone()));
 
         Ok(())
@@ -78,7 +80,7 @@ impl TestPlugin {
 #[test]
 fn test_behavior() {
     let runtime: Box<dyn MylifePluginRuntime> = TestPlugin::runtime();
-    let mut component = runtime.create("comp-id", Box::new(|| {}));
+    let mut component = runtime.create("comp-id", Box::new(|| {}), Box::new(|_, _| {}));
 
     HISTORY.clear();
 
@@ -104,14 +106,14 @@ fn test_behavior() {
 
     // on state
     assert_eq!(
-        component.get_state("stateValue").unwrap(),
+        component.get_state("stateValue"),
         Value::Bool(false)
     );
     component
         .execute_action("setState", Value::Bool(true))
         .unwrap();
     assert_eq!(
-        component.get_state("stateValue").unwrap(),
+        component.get_state("stateValue"),
         Value::Bool(true)
     );
 }

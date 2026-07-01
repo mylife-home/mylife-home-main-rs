@@ -6,11 +6,13 @@ use std::{
 use bytes::Bytes;
 use kameo::{message, prelude::*};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::{
     bus::client::{self, ClientHandle, TopicBuilder},
     utils::actors::{
-        ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub,
+        ActorHandle, HandleLookupError, PublisherHandle, SpawnedActor, SpawnedActors,
+        SubscriberHandle, spawn_pubsub,
     },
 };
 
@@ -36,7 +38,7 @@ pub struct MetadataHandle {
 
 impl MetadataHandle {
     /// Create a new access
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new() -> Result<Self, HandleLookupError> {
         Ok(Self {
             actor: ActorHandle::from_name(METADATA_NAME)?,
             on_remote_update: SubscriberHandle::from_name(REMOTE_UPDATE_PUBSUB_NAME)?,
@@ -44,7 +46,7 @@ impl MetadataHandle {
     }
 
     /// Set metadata on the local instance
-    pub fn set<T: Serialize>(&self, path: &str, value: &T) -> anyhow::Result<()> {
+    pub fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<(), serde_json::error::Error> {
         let buff = serde_json::to_vec(value)?;
 
         self.actor.send(LocalUpdate {
@@ -92,7 +94,7 @@ struct Metadata {
 
 impl Actor for Metadata {
     type Args = MetadataConfig;
-    type Error = anyhow::Error;
+    type Error = HandleLookupError;
 
     async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         let client = ClientHandle::new()?;
@@ -217,7 +219,7 @@ struct Remote {
 }
 
 impl Remote {
-    pub fn new(client: ClientHandle) -> anyhow::Result<Self> {
+    pub fn new(client: ClientHandle) -> Result<Self, HandleLookupError> {
         Ok(Self {
             metadata: HashMap::new(),
             on_update: PublisherHandle::from_name(REMOTE_UPDATE_PUBSUB_NAME)?,
@@ -310,6 +312,14 @@ pub struct RemoteUpdate {
     value: Option<Arc<Bytes>>,
 }
 
+#[derive(Debug, Error)]
+pub enum MetadataReadError {
+    #[error("deserialize error: {0}")]
+    Serde(#[from] serde_json::error::Error),
+    #[error("no value")]
+    NoValue,
+}
+
 impl RemoteUpdate {
     pub fn instance(&self) -> &str {
         &self.instance
@@ -323,9 +333,9 @@ impl RemoteUpdate {
         self.value.is_some()
     }
 
-    pub fn read_value<T: for<'a> Deserialize<'a>>(&self) -> anyhow::Result<T> {
+    pub fn read_value<T: for<'a> Deserialize<'a>>(&self) -> Result<T, MetadataReadError> {
         let Some(raw) = &self.value else {
-            anyhow::bail!("no value");
+            return Err(MetadataReadError::NoValue);
         };
 
         let value = serde_json::from_slice::<T>(raw)?;

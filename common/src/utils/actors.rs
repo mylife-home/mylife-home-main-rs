@@ -1,20 +1,60 @@
 use std::{any::type_name, borrow::Cow, fmt, time::Duration};
 
-use anyhow::Context;
 use async_trait::async_trait;
 use kameo::{
     Actor, Reply,
     actor::{ActorRef, Spawn, WeakActorRef},
-    error::SendError,
+    error::{Infallible, RegistryError},
     mailbox, message,
 };
 use kameo_actors::{
     pubsub::{self, PubSub},
     scheduler::{self, Scheduler},
 };
+use thiserror::Error;
 use tokio::task::AbortHandle;
 
 const SCHEDULER_NAME: &str = "scheduler";
+
+/// Error that occurs when looking up an actor handle by name
+#[derive(Debug, Error)]
+pub enum HandleLookupError {
+    #[error("registry error: {0}")]
+    RegistryError(#[from] RegistryError),
+    #[error("actor '{0}' not found")]
+    ActorNotFound(String),
+}
+
+#[derive(Debug, Error)]
+pub enum CallError<E = Infallible> {
+    /// The actor isn't running.
+    #[error("actor is not running")]
+    ActorNotRunning,
+    /// The actor panicked or was stopped before a reply could be received.
+    #[error("actor stopped before reply could be received")]
+    ActorStopped,
+    /// The actors mailbox is full.
+    #[error("actor's mailbox is full")]
+    MailboxFull,
+    /// An error returned by the actor's message handler.
+    #[error("error in actor's message handler: {0}")]
+    HandlerError(#[from] E),
+    /// Timed out waiting for a reply.
+    #[error("timeout waiting for reply")]
+    Timeout,
+}
+
+impl<A, E> From<kameo::error::SendError<A, E>> for CallError<E> {
+    fn from(value: kameo::error::SendError<A, E>) -> Self {
+        match value {
+            kameo::error::SendError::ActorNotRunning(_) => CallError::ActorNotRunning,
+            kameo::error::SendError::ActorStopped => CallError::ActorStopped,
+            kameo::error::SendError::MailboxFull(_) => CallError::MailboxFull,
+            kameo::error::SendError::HandlerError(e) => CallError::HandlerError(e),
+            kameo::error::SendError::Timeout(_) => CallError::Timeout,
+        }
+    }
+}
 
 /// Handle to an actor
 pub struct ActorHandle<Actor: kameo::Actor> {
@@ -48,10 +88,10 @@ impl<Actor: kameo::Actor> ActorHandle<Actor> {
     }
 
     /// Create a handle to an actor given its registry name
-    pub fn from_name(name: impl Into<Cow<'static, str>>) -> anyhow::Result<Self> {
+    pub fn from_name(name: impl Into<Cow<'static, str>>) -> Result<Self, HandleLookupError> {
         let name = name.into();
-        let actor_ref =
-            ActorRef::lookup(&name)?.with_context(|| format!("actor '{}' not found", name))?;
+        let actor_ref = ActorRef::lookup(&name)?
+            .ok_or_else(|| HandleLookupError::ActorNotFound(name.to_string()))?;
 
         Ok(Self { name, actor_ref })
     }
@@ -73,13 +113,14 @@ impl<Actor: kameo::Actor> ActorHandle<Actor> {
         msg: Message,
     ) -> Result<
         <<Actor as message::Message<Message>>::Reply as Reply>::Ok,
-        SendError<Message, <<Actor as message::Message<Message>>::Reply as Reply>::Error>,
+        CallError<<<Actor as message::Message<Message>>::Reply as Reply>::Error>,
     >
     where
         Actor: message::Message<Message>,
         Message: Send + 'static,
     {
-        self.actor_ref.ask(msg).try_send().await
+        let res = self.actor_ref.ask(msg).try_send().await?;
+        Ok(res)
     }
 }
 
@@ -89,7 +130,7 @@ pub struct PublisherHandle<Message: Send + Clone + 'static>(ActorHandle<PubSub<M
 
 impl<Message: Send + Clone + 'static> PublisherHandle<Message> {
     /// Create a handle to a PubSub actor given its registry name
-    pub fn from_name(name: impl Into<Cow<'static, str>>) -> anyhow::Result<Self> {
+    pub fn from_name(name: impl Into<Cow<'static, str>>) -> Result<Self, HandleLookupError> {
         Ok(Self(ActorHandle::from_name(name)?))
     }
 
@@ -104,7 +145,7 @@ pub struct SubscriberHandle<M: Send + Clone + 'static>(ActorHandle<PubSub<M>>);
 
 impl<M: Send + Clone + 'static> SubscriberHandle<M> {
     /// Create a handle to a PubSub actor given its registry name
-    pub fn from_name(name: impl Into<Cow<'static, str>>) -> anyhow::Result<Self> {
+    pub fn from_name(name: impl Into<Cow<'static, str>>) -> Result<Self, HandleLookupError> {
         Ok(Self(ActorHandle::from_name(name)?))
     }
 
@@ -130,7 +171,7 @@ pub struct SchedulerHandle(ActorHandle<Scheduler>);
 
 impl SchedulerHandle {
     /// Create a handle to the scheduler
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new() -> Result<Self, HandleLookupError> {
         Ok(Self(ActorHandle::from_name(SCHEDULER_NAME)?))
     }
 
@@ -139,7 +180,7 @@ impl SchedulerHandle {
         actor_ref: WeakActorRef<A>,
         duration: Duration,
         message: M,
-    ) -> anyhow::Result<AbortHandle>
+    ) -> Result<AbortHandle, CallError>
     where
         A: Actor + message::Message<M>,
         M: Send + Sync + 'static,
@@ -156,7 +197,7 @@ impl SchedulerHandle {
         actor_ref: WeakActorRef<A>,
         duration: Duration,
         message: M,
-    ) -> anyhow::Result<AbortHandle>
+    ) -> Result<AbortHandle, CallError>
     where
         A: Actor + message::Message<M>,
         M: Send + Sync + Clone + 'static,
@@ -214,7 +255,7 @@ impl SpawnedActor {
 
 #[async_trait]
 trait UntypedSpawnedActor {
-    fn register(&self, name: Cow<'static, str>) -> anyhow::Result<()>;
+    fn register(&self, name: Cow<'static, str>) -> Result<(), RegistryError>;
     async fn terminate(&self);
 }
 
@@ -226,7 +267,7 @@ where
     TActor: Actor,
     <TActor as Actor>::Error: fmt::Display,
 {
-    fn register(&self, name: Cow<'static, str>) -> anyhow::Result<()> {
+    fn register(&self, name: Cow<'static, str>) -> Result<(), RegistryError> {
         self.0.register(name)?;
 
         Ok(())

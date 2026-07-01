@@ -4,13 +4,16 @@ use std::{
 };
 
 use crate::modules;
-use anyhow::Context;
-use common::components::registry::{ComponentExecuteAction, RegistryHandle};
+use common::{
+    components::registry::{self, ComponentExecuteAction, RegistryHandle},
+    utils::actors::CallError,
+};
 use kameo::{Actor, error::HookError, message, prelude::*};
 use plugin_runtime::{
     metadata::MemberType,
-    runtime::{Config, MylifeComponent, Value},
+    runtime::{Config, ConfigError, MylifeComponent, Value},
 };
+use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub struct LocalComponentHandle {
@@ -18,9 +21,22 @@ pub struct LocalComponentHandle {
     actor_ref: ActorRef<LocalComponent>,
 }
 
+#[derive(Debug, Error)]
+#[error("failed to start component '{id}': {error}")]
+pub struct ComponentStartError {
+    id: String,
+    error: Arc<LocalComponentActorError>,
+}
+
+impl ComponentStartError {
+    pub fn new(id: String, error: Arc<LocalComponentActorError>) -> Self {
+        Self { id, error }
+    }
+}
+
 impl LocalComponentHandle {
     /// Start local component
-    pub async fn start(config: LocalComponentConfig) -> anyhow::Result<Self> {
+    pub async fn start(config: LocalComponentConfig) -> Result<Self, ComponentStartError> {
         let id = config.id.clone();
         let actor_ref = LocalComponent::spawn(config);
 
@@ -30,8 +46,7 @@ impl LocalComponentHandle {
                     panic!("component '{}' panicked at startup: {}", id, p);
                 }
                 HookError::Error(e) => {
-                    // cannot reuse Arc<anyhow::Error>
-                    anyhow::bail!("component '{}' failed to start: {}", id, e);
+                    return Err(ComponentStartError::new(id, e));
                 }
             }
         }
@@ -56,7 +71,6 @@ impl LocalComponentHandle {
                     panic!("component '{}' actor panicked at shutdown: {}", self.id, p);
                 }
                 HookError::Error(error) => {
-                    // cannot reuse Arc<anyhow::Error>
                     tracing::error!(
                         ?error,
                         component_id = self.id,
@@ -90,9 +104,67 @@ pub struct LocalComponentConfig {
     pub registry: RegistryHandle,
 }
 
+/// LocalComponentActorError occurs when something goes wrong in a local component actor.
+#[derive(Debug, Error)]
+pub enum LocalComponentActorError {
+    #[error("plugin '{0}' not found")]
+    PluginNotFound(String),
+
+    #[error("component add error: {0}")]
+    ComponentAddError(#[from] CallError<registry::ComponentAddError>),
+
+    #[error("failed to configure component '{id}': {error}")]
+    ConfigureError {
+        id: String,
+        #[source]
+        error: ConfigError,
+    },
+
+    #[error("failed to init component '{id}': {error}")]
+    InitError {
+        id: String,
+        #[source]
+        error: plugin_runtime::runtime::PluginError,
+    },
+
+    #[error("component remove error: {0}")]
+    ComponentRemoveError(#[from] CallError<registry::ComponentRemoveError>),
+}
+
+impl LocalComponentActorError {
+    pub fn plugin_not_found(plugin: impl Into<String>) -> Arc<Self> {
+        Arc::new(LocalComponentActorError::PluginNotFound(plugin.into()))
+    }
+
+    pub fn component_add_error(error: CallError<registry::ComponentAddError>) -> Arc<Self> {
+        Arc::new(LocalComponentActorError::ComponentAddError(error))
+    }
+
+    pub fn component_remove_error(error: CallError<registry::ComponentRemoveError>) -> Arc<Self> {
+        Arc::new(LocalComponentActorError::ComponentRemoveError(error))
+    }
+
+    pub fn configure_error(id: impl Into<String>, error: ConfigError) -> Arc<Self> {
+        Arc::new(LocalComponentActorError::ConfigureError {
+            id: id.into(),
+            error,
+        })
+    }
+
+    pub fn init_error(
+        id: impl Into<String>,
+        error: plugin_runtime::runtime::PluginError,
+    ) -> Arc<Self> {
+        Arc::new(LocalComponentActorError::InitError {
+            id: id.into(),
+            error,
+        })
+    }
+}
+
 impl Actor for LocalComponent {
     type Args = LocalComponentConfig;
-    type Error = Arc<anyhow::Error>;
+    type Error = Arc<LocalComponentActorError>;
 
     async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         let LocalComponentConfig {
@@ -104,7 +176,7 @@ impl Actor for LocalComponent {
 
         let plugin = modules::registry()
             .plugin(&plugin)
-            .with_context(|| format!("plugin '{}' not found", plugin))?;
+            .ok_or_else(|| LocalComponentActorError::plugin_not_found(plugin.clone()))?;
 
         // We cannot fail anymore, create component now on the registry to get its handle
         let handle = registry
@@ -114,7 +186,8 @@ impl Actor for LocalComponent {
                 id.clone(),
                 actor_ref.clone().recipient(),
             )
-            .await?;
+            .await
+            .map_err(|error| LocalComponentActorError::component_add_error(error))?;
 
         let waker = {
             let id = id.clone();
@@ -159,7 +232,7 @@ impl Actor for LocalComponent {
                 );
             }
 
-            Err(e).with_context(|| format!("failed to configure component '{}'", id))?;
+            return Err(LocalComponentActorError::configure_error(id, e));
         }
 
         if let Err(e) = component_impl.init() {
@@ -171,7 +244,7 @@ impl Actor for LocalComponent {
                 );
             }
 
-            Err(e).with_context(|| format!("failed to init component '{}'", id))?;
+            return Err(LocalComponentActorError::init_error(id, e));
         }
 
         // publish all state immediately
@@ -194,7 +267,10 @@ impl Actor for LocalComponent {
         _actor_ref: WeakActorRef<Self>,
         _reason: ActorStopReason,
     ) -> Result<(), Self::Error> {
-        self.registry.component_remove(self.id.clone()).await?;
+        self.registry
+            .component_remove(self.id.clone())
+            .await
+            .map_err(|error| LocalComponentActorError::component_remove_error(error))?;
 
         Ok(())
     }
