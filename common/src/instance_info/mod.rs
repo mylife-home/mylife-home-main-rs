@@ -4,12 +4,15 @@ use std::{
     env, fs,
     time::{Duration, SystemTime},
 };
+use thiserror::Error;
 
 use crate::{
     bus::metadata::MetadataHandle,
     utils::{
         self,
-        actors::{ActorHandle, SchedulerHandle, SpawnedActor, SpawnedActors},
+        actors::{
+            ActorHandle, CallError, HandleLookupError, SchedulerHandle, SpawnedActor, SpawnedActors,
+        },
     },
 };
 
@@ -73,9 +76,18 @@ struct InstanceInfoPublisher {
     hardware_info: HashMap<String, String>,
 }
 
+/// Error that occurs when the client actor fails to start or operate correctly.
+#[derive(Debug, Error)]
+pub enum InstanceInfoPublisherActorError {
+    #[error("Failed to lookup actor handle: {0}")]
+    HandleLookupError(#[from] HandleLookupError),
+    #[error("Failed to set interval: {0}")]
+    SchedulerError(#[from] CallError),
+}
+
 impl Actor for InstanceInfoPublisher {
     type Args = ();
-    type Error = anyhow::Error;
+    type Error = InstanceInfoPublisherActorError;
 
     async fn on_start(_config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         let metadata = MetadataHandle::new()?;

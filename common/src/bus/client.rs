@@ -2,6 +2,7 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use kameo::{message, prelude::*};
+use thiserror::Error;
 use tokio::{select, sync::broadcast, time::timeout};
 
 use crate::{
@@ -10,7 +11,8 @@ use crate::{
         mqtt::{MqttClient, MqttEvent},
     },
     utils::actors::{
-        ActorHandle, PublisherHandle, SpawnedActor, SpawnedActors, SubscriberHandle, spawn_pubsub,
+        ActorHandle, HandleLookupError, PublisherHandle, SpawnedActor, SpawnedActors,
+        SubscriberHandle, spawn_pubsub,
     },
 };
 
@@ -47,7 +49,7 @@ pub struct ClientHandle {
 
 impl ClientHandle {
     /// Create a new access
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new() -> Result<Self, HandleLookupError> {
         Ok(Self {
             actor: ActorHandle::from_name(CLIENT_NAME)?,
             on_message: SubscriberHandle::from_name(MESSAGE_PUBSUB_NAME)?,
@@ -128,14 +130,23 @@ struct Client {
     on_instance_online: PublisherHandle<InstanceOnline>,
 }
 
+/// Error that occurs when the client actor fails to start or operate correctly.
+#[derive(Debug, Error)]
+pub enum ClientActorError {
+    #[error("Failed to lookup actor handle: {0}")]
+    HandleLookupError(#[from] HandleLookupError),
+    #[error("MQTT error: {0}")]
+    MqttError(#[from] mqtt::MqttError),
+}
+
 impl Actor for Client {
     type Args = ClientConfig;
-    type Error = anyhow::Error;
+    type Error = ClientActorError;
 
     async fn on_start(
         config: ClientConfig,
-        _actor_ref: kameo::prelude::ActorRef<Self>,
-    ) -> anyhow::Result<Self> {
+        _actor_ref: ActorRef<Self>,
+    ) -> Result<Self, ClientActorError> {
         let last_will = mqtt::LastWill {
             topic: format!("{}/online", config.instance_name),
             payload: Bytes::new(),
@@ -166,13 +177,10 @@ impl Actor for Client {
         &mut self,
         _actor_ref: WeakActorRef<Self>,
         _reason: ActorStopReason,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), ClientActorError> {
         self.mark_offline();
 
-        let Some(mqtt_client) = self.mqtt_client.take() else {
-            anyhow::bail!("incorrect state");
-        };
-
+        let mqtt_client = self.mqtt_client.take().expect("incorrect state");
         mqtt_client.shutdown().await;
 
         Ok(())
@@ -182,7 +190,7 @@ impl Actor for Client {
         &mut self,
         _actor_ref: WeakActorRef<Self>,
         mailbox_rx: &mut MailboxReceiver<Self>,
-    ) -> anyhow::Result<Option<mailbox::Signal<Self>>> {
+    ) -> Result<Option<mailbox::Signal<Self>>, ClientActorError> {
         loop {
             select! {
                 event = self.get_next_event() => {
@@ -284,8 +292,7 @@ impl Client {
     async fn process_event(&mut self, event: MqttEvent) {
         match event {
             MqttEvent::Connected => {
-                if let Err(error) = self.clear_resident_state().await {
-                    tracing::error!(?error, "Failed to clear resident state");
+                if !self.clear_resident_state().await {
                     return;
                 }
 
@@ -323,14 +330,12 @@ impl Client {
         }
     }
 
-    async fn clear_resident_state(&mut self) -> anyhow::Result<()> {
+    async fn clear_resident_state(&mut self) -> bool {
         self.mark_offline();
 
         // register on self state, and remove on every message received
         // wait 1 sec after last message receive
-        let Some(mqtt_client) = &self.mqtt_client else {
-            anyhow::bail!("mqtt client not set");
-        };
+        let mqtt_client = self.mqtt_client.as_ref().expect("mqtt client not set");
 
         let _temp_sub = TempSubscription::new(mqtt_client, format!("{}/#", self.instance_name));
 
@@ -344,10 +349,12 @@ impl Client {
 
                         continue;
                     } else {
-                        anyhow::bail!(
-                            "Received non-message event while clearing resident state: {:?}",
-                            event
+                        tracing::error!(
+                            ?event,
+                            "failed to clear resident state: received non-message event while clearing resident state",
                         );
+
+                        return false;
                     }
                 }
                 Ok(Err(e)) => match e {
@@ -356,13 +363,13 @@ impl Client {
                         continue;
                     }
                     broadcast::error::RecvError::Closed => {
-                        anyhow::bail!("MQTT event channel closed");
+                        panic!("MQTT event channel closed");
                     }
                 },
                 Err(_) => {
                     // timeout, no message received for 1 second, consider resident state cleared
                     tracing::trace!("resident state cleared");
-                    return Ok(());
+                    return true;
                 }
             }
         }
