@@ -98,8 +98,6 @@ impl<PluginType: MylifePlugin> PluginRuntimeAccess<PluginType> {
     }
 }
 
-// FIXME: remove Arc<Mutex<>>
-
 /// ComponentImpl is a live plugin instance: it wraps the user plugin value,
 /// holds its id and metadata, and exposes the Component interface by routing
 /// through the shared access table.
