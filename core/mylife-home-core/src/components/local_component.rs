@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fmt::{self},
     sync::Arc,
 };
@@ -10,10 +11,15 @@ use common::{
 };
 use kameo::{Actor, error::HookError, message, prelude::*};
 use plugin_runtime::{
-    metadata::MemberType,
-    runtime::{Config, ConfigError, MylifeComponent, Value},
+    metadata::{ConfigType, MemberType, PluginMetadata},
+    runtime::{Config, ConfigError, ConfigValue, MylifeComponent, Value},
 };
 use thiserror::Error;
+
+/// Untyped config.
+/// It will be typed later when we know plugin definition
+/// (we cannot determinate for instance if we need to deserialize a number value to a float or int)
+pub type RawConfig = HashMap<String, serde_json::Value>;
 
 #[derive(Debug, Clone)]
 pub struct LocalComponentHandle {
@@ -100,7 +106,7 @@ impl fmt::Debug for LocalComponent {
 pub struct LocalComponentConfig {
     pub id: String,
     pub plugin: String,
-    pub config: Config,
+    pub config: RawConfig,
     pub registry: RegistryHandle,
 }
 
@@ -112,6 +118,12 @@ pub enum LocalComponentActorError {
 
     #[error("component add error: {0}")]
     ComponentAddError(#[from] CallError<registry::ComponentAddError>),
+
+    #[error("failed to translate component '{id}' config: {error}")]
+    ConfigTranslationError {
+        id: String,
+        error: ConfigTranslationError,
+    },
 
     #[error("failed to configure component '{id}': {error}")]
     ConfigureError {
@@ -144,6 +156,16 @@ impl LocalComponentActorError {
         Arc::new(LocalComponentActorError::ComponentRemoveError(error))
     }
 
+    pub fn config_translation_error(
+        id: impl Into<String>,
+        error: ConfigTranslationError,
+    ) -> Arc<Self> {
+        Arc::new(LocalComponentActorError::ConfigTranslationError {
+            id: id.into(),
+            error,
+        })
+    }
+
     pub fn configure_error(id: impl Into<String>, error: ConfigError) -> Arc<Self> {
         Arc::new(LocalComponentActorError::ConfigureError {
             id: id.into(),
@@ -162,6 +184,66 @@ impl LocalComponentActorError {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum ConfigTranslationError {
+    #[error("missing config key '{0}'")]
+    KeyMissing(String),
+
+    #[error("bad config value '{value:?}': cannot convert into type '{ty:?}' for key '{key}'")]
+    BadValue {
+        key: String,
+        ty: ConfigType,
+        value: serde_json::Value,
+    },
+}
+
+impl ConfigTranslationError {
+    pub fn key_missing(key: impl Into<String>) -> ConfigTranslationError {
+        ConfigTranslationError::KeyMissing(key.into())
+    }
+
+    pub fn bad_value(
+        key: impl Into<String>,
+        ty: ConfigType,
+        value: &serde_json::Value,
+    ) -> ConfigTranslationError {
+        ConfigTranslationError::BadValue {
+            key: key.into(),
+            ty,
+            value: value.clone(),
+        }
+    }
+}
+
+impl LocalComponent {
+    fn translate_config(
+        metadata: &PluginMetadata,
+        raw_config: RawConfig,
+    ) -> Result<Config, ConfigTranslationError> {
+        let mut config = Config::new();
+
+        for (key, item) in metadata.config() {
+            let Some(raw_value) = raw_config.get(key) else {
+                return Err(ConfigTranslationError::key_missing(key));
+            };
+
+            let ty = item.value_type();
+
+            let value = match ty {
+                ConfigType::String => raw_value.as_str().map(|v| ConfigValue::String(v.to_owned())),
+                ConfigType::Bool => raw_value.as_bool().map(|v| ConfigValue::Bool(v)),
+                ConfigType::Integer => raw_value.as_i64().map(|v| ConfigValue::Integer(v)),
+                ConfigType::Float => raw_value.as_f64().map(|v| ConfigValue::Float(v)),
+            };
+
+            let value = value.ok_or_else(|| ConfigTranslationError::bad_value(key, ty, raw_value))?;
+            config.insert(key.clone(), value);
+        }
+
+        Ok(config)
+    }
+}
+
 impl Actor for LocalComponent {
     type Args = LocalComponentConfig;
     type Error = Arc<LocalComponentActorError>;
@@ -177,6 +259,9 @@ impl Actor for LocalComponent {
         let plugin = modules::registry()
             .plugin(&plugin)
             .ok_or_else(|| LocalComponentActorError::plugin_not_found(plugin.clone()))?;
+
+        let config = Self::translate_config(plugin.metadata(), config)
+            .map_err(|error| LocalComponentActorError::config_translation_error(id.clone(), error))?;
 
         // We cannot fail anymore, create component now on the registry to get its handle
         let handle = registry

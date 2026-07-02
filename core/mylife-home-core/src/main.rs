@@ -4,7 +4,6 @@ use common::{
     ActorsConfig, instance_info,
     utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
 };
-use plugin_runtime::runtime::{Config, ConfigValue};
 
 use crate::components::LocalComponentsHandle;
 
@@ -62,8 +61,8 @@ async fn main() {
 }
 
 async fn create_component() {
-    let mut config = Config::new();
-    config.insert("config".to_string(), ConfigValue::Bool(false));
+    let mut config = HashMap::new();
+    config.insert("config".to_string(), serde_json::Value::from(false));
 
     let handle = LocalComponentsHandle::new().expect("failed to create handle");
 

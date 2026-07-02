@@ -1,18 +1,17 @@
 use std::collections::HashMap;
 
 use common::{
+    bus::rpc::RpcService,
     components::registry::{self, RegistryHandle},
     utils::actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
 };
 use kameo::{Actor, message};
-use plugin_runtime::runtime::Config;
 use thiserror::Error;
 
 use crate::{
     components::local_component::{
-        ComponentStartError, LocalComponentConfig, LocalComponentHandle,
-    },
-    modules,
+        ComponentStartError, LocalComponentConfig, LocalComponentHandle, RawConfig,
+    }, modules,
 };
 
 mod local_component;
@@ -34,7 +33,7 @@ impl LocalComponentsHandle {
         &self,
         component_id: String,
         plugin_id: String,
-        config: Config,
+        config: RawConfig,
     ) -> Result<(), CallError<LocalComponentAddError>> {
         self.0
             .call(ComponentAdd {
@@ -164,7 +163,7 @@ impl message::Message<ComponentRemove> for LocalComponents {
 struct ComponentAdd {
     component_id: String,
     plugin_id: String,
-    config: Config,
+    config: RawConfig,
 }
 
 #[derive(Clone, Debug)]
