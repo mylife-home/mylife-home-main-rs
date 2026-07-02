@@ -228,9 +228,15 @@ impl message::Message<ServiceAdd> for Rpc {
         self.services.insert(
             msg.address.clone(),
             msg.service
-                .create_handler(self.client.clone(), msg.address, &self.instance_name)
+                .create_handler(
+                    self.client.clone(),
+                    msg.address.clone(),
+                    &self.instance_name,
+                )
                 .into(),
         );
+
+        tracing::debug!(address = msg.address, "rpc service added");
 
         Ok(())
     }
@@ -253,6 +259,8 @@ impl message::Message<ServiceRemove> for Rpc {
         if self.services.remove(&msg.address).is_none() {
             return Err(RpcServiceRemoveError::NotFound(msg.address));
         }
+
+        tracing::debug!(address = msg.address, "rpc service removed");
 
         Ok(())
     }

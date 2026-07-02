@@ -16,6 +16,7 @@ kameo = { workspace = true, features = ["console"] }
 kameo_actors = { workspace = true }
 plugin_runtime = { path = "../plugin-runtime" }
 plugin_logic_base = { path = "../plugins/logic-base" }
+serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 thiserror = { workspace = true }

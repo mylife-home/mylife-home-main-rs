@@ -230,13 +230,16 @@ impl LocalComponent {
             let ty = item.value_type();
 
             let value = match ty {
-                ConfigType::String => raw_value.as_str().map(|v| ConfigValue::String(v.to_owned())),
+                ConfigType::String => raw_value
+                    .as_str()
+                    .map(|v| ConfigValue::String(v.to_owned())),
                 ConfigType::Bool => raw_value.as_bool().map(|v| ConfigValue::Bool(v)),
                 ConfigType::Integer => raw_value.as_i64().map(|v| ConfigValue::Integer(v)),
                 ConfigType::Float => raw_value.as_f64().map(|v| ConfigValue::Float(v)),
             };
 
-            let value = value.ok_or_else(|| ConfigTranslationError::bad_value(key, ty, raw_value))?;
+            let value =
+                value.ok_or_else(|| ConfigTranslationError::bad_value(key, ty, raw_value))?;
             config.insert(key.clone(), value);
         }
 
@@ -260,8 +263,9 @@ impl Actor for LocalComponent {
             .plugin(&plugin)
             .ok_or_else(|| LocalComponentActorError::plugin_not_found(plugin.clone()))?;
 
-        let config = Self::translate_config(plugin.metadata(), config)
-            .map_err(|error| LocalComponentActorError::config_translation_error(id.clone(), error))?;
+        let config = Self::translate_config(plugin.metadata(), config).map_err(|error| {
+            LocalComponentActorError::config_translation_error(id.clone(), error)
+        })?;
 
         // We cannot fail anymore, create component now on the registry to get its handle
         let handle = registry
