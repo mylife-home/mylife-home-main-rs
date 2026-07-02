@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::{
     ActorsConfig,
@@ -57,7 +57,7 @@ pub async fn init(actors: &mut SpawnedActors, instance_name: Arc<String>, config
     .await;
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct BusConfig {
     server_address: String,
 }
