@@ -20,9 +20,7 @@ impl RpcService for ComponentAddRpcService {
     type Error = CallError<LocalComponentAddError>;
 
     async fn handle(&self, request: Self::Request) -> Result<Self::Reply, Self::Error> {
-        self.0
-            .component_add(request.id, request.plugin, request.config)
-            .await
+        self.0.component_add(request).await
     }
 }
 

@@ -5,7 +5,7 @@ use common::{
     utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
 };
 
-use crate::components::LocalComponentsHandle;
+use crate::{components::{ComponentConfig, LocalComponentsHandle}, store::StoreConfig};
 
 mod components;
 mod modules;
@@ -34,23 +34,12 @@ async fn main() {
     )
     .await;
 
+    store::init_actor(&mut actors, StoreConfig{}).await;
     components::init_actor(&mut actors).await;
     components::init_plugins().await;
 
     let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
     instance_info_handle.add_component("core", env!("CARGO_PKG_VERSION"));
-
-    // build module list
-    let mut modules = HashMap::new();
-
-    for plugin in modules::registry().plugins() {
-        let meta = plugin.metadata();
-        modules.insert(meta.module(), meta.version());
-    }
-
-    for (name, version) in modules {
-        instance_info_handle.add_component(&format!("core-plugin.{}", name), version);
-    }
 
     create_component().await;
 
@@ -68,11 +57,11 @@ async fn create_component() {
     let handle = LocalComponentsHandle::new().expect("failed to create handle");
 
     handle
-        .component_add(
-            "comp-id".to_owned(),
-            "logic-base.value-binary".to_owned(),
+        .component_add(ComponentConfig {
+            id: "comp-id".to_owned(),
+            plugin: "logic-base.value-binary".to_owned(),
             config,
-        )
+        })
         .await
         .expect("could not create component");
 }

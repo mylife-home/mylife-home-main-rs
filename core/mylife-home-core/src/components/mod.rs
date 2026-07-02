@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
 use common::{
-    bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError},
-    components::registry::{self, RegistryHandle},
-    instance_info::InstanceInfoPublisherHandle,
-    utils::actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
+    bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError}, components::registry::{self, RegistryHandle}, instance_info::{self, InstanceInfoPublisherHandle}, utils::actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
 };
 use kameo::{Actor, message, prelude::*};
 use serde::{Deserialize, Serialize};
@@ -48,17 +45,9 @@ impl LocalComponentsHandle {
     /// Add a component, waiting for the manager's reply
     pub async fn component_add(
         &self,
-        component_id: String,
-        plugin_id: String,
-        config: RawConfig,
+        config: ComponentConfig,
     ) -> Result<(), CallError<LocalComponentAddError>> {
-        self.0
-            .call(ComponentAdd {
-                component_id,
-                plugin_id,
-                config,
-            })
-            .await?;
+        self.0.call(ComponentAdd(config)).await?;
 
         Ok(())
     }
@@ -68,7 +57,7 @@ impl LocalComponentsHandle {
         &self,
         component_id: String,
     ) -> Result<(), CallError<LocalComponentRemoveError>> {
-        self.0.call(ComponentRemove { component_id }).await?;
+        self.0.call(ComponentRemove(component_id)).await?;
 
         Ok(())
     }
@@ -92,13 +81,23 @@ pub async fn init_actor(actors: &mut SpawnedActors) {
 pub async fn init_plugins() {
     // plugin are here forever, we can just register them
     let registry = registry::RegistryHandle::new().expect("Cannot get registry access");
+    let mut modules = HashMap::new();
 
     for plugin in modules::registry().plugins() {
         registry
             .plugin_add(None, plugin.metadata().clone())
             .await
-            .expect("Could not registry plugin")
+            .expect("Could not registry plugin");
+
+        let meta = plugin.metadata();
+        modules.insert(meta.module(), meta.version());
     }
+
+    let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
+    for (name, version) in modules {
+        instance_info_handle.add_component(&format!("core-plugin.{}", name), version);
+    }
+
 }
 
 struct LocalComponents {
@@ -116,6 +115,10 @@ enum LocalComponentsActorError {
     RpcServiceAddError(#[from] CallError<RpcServiceAddError>),
     #[error("Failed to remove rpc service: {0}")]
     RpcServiceRemoveError(#[from] CallError<RpcServiceRemoveError>),
+    #[error("Failed to call store: {0}")]
+    StoreError(#[source] CallError),
+    #[error("failed to add component: {0}")]
+    LocalComponentAddError(#[from] LocalComponentAddError),
 }
 
 impl Actor for LocalComponents {
@@ -125,14 +128,21 @@ impl Actor for LocalComponents {
     async fn on_start(_args: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         let instance_info = InstanceInfoPublisherHandle::new();
 
-        let _self = Self {
+        let mut _self = Self {
             registry: RegistryHandle::new()?,
             rpc: RpcHandle::new()?,
             store: StoreHandle::new()?,
             components: HashMap::new(),
         };
 
-        // TODO: load components
+        for config in _self
+            .store
+            .component_list()
+            .await
+            .map_err(|e| LocalComponentsActorError::StoreError(e))?
+        {
+            _self.add_component(config).await?;
+        }
 
         let self_handle = LocalComponentsHandle::from_actor_ref(actor_ref);
 
@@ -181,11 +191,7 @@ impl Actor for LocalComponents {
 }
 
 #[derive(Clone, Debug)]
-struct ComponentAdd {
-    component_id: String,
-    plugin_id: String,
-    config: RawConfig,
-}
+struct ComponentAdd(ComponentConfig);
 
 #[derive(Debug, Error)]
 pub enum LocalComponentAddError {
@@ -204,10 +210,19 @@ impl message::Message<ComponentAdd> for LocalComponents {
         msg: ComponentAdd,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let config = LocalComponentConfig {
-            id: msg.component_id.clone(),
-            plugin: msg.plugin_id.clone(),
-            config: msg.config.clone(),
+        self.add_component(msg.0).await
+    }
+}
+
+impl LocalComponents {
+    async fn add_component(
+        &mut self,
+        config: ComponentConfig,
+    ) -> Result<(), LocalComponentAddError> {
+        let local_config = LocalComponentConfig {
+            id: config.id.clone(),
+            plugin: config.plugin.clone(),
+            config: config.config.clone(),
             registry: self.registry.clone(),
         };
 
@@ -217,21 +232,21 @@ impl message::Message<ComponentAdd> for LocalComponents {
             return Err(LocalComponentAddError::AlreadyExists(id));
         }
 
-        let component = LocalComponentHandle::start(config).await?;
+        let component = LocalComponentHandle::start(local_config).await?;
         self.components.insert(id, component);
 
         if let Err(error) = self
             .store
             .component_set(ComponentConfig {
-                id: msg.component_id.clone(),
-                plugin: msg.plugin_id,
-                config: msg.config,
+                id: config.id.clone(),
+                plugin: config.plugin,
+                config: config.config,
             })
             .await
         {
             tracing::error!(
                 ?error,
-                component_id = msg.component_id,
+                component_id = config.id,
                 "could not add component to store"
             );
         }
@@ -241,9 +256,7 @@ impl message::Message<ComponentAdd> for LocalComponents {
 }
 
 #[derive(Clone, Debug)]
-struct ComponentRemove {
-    component_id: String,
-}
+struct ComponentRemove(String);
 
 #[derive(Debug, Error)]
 pub enum LocalComponentRemoveError {
@@ -259,17 +272,17 @@ impl message::Message<ComponentRemove> for LocalComponents {
         msg: ComponentRemove,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let Some(component) = self.components.get(&msg.component_id) else {
-            return Err(LocalComponentRemoveError::NotFound(msg.component_id));
+        let Some(component) = self.components.get(&msg.0) else {
+            return Err(LocalComponentRemoveError::NotFound(msg.0));
         };
 
         component.terminate().await;
-        self.components.remove(&msg.component_id);
+        self.components.remove(&msg.0);
 
-        if let Err(error) = self.store.component_clear(&msg.component_id).await {
+        if let Err(error) = self.store.component_clear(&msg.0).await {
             tracing::error!(
                 ?error,
-                component_id = msg.component_id,
+                component_id = msg.0,
                 "could not remove component from store"
             );
         }
