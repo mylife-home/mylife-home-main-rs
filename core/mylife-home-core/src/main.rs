@@ -1,9 +1,8 @@
-use std::{collections::HashMap, time::Duration};
-
-use tokio::time::sleep;
+use std::collections::HashMap;
 
 use common::{
-    ActorsConfig, instance_info, utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
+    ActorsConfig, instance_info,
+    utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
 };
 use plugin_runtime::runtime::{Config, ConfigValue};
 
@@ -19,12 +18,11 @@ mod modules_include {
 
 #[tokio::main]
 async fn main() {
-    logger::init(true);
-    modules::init();
     config::init("core.toml");
-    let console = kameo::console::serve("127.0.0.1:9999").await.expect("could not start kameo console");
+    logger::init();
+    modules::init();
 
-    let mut actors = SpawnedActors::new();
+    let mut actors = SpawnedActors::new().await;
 
     common::init(
         &mut actors,
@@ -61,7 +59,6 @@ async fn main() {
     delete_component().await;
 
     actors.terminate().await;
-    console.shutdown();
 }
 
 async fn create_component() {

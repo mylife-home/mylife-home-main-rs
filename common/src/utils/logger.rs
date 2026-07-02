@@ -18,6 +18,8 @@ use tracing_subscriber::{
     registry::LookupSpan,
 };
 
+use crate::utils::{ObservabilityConfig, config};
+
 /// A consumer of fanned-out log events (MQTT forwarder, syslog, ...).
 /// `emit` is called synchronously from the layer, so impls must not block:
 /// the MQTT sink sends to the bus mailbox and returns.
@@ -61,13 +63,15 @@ static SINKS: LazyLock<Arc<Sinks>> = LazyLock::new(|| {
 });
 
 /// Installs the global subscriber. Call once, early. Sinks are added separately.
-pub fn init(console: bool) {
+pub fn init() {
+    let config: ObservabilityConfig = config::section("observability");
+    
     let fanout = FanoutLayer {
         sinks: SINKS.clone(),
     };
     let registry = tracing_subscriber::registry().with(fanout);
 
-    if console {
+    if config.logger_output_console {
         registry.with(console_layer()).init();
     } else {
         registry.init();

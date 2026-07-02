@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use kameo::{
     Actor, Reply,
     actor::{ActorRef, Spawn, WeakActorRef},
+    console::ConsoleHandle,
     error::{Infallible, RegistryError},
     mailbox, message,
 };
@@ -11,8 +12,11 @@ use kameo_actors::{
     pubsub::{self, PubSub},
     scheduler::{self, Scheduler},
 };
+use serde::Deserialize;
 use thiserror::Error;
 use tokio::task::AbortHandle;
+
+use crate::utils::{ObservabilityConfig, config};
 
 const SCHEDULER_NAME: &str = "scheduler";
 
@@ -288,22 +292,49 @@ where
     }
 }
 
-pub struct SpawnedActors(Vec<SpawnedActor>);
+pub struct SpawnedActors {
+    console: Option<ConsoleHandle>,
+    actors: Vec<SpawnedActor>,
+}
 
 impl SpawnedActors {
-    pub fn new() -> Self {
-        Self(Vec::new())
+    pub async fn new() -> Self {
+        let config: ObservabilityConfig = config::section("observability");
+        
+        let console = if let Some(address) = config.kameo_console_listen_address {
+            Some(
+                kameo::console::serve(&address)
+                    .await
+                    .expect("could not start kameo console"),
+            )
+        } else {
+            None
+        };
+
+        Self {
+            console,
+            actors: Vec::new(),
+        }
     }
 
     pub fn add(&mut self, actor: SpawnedActor) {
-        self.0.push(actor);
+        self.actors.push(actor);
     }
 
     pub async fn terminate(&mut self) {
-        for actor in self.0.iter().rev() {
+        for actor in self.actors.iter().rev() {
             actor.terminate().await;
         }
 
-        self.0.clear();
+        self.actors.clear();
+
+        if let Some(console) = self.console.take() {
+            console.shutdown();
+        }
     }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ActorsConfig {
+    kameo_console_listen_address: String,
 }
