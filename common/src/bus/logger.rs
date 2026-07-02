@@ -233,7 +233,6 @@ impl LogPublisher {
             message += &parts.join(", ");
         }
 
-        // TODO: format KV
         let record = LogRecord {
             name: record.event.target,
             instance_name: (*self.instance_name).clone(),
