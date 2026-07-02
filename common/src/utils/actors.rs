@@ -333,8 +333,3 @@ impl SpawnedActors {
         }
     }
 }
-
-#[derive(Debug, Clone, Deserialize)]
-struct ActorsConfig {
-    kameo_console_listen_address: String,
-}
