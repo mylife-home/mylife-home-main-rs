@@ -20,8 +20,6 @@ Then each plugin can have a MessageSender instance, which can be used in another
 
 ## TODO
 
-common:
-  - kameo console? -> bump kameo/kameo_actors
 core:
 - bindings
 - component manager: rpc service + store
