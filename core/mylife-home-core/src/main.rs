@@ -9,6 +9,7 @@ use crate::components::LocalComponentsHandle;
 
 mod components;
 mod modules;
+mod store;
 
 mod modules_include {
     #![allow(unused_imports)]

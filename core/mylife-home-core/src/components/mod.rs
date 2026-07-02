@@ -15,6 +15,7 @@ use crate::{
         ComponentStartError, LocalComponentConfig, LocalComponentHandle, RawConfig,
     },
     modules,
+    store::StoreHandle,
 };
 
 mod local_component;
@@ -23,11 +24,11 @@ mod rpc_services;
 const LOCAL_COMPONENTS_NAME: &str = "components.local";
 
 /// Configuration to setup one component
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentConfig {
-    id: String,
-    plugin: String,
-    config: RawConfig,
+    pub id: String,
+    pub plugin: String,
+    pub config: RawConfig,
 }
 
 /// Client access to the registry actor
@@ -73,7 +74,7 @@ impl LocalComponentsHandle {
     }
 
     /// Get components list
-    pub async fn component_list(&self) -> Result<Vec<ComponentConfig>, CallError> {
+    pub async fn component_list(&self) -> Result<Vec<ComponentConfig>, CallError<CallError>> {
         let list = self.0.call(ComponentList).await?;
 
         Ok(list)
@@ -103,6 +104,7 @@ pub async fn init_plugins() {
 struct LocalComponents {
     registry: RegistryHandle,
     rpc: RpcHandle,
+    store: StoreHandle,
     components: HashMap<String, LocalComponentHandle>,
 }
 
@@ -126,8 +128,11 @@ impl Actor for LocalComponents {
         let _self = Self {
             registry: RegistryHandle::new()?,
             rpc: RpcHandle::new()?,
+            store: StoreHandle::new()?,
             components: HashMap::new(),
         };
+
+        // TODO: load components
 
         let self_handle = LocalComponentsHandle::from_actor_ref(actor_ref);
 
@@ -200,9 +205,9 @@ impl message::Message<ComponentAdd> for LocalComponents {
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let config = LocalComponentConfig {
-            id: msg.component_id,
-            plugin: msg.plugin_id,
-            config: msg.config,
+            id: msg.component_id.clone(),
+            plugin: msg.plugin_id.clone(),
+            config: msg.config.clone(),
             registry: self.registry.clone(),
         };
 
@@ -214,6 +219,22 @@ impl message::Message<ComponentAdd> for LocalComponents {
 
         let component = LocalComponentHandle::start(config).await?;
         self.components.insert(id, component);
+
+        if let Err(error) = self
+            .store
+            .component_set(ComponentConfig {
+                id: msg.component_id.clone(),
+                plugin: msg.plugin_id,
+                config: msg.config,
+            })
+            .await
+        {
+            tracing::error!(
+                ?error,
+                component_id = msg.component_id,
+                "could not add component to store"
+            );
+        }
 
         Ok(())
     }
@@ -245,6 +266,14 @@ impl message::Message<ComponentRemove> for LocalComponents {
         component.terminate().await;
         self.components.remove(&msg.component_id);
 
+        if let Err(error) = self.store.component_clear(&msg.component_id).await {
+            tracing::error!(
+                ?error,
+                component_id = msg.component_id,
+                "could not remove component from store"
+            );
+        }
+
         Ok(())
     }
 }
@@ -253,14 +282,14 @@ impl message::Message<ComponentRemove> for LocalComponents {
 struct ComponentList;
 
 impl message::Message<ComponentList> for LocalComponents {
-    type Reply = Vec<ComponentConfig>;
+    type Reply = Result<Vec<ComponentConfig>, CallError>;
 
     async fn handle(
         &mut self,
         _msg: ComponentList,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        // TODO
-        Vec::new()
+        // We rely on the store for the config + plugin instead of keeping a copy just for this call
+        self.store.component_list().await
     }
 }

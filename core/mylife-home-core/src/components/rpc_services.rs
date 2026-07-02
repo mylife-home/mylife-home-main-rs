@@ -62,7 +62,7 @@ impl ComponentListRpcService {
 impl RpcService for ComponentListRpcService {
     type Request = ();
     type Reply = Vec<ComponentConfig>;
-    type Error = CallError;
+    type Error = CallError<CallError>;
 
     async fn handle(&self, _request: Self::Request) -> Result<Self::Reply, Self::Error> {
         self.0.component_list().await
