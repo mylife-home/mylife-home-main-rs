@@ -3,8 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use tokio::time::sleep;
 
 use common::{
-    ActorsConfig, instance_info,
-    utils::{actors::SpawnedActors, config, logger},
+    ActorsConfig, instance_info, utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
 };
 use plugin_runtime::runtime::{Config, ConfigValue};
 
@@ -57,13 +56,10 @@ async fn main() {
 
     create_component().await;
 
-    sleep(Duration::from_secs(5000)).await;
+    wait_for_shutdown_signal().await;
 
     delete_component().await;
 
-    sleep(Duration::from_secs(5)).await;
-
-    // shutdown
     actors.terminate().await;
     console.shutdown();
 }
