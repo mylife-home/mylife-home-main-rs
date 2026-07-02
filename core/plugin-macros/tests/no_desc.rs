@@ -23,7 +23,7 @@ struct TestPlugin {
 
 impl MylifePluginHooks for TestPlugin {
     type Error = Infallible;
-    
+
     fn new(_id: &str, _waker: WakeHandle) -> Self {
         TestPlugin::default()
     }

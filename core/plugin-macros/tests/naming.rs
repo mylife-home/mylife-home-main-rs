@@ -24,7 +24,7 @@ struct PluginName {
 // impl Drop si besoin de terminate
 impl MylifePluginHooks for PluginName {
     type Error = Infallible;
-    
+
     fn new(_id: &str, _waker: WakeHandle) -> Self {
         PluginName::default()
     }

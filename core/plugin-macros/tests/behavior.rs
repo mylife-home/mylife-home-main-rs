@@ -52,7 +52,7 @@ struct TestPlugin {
 
 impl MylifePluginHooks for TestPlugin {
     type Error = Infallible;
-    
+
     fn new(_id: &str, _waker: WakeHandle) -> Self {
         TestPlugin::default()
     }
@@ -105,15 +105,9 @@ fn test_behavior() {
     );
 
     // on state
-    assert_eq!(
-        component.get_state("stateValue"),
-        Value::Bool(false)
-    );
+    assert_eq!(component.get_state("stateValue"), Value::Bool(false));
     component
         .execute_action("setState", Value::Bool(true))
         .unwrap();
-    assert_eq!(
-        component.get_state("stateValue"),
-        Value::Bool(true)
-    );
+    assert_eq!(component.get_state("stateValue"), Value::Bool(true));
 }
