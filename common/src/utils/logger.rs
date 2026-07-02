@@ -65,7 +65,7 @@ static SINKS: LazyLock<Arc<Sinks>> = LazyLock::new(|| {
 /// Installs the global subscriber. Call once, early. Sinks are added separately.
 pub fn init() {
     let config: ObservabilityConfig = config::section("observability");
-    
+
     let fanout = FanoutLayer {
         sinks: SINKS.clone(),
     };

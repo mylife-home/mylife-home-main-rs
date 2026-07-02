@@ -12,7 +12,6 @@ use kameo_actors::{
     pubsub::{self, PubSub},
     scheduler::{self, Scheduler},
 };
-use serde::Deserialize;
 use thiserror::Error;
 use tokio::task::AbortHandle;
 
@@ -300,7 +299,7 @@ pub struct SpawnedActors {
 impl SpawnedActors {
     pub async fn new() -> Self {
         let config: ObservabilityConfig = config::section("observability");
-        
+
         let console = if let Some(address) = config.kameo_console_listen_address {
             Some(
                 kameo::console::serve(&address)
