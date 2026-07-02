@@ -23,6 +23,7 @@ async fn main() {
     logger::init(true);
     modules::init();
     config::init("core.toml");
+    let console = kameo::console::serve("127.0.0.1:9999").await.expect("could not start kameo console");
 
     let mut actors = SpawnedActors::new();
 
@@ -64,6 +65,7 @@ async fn main() {
 
     // shutdown
     actors.terminate().await;
+    console.shutdown();
 }
 
 async fn create_component() {

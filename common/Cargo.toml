@@ -8,7 +8,7 @@ async-trait = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
-kameo = { workspace = true }
+kameo = { workspace = true, features = ["console"] }
 kameo_actors = { workspace = true }
 lazy_static = { workspace = true }
 mqttbytes = { workspace = true }
