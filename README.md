@@ -21,7 +21,6 @@ Then each plugin can have a MessageSender instance, which can be used in another
 ## TODO
 
 core:
+- component manager: store + component list
 - bindings
-- component manager: rpc service + store
 - plugins
-- component
