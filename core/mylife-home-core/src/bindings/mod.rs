@@ -2,15 +2,22 @@ use std::{collections::HashMap, fmt};
 
 use common::{
     bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError},
-    components::registry::{self, RegistryHandle},
-    instance_info::{self, InstanceInfoPublisherHandle},
-    utils::actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
+    components::registry::{
+        self, ComponentGetError, ComponentGetErrorKind, ComponentInfo, RegistryHandle,
+    },
+    instance_info::InstanceInfoPublisherHandle,
+    utils::actors::{
+        ActorHandle,
+        CallError::{self, HandlerError},
+        HandleLookupError, SpawnedActor, SpawnedActors,
+    },
 };
 use kameo::{Actor, message, prelude::*};
+use plugin_runtime::runtime::Value;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{modules, store::StoreHandle};
+use crate::store::StoreHandle;
 
 mod rpc_services;
 
@@ -77,32 +84,11 @@ impl BindingsHandle {
 }
 
 pub async fn init_actor(actors: &mut SpawnedActors) {
-    let (local_bindings, _) = SpawnedActor::start::<Bindings>(()).await;
+    let (bindings, _) = SpawnedActor::start::<Bindings>(()).await;
 
-    local_bindings.register(BINDINGS_NAME);
+    bindings.register(BINDINGS_NAME);
 
-    actors.add(local_bindings);
-}
-
-pub async fn init_plugins() {
-    // plugin are here forever, we can just register them
-    let registry = registry::RegistryHandle::new().expect("Cannot get registry access");
-    let mut modules = HashMap::new();
-
-    for plugin in modules::registry().plugins() {
-        registry
-            .plugin_add(None, plugin.metadata().clone())
-            .await
-            .expect("Could not registry plugin");
-
-        let meta = plugin.metadata();
-        modules.insert(meta.module(), meta.version());
-    }
-
-    let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
-    for (name, version) in modules {
-        instance_info_handle.add_component(&format!("core-plugin.{}", name), version);
-    }
+    actors.add(bindings);
 }
 
 struct Bindings {
@@ -111,37 +97,6 @@ struct Bindings {
     store: StoreHandle,
     bindings: HashMap<BindingKey, Binding>,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct BindingKey {
-    source_id: String,
-    source_state: String,
-    target_id: String,
-    target_action: String,
-}
-
-impl From<BindingConfig> for BindingKey {
-    fn from(value: BindingConfig) -> Self {
-        Self {
-            source_id: value.source_id,
-            source_state: value.source_state,
-            target_id: value.target_id,
-            target_action: value.target_action,
-        }
-    }
-}
-
-impl fmt::Display for BindingKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!(
-            "{}.{} -> {}.{}",
-            self.source_id, self.source_state, self.target_id, self.target_action
-        ))
-    }
-}
-
-#[derive(Debug)]
-struct Binding {}
 
 #[derive(Debug, Error)]
 enum BindingsActorError {
@@ -226,13 +181,45 @@ impl Actor for Bindings {
     }
 }
 
+impl message::Message<registry::RegistryUpdated> for Bindings {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: registry::RegistryUpdated,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        match msg {
+            registry::RegistryUpdated::ComponentStateChanged(msg) => {
+                for binding in self.bindings.values_mut() {
+                    binding.process_state_change(&msg);
+                }
+            }
+
+            registry::RegistryUpdated::ComponentAdded(msg) => {
+                for binding in self.bindings.values_mut() {
+                    binding.component_added(msg.component_id());
+                }
+            }
+
+            registry::RegistryUpdated::ComponentRemoved(msg) => {
+                for binding in self.bindings.values_mut() {
+                    binding.component_removed(msg.component_id());
+                }
+            }
+
+            _ => {}
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct BindingAdd(BindingConfig);
 
 #[derive(Debug, Error)]
 pub enum BindingAddError {
     #[error("binding '{0}' already exists")]
-    AlreadyExists(String),
+    AlreadyExists(BindingConfig),
 }
 
 impl message::Message<BindingAdd> for Bindings {
@@ -249,12 +236,27 @@ impl message::Message<BindingAdd> for Bindings {
 
 impl Bindings {
     async fn add_binding(&mut self, config: BindingConfig) -> Result<(), BindingAddError> {
-        todo!();
+        let key = config.clone().into();
 
-        // create binding
-        // initial link if components exist
-        // save to store
+        if self.bindings.contains_key(&key) {
+            return Err(BindingAddError::AlreadyExists(config));
+        }
 
+        let mut entry = self
+            .bindings
+            .entry(key)
+            .insert_entry(Binding::new(self.registry.clone(), &config));
+        let binding = entry.get_mut();
+
+        binding.init().await;
+
+        if let Err(error) = self.store.binding_set(config.clone()).await {
+            tracing::error!(
+                ?error,
+                binding = %config,
+                "could not add binding to store"
+            );
+        }
         Ok(())
     }
 }
@@ -307,5 +309,167 @@ impl message::Message<BindingList> for Bindings {
     ) -> Self::Reply {
         // We rely on the store for the config + plugin instead of keeping a copy just for this call
         self.store.binding_list().await
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct BindingKey {
+    source_id: String,
+    source_state: String,
+    target_id: String,
+    target_action: String,
+}
+
+impl From<BindingConfig> for BindingKey {
+    fn from(value: BindingConfig) -> Self {
+        Self {
+            source_id: value.source_id,
+            source_state: value.source_state,
+            target_id: value.target_id,
+            target_action: value.target_action,
+        }
+    }
+}
+
+impl fmt::Display for BindingKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!(
+            "{}.{} -> {}.{}",
+            self.source_id, self.source_state, self.target_id, self.target_action
+        ))
+    }
+}
+
+#[derive(Debug)]
+struct Binding {
+    registry: RegistryHandle,
+    source_id: String,
+    source_state: String,
+    target_id: String,
+    target_action: String,
+    source_value: Option<Value>, // only if online
+    target_online: bool,
+}
+
+impl Binding {
+    pub fn new(registry: RegistryHandle, config: &BindingConfig) -> Self {
+        Self {
+            registry,
+            source_id: config.source_id.clone(),
+            source_state: config.source_state.clone(),
+            target_id: config.target_id.clone(),
+            target_action: config.target_action.clone(),
+            source_value: None,
+            target_online: false,
+        }
+    }
+
+    /// Run the initial linking
+    pub async fn init(&mut self) {
+        self.init_source_value().await;
+        self.init_target_online().await;
+        self.apply_binding();
+    }
+
+    async fn init_source_value(&mut self) {
+        let source_component = match self.find_component(&self.source_id).await {
+            Ok(comp) => comp,
+            Err(error) => {
+                tracing::error!(
+                    ?error,
+                    component_id = self.source_id,
+                    "failed to lookup for source component"
+                );
+                return;
+            }
+        };
+
+        if let Some(source_component) = source_component {
+            let Some(value) = source_component.state.get(&self.source_state) else {
+                tracing::error!(
+                    component_id = self.source_id,
+                    state_name = self.source_state,
+                    "no such state on component"
+                );
+                return;
+            };
+
+            // here value = None is OK: the component state has not been set for now
+            self.source_value = value.clone();
+        } else {
+            self.source_value = None;
+        }
+    }
+
+    async fn init_target_online(&mut self) {
+        let target_component = match self.find_component(&self.target_id).await {
+            Ok(comp) => comp,
+            Err(error) => {
+                tracing::error!(
+                    ?error,
+                    component_id = self.target_id,
+                    "failed to lookup for target component"
+                );
+                return;
+            }
+        };
+
+        self.target_online = target_component.is_some();
+    }
+
+    async fn find_component(
+        &self,
+        id: &String,
+    ) -> Result<Option<ComponentInfo>, CallError<ComponentGetError>> {
+        match self.registry.get_component(id.clone()).await {
+            Ok(component) => Ok(Some(component)),
+            Err(err) => {
+                if let HandlerError(err) = &err
+                    && matches!(err.kind(), ComponentGetErrorKind::NotFound)
+                {
+                    return Ok(None);
+                }
+
+                return Err(err);
+            }
+        }
+    }
+
+    pub fn process_state_change(&mut self, msg: &registry::ComponentStateChanged) {
+        if msg.component_id() == self.source_id && msg.state() == self.source_state {
+            self.source_value = Some(msg.value().clone());
+            self.apply_binding();
+        }
+    }
+
+    pub fn component_added(&mut self, id: &str) {
+        if id == self.target_id {
+            self.target_online = true;
+            self.apply_binding();
+        }
+
+        // source_value set from process_state_change
+    }
+
+    pub fn component_removed(&mut self, id: &str) {
+        if id == self.source_id {
+            self.source_value = None;
+        }
+
+        if id == self.target_id {
+            self.target_online = false
+        }
+    }
+
+    fn apply_binding(&self) {
+        if self.target_online
+            && let Some(value) = &self.source_value
+        {
+            self.registry.component_execute_action(
+                self.target_id.clone(),
+                self.target_action.clone(),
+                value.clone(),
+            );
+        }
     }
 }

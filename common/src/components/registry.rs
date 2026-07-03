@@ -565,6 +565,14 @@ impl ComponentGetError {
             kind: ComponentGetErrorKind::NotFound,
         }
     }
+
+    pub fn component_id(&self) -> &str {
+        &self.component_id
+    }
+
+    pub fn kind(&self) -> &ComponentGetErrorKind {
+        &self.kind
+    }
 }
 
 #[derive(Debug, Error)]

@@ -238,15 +238,7 @@ impl LocalComponents {
         let component = LocalComponentHandle::start(local_config).await?;
         self.components.insert(id, component);
 
-        if let Err(error) = self
-            .store
-            .component_set(ComponentConfig {
-                id: config.id.clone(),
-                plugin: config.plugin,
-                config: config.config,
-            })
-            .await
-        {
+        if let Err(error) = self.store.component_set(config.clone()).await {
             tracing::error!(
                 ?error,
                 component_id = config.id,

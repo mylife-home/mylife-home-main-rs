@@ -81,7 +81,10 @@ impl Actor for Store {
 
         // TODO: load
 
-        Ok(Self { components, bindings })
+        Ok(Self {
+            components,
+            bindings,
+        })
     }
 
     async fn on_stop(
