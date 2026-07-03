@@ -1,14 +1,13 @@
 use std::collections::HashMap;
 
 use common::{
-    ActorsConfig, instance_info,
-    utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
+    ActorsConfig,
+    bus::rpc::RpcHandle,
+    instance_info,
+    utils::{actors::SpawnedActors, config, hostname, logger, wait_for_shutdown_signal},
 };
 
-use crate::{
-    components::{ComponentConfig, LocalComponentsHandle},
-    store::StoreConfig,
-};
+use crate::{components::ComponentConfig, store::StoreConfig};
 
 mod bindings;
 mod components;
@@ -46,11 +45,11 @@ async fn main() {
     let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
     instance_info_handle.add_component("core", env!("CARGO_PKG_VERSION"));
 
+    // let it connect
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     create_component().await;
 
     wait_for_shutdown_signal().await;
-
-    delete_component().await;
 
     actors.terminate().await;
 }
@@ -59,23 +58,19 @@ async fn create_component() {
     let mut config = HashMap::new();
     config.insert("config".to_string(), serde_json::Value::from(false));
 
-    let handle = LocalComponentsHandle::new().expect("failed to create handle");
-
+    let handle = RpcHandle::new().expect("failed to create rpc handle");
+    let instance = hostname().expect("could not get hostname") + "-core";
     handle
-        .component_add(ComponentConfig {
-            id: "comp-id".to_owned(),
-            plugin: "logic-base.value-binary".to_owned(),
-            config,
-        })
+        .call::<ComponentConfig, ()>(
+            instance,
+            "components.add",
+            &ComponentConfig {
+                id: "comp-id".to_owned(),
+                plugin: "logic-base.value-binary".to_owned(),
+                config,
+            },
+            None,
+        )
         .await
         .expect("could not create component");
-}
-
-async fn delete_component() {
-    let handle = LocalComponentsHandle::new().expect("failed to create handle");
-
-    handle
-        .component_remove("comp-id".to_owned())
-        .await
-        .expect("could not delete component");
 }

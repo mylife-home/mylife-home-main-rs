@@ -47,9 +47,9 @@ pub struct BindingsHandle(ActorHandle<Bindings>);
 
 impl BindingsHandle {
     /// Create a new access
-    pub fn new() -> Result<Self, HandleLookupError> {
-        Ok(Self(ActorHandle::from_name(BINDINGS_NAME)?))
-    }
+    // pub fn new() -> Result<Self, HandleLookupError> {
+    //     Ok(Self(ActorHandle::from_name(BINDINGS_NAME)?))
+    // }
 
     fn from_actor_ref(actor_ref: ActorRef<Bindings>) -> Self {
         Self(ActorHandle::from_ref(actor_ref, BINDINGS_NAME))

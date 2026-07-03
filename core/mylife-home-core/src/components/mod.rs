@@ -37,9 +37,9 @@ pub struct LocalComponentsHandle(ActorHandle<LocalComponents>);
 
 impl LocalComponentsHandle {
     /// Create a new access
-    pub fn new() -> Result<Self, HandleLookupError> {
-        Ok(Self(ActorHandle::from_name(LOCAL_COMPONENTS_NAME)?))
-    }
+    // pub fn new() -> Result<Self, HandleLookupError> {
+    //     Ok(Self(ActorHandle::from_name(LOCAL_COMPONENTS_NAME)?))
+    // }
 
     fn from_actor_ref(actor_ref: ActorRef<LocalComponents>) -> Self {
         Self(ActorHandle::from_ref(actor_ref, LOCAL_COMPONENTS_NAME))
