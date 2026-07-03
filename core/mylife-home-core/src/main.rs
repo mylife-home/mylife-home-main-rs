@@ -5,8 +5,12 @@ use common::{
     utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
 };
 
-use crate::{components::{ComponentConfig, LocalComponentsHandle}, store::StoreConfig};
+use crate::{
+    components::{ComponentConfig, LocalComponentsHandle},
+    store::StoreConfig,
+};
 
+mod bindings;
 mod components;
 mod modules;
 mod store;
@@ -34,9 +38,10 @@ async fn main() {
     )
     .await;
 
-    store::init_actor(&mut actors, StoreConfig{}).await;
+    store::init_actor(&mut actors, StoreConfig {}).await;
     components::init_actor(&mut actors).await;
     components::init_plugins().await;
+    bindings::init_actor(&mut actors).await;
 
     let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
     instance_info_handle.add_component("core", env!("CARGO_PKG_VERSION"));

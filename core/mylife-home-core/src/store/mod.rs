@@ -4,7 +4,10 @@ use common::utils::actors::CallError;
 use kameo::{error::Infallible, message, prelude::*};
 use thiserror::Error;
 
-use crate::components::ComponentConfig;
+use crate::{
+    bindings::{BindingConfig, BindingKey},
+    components::ComponentConfig,
+};
 
 use common::utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors};
 
@@ -37,6 +40,21 @@ impl StoreHandle {
     pub async fn component_list(&self) -> Result<Vec<ComponentConfig>, CallError> {
         self.0.call(ComponentList).await
     }
+
+    /// Set a binding in the store
+    pub async fn binding_set(&self, binding: BindingConfig) -> Result<(), CallError> {
+        self.0.call(BindingSet(binding)).await
+    }
+
+    /// Clear (remove) a binding in the store
+    pub async fn binding_clear(&self, binding: BindingConfig) -> Result<(), CallError> {
+        self.0.call(BindingClear(binding)).await
+    }
+
+    /// List the bindings in the store
+    pub async fn binding_list(&self) -> Result<Vec<BindingConfig>, CallError> {
+        self.0.call(BindingList).await
+    }
 }
 
 pub async fn init_actor(actors: &mut SpawnedActors, config: StoreConfig) {
@@ -50,7 +68,7 @@ pub async fn init_actor(actors: &mut SpawnedActors, config: StoreConfig) {
 #[derive(Debug)]
 struct Store {
     components: HashMap<String, ComponentConfig>,
-    // bindings
+    bindings: HashMap<BindingKey, BindingConfig>,
 }
 
 impl Actor for Store {
@@ -59,10 +77,11 @@ impl Actor for Store {
 
     async fn on_start(config: Self::Args, _actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         let components = HashMap::new();
+        let bindings = HashMap::new();
 
         // TODO: load
 
-        Ok(Self { components })
+        Ok(Self { components, bindings })
     }
 
     async fn on_stop(
@@ -121,6 +140,52 @@ impl message::Message<ComponentList> for Store {
 }
 
 #[derive(Debug)]
+pub struct BindingSet(BindingConfig);
+
+impl message::Message<BindingSet> for Store {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: BindingSet,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        let id = msg.0.clone().into();
+        self.bindings.insert(id, msg.0);
+    }
+}
+
+#[derive(Debug)]
+pub struct BindingClear(BindingConfig);
+
+impl message::Message<BindingClear> for Store {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: BindingClear,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.bindings.remove(&msg.0.into());
+    }
+}
+
+#[derive(Debug)]
+pub struct BindingList;
+
+impl message::Message<BindingList> for Store {
+    type Reply = Vec<BindingConfig>;
+
+    async fn handle(
+        &mut self,
+        _msg: BindingList,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.bindings.values().cloned().collect()
+    }
+}
+
+#[derive(Debug)]
 pub struct Save;
 
 #[derive(Debug, Error)]
@@ -134,4 +199,4 @@ impl message::Message<Save> for Store {
     }
 }
 
-// TODO: rpc service for store.save + capability
+// TODO: store.load + rpc service for store.save + capability

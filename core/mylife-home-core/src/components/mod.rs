@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use common::{
-    bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError}, components::registry::{self, RegistryHandle}, instance_info::{self, InstanceInfoPublisherHandle}, utils::actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
+    bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError},
+    components::registry::{self, RegistryHandle},
+    instance_info::{self, InstanceInfoPublisherHandle},
+    utils::actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
 };
 use kameo::{Actor, message, prelude::*};
 use serde::{Deserialize, Serialize};
@@ -97,9 +100,9 @@ pub async fn init_plugins() {
     for (name, version) in modules {
         instance_info_handle.add_component(&format!("core-plugin.{}", name), version);
     }
-
 }
 
+#[derive(Debug)]
 struct LocalComponents {
     registry: RegistryHandle,
     rpc: RpcHandle,
