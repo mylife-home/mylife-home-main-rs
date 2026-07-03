@@ -6,6 +6,7 @@ use common::{
     instance_info::{self, InstanceInfoPublisherHandle},
     utils::actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
 };
+use futures::future::join_all;
 use kameo::{Actor, message, prelude::*};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -183,6 +184,8 @@ impl Actor for LocalComponents {
         _actor_ref: WeakActorRef<Self>,
         _reason: ActorStopReason,
     ) -> Result<(), Self::Error> {
+        join_all(self.components.values().map(|comp| comp.terminate())).await;
+
         self.components.clear();
 
         self.rpc.unregister_service("components.add").await?;

@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 async-trait = { workspace = true }
 common = { path = "../../common" }
+futures = { workspace = true }
 kameo = { workspace = true, features = ["console"] }
 kameo_actors = { workspace = true }
 plugin_runtime = { path = "../plugin-runtime" }
