@@ -94,6 +94,14 @@ impl RegistryHandle {
         Ok(())
     }
 
+    /// Get info on a component
+    pub async fn get_component(
+        &self,
+        component_id: String,
+    ) -> Result<ComponentInfo, CallError<ComponentGetError>> {
+        self.actor.call(ComponentGet { component_id }).await
+    }
+
     /// Execute an action on a component
     pub fn component_execute_action(&self, component_id: String, action: String, value: Value) {
         self.actor.send(ComponentAction {
@@ -107,6 +115,14 @@ impl RegistryHandle {
     pub fn on_update(&self) -> &SubscriberHandle<RegistryUpdated> {
         &self.on_update
     }
+}
+
+#[derive(Debug)]
+pub struct ComponentInfo {
+    pub instance: Option<String>,
+    pub plugin: Arc<PluginMetadata>,
+    pub component_id: String,
+    pub state: HashMap<String, Option<Value>>,
 }
 
 /// Specific registry access part for a component
@@ -301,6 +317,21 @@ impl Registry {
             }));
 
         Ok(())
+    }
+
+    fn get_component(&mut self, component_id: String) -> Result<ComponentInfo, ComponentGetError> {
+        let component_id = Arc::new(component_id);
+
+        let Some(component_data) = self.components.get(&component_id) else {
+            return Err(ComponentGetError::not_found(component_id.to_string()));
+        };
+
+        Ok(ComponentInfo {
+            instance: component_data.instance_name().into(),
+            plugin: component_data.plugin().clone(),
+            component_id: component_id.to_string(),
+            state: component_data.state().clone(),
+        })
     }
 
     fn execute_action(&mut self, component_id: String, action: &str, value: Value) {
@@ -519,6 +550,41 @@ impl message::Message<ComponentRemove> for Registry {
     }
 }
 
+#[derive(Debug, Error)]
+#[error("failed to get component '{component_id}': {kind}")]
+pub struct ComponentGetError {
+    component_id: String,
+    #[source]
+    kind: ComponentGetErrorKind,
+}
+
+impl ComponentGetError {
+    fn not_found(component_id: impl Into<String>) -> Self {
+        Self {
+            component_id: component_id.into(),
+            kind: ComponentGetErrorKind::NotFound,
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ComponentGetErrorKind {
+    #[error("component not found")]
+    NotFound,
+}
+
+impl message::Message<ComponentGet> for Registry {
+    type Reply = Result<ComponentInfo, ComponentGetError>;
+
+    async fn handle(
+        &mut self,
+        msg: ComponentGet,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.get_component(msg.component_id)
+    }
+}
+
 impl message::Message<ComponentAction> for Registry {
     type Reply = ();
 
@@ -569,6 +635,12 @@ struct ComponentAdd {
 /// Registry command: remove a component
 #[derive(Debug, Clone)]
 struct ComponentRemove {
+    component_id: String,
+}
+
+/// Registry command: get a component
+#[derive(Debug, Clone)]
+struct ComponentGet {
     component_id: String,
 }
 
@@ -745,6 +817,12 @@ impl From<InstanceName> for Option<Arc<String>> {
     }
 }
 
+impl From<&InstanceName> for Option<String> {
+    fn from(value: &InstanceName) -> Self {
+        value.0.as_ref().map(ToString::to_string)
+    }
+}
+
 impl fmt::Display for InstanceName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(value) = &self.0 {
@@ -843,9 +921,9 @@ impl InstanceData {
         Ok(plugin)
     }
 
-    pub fn get_plugin(&self, id: &str) -> Option<&PluginData> {
-        self.plugins.get(id)
-    }
+    // pub fn get_plugin(&self, id: &str) -> Option<&PluginData> {
+    //     self.plugins.get(id)
+    // }
 }
 
 #[derive(Debug)]
@@ -917,9 +995,9 @@ impl ComponentData {
         }
     }
 
-    pub fn component_id(&self) -> &str {
-        &self.component_id
-    }
+    // pub fn component_id(&self) -> &str {
+    //     &self.component_id
+    // }
 
     pub fn instance_name(&self) -> &InstanceName {
         &self.instance_name
@@ -927,6 +1005,10 @@ impl ComponentData {
 
     pub fn plugin(&self) -> &Arc<PluginMetadata> {
         &self.plugin
+    }
+
+    pub fn state(&self) -> &HashMap<String, Option<Value>> {
+        &self.state
     }
 
     pub fn execute_action(&mut self, name: &str, value: Value) {
