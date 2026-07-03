@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use serde_with::{TimestampSeconds, serde_as};
-use std::{collections::HashMap, time::SystemTime};
+use serde_with::{DurationSeconds, serde_as};
+use std::{collections::HashMap, time::Duration};
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,10 +23,10 @@ pub struct InstanceInfo {
     /// - mylife: 1.21.4
     pub versions: HashMap<String, String>,
 
-    #[serde_as(as = "TimestampSeconds<i64>")]
-    pub system_uptime: SystemTime,
-    #[serde_as(as = "TimestampSeconds<i64>")]
-    pub instance_uptime: SystemTime,
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub system_uptime: Duration,
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub instance_uptime: Duration,
     pub hostname: String,
     pub capabilities: Vec<String>,
 

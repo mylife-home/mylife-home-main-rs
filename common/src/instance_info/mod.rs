@@ -2,7 +2,7 @@ use kameo::{Actor, message, prelude::*};
 use std::{
     collections::{HashMap, HashSet},
     env, fs,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant},
 };
 use thiserror::Error;
 
@@ -13,6 +13,7 @@ use crate::{
         actors::{
             ActorHandle, CallError, HandleLookupError, SchedulerHandle, SpawnedActor, SpawnedActors,
         },
+        system_uptime,
     },
 };
 
@@ -72,7 +73,7 @@ struct InstanceInfoPublisher {
     r#type: Option<String>,
     versions: HashMap<String, String>,
     capabilities: HashSet<String>,
-    instance_uptime: SystemTime,
+    instance_uptime: Instant,
     hardware_info: HashMap<String, String>,
 }
 
@@ -113,7 +114,7 @@ impl Actor for InstanceInfoPublisher {
             versions,
             capabilities: HashSet::new(),
             // Let's take actor startup time as instance uptime
-            instance_uptime: SystemTime::now(),
+            instance_uptime: Instant::now(),
             hardware_info: Self::get_hardware_info(),
         })
     }
@@ -134,12 +135,20 @@ impl InstanceInfoPublisher {
             }
         };
 
+        let system_uptime = match system_uptime() {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::error!(?error, "could not read uptime");
+                Duration::ZERO
+            }
+        };
+
         let info = types::InstanceInfo {
             r#type: r#type.clone(),
             hardware: self.hardware_info.clone(),
             versions: self.versions.clone(),
-            system_uptime: SystemTime::now(),
-            instance_uptime: self.instance_uptime,
+            system_uptime,
+            instance_uptime: self.instance_uptime.elapsed(),
             hostname,
             capabilities: self.capabilities.iter().cloned().collect(),
 

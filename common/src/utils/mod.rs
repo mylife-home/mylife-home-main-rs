@@ -1,4 +1,4 @@
-use std::{fs, io};
+use std::{fs, io, time::Duration};
 
 use tokio::signal::unix::{SignalKind, signal};
 
@@ -10,6 +10,16 @@ pub fn hostname() -> io::Result<String> {
     Ok(fs::read_to_string("/proc/sys/kernel/hostname")?
         .trim_end()
         .to_owned())
+}
+
+pub fn system_uptime() -> io::Result<Duration> {
+    let content = fs::read_to_string("/proc/uptime")?;
+    let seconds: f64 = content
+        .split_whitespace()
+        .next()
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad /proc/uptime format"))?;
+    Ok(Duration::from_secs_f64(seconds))
 }
 
 pub async fn wait_for_shutdown_signal() {
