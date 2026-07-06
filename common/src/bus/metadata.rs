@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    fmt,
     sync::Arc,
 };
 
@@ -46,23 +47,46 @@ impl MetadataHandle {
     }
 
     /// Set metadata on the local instance
-    pub fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<(), serde_json::error::Error> {
-        let buff = serde_json::to_vec(value)?;
+    pub async fn set<T: Serialize + fmt::Debug>(&self, path: &str, value: &T) {
+        let buff = match serde_json::to_vec(value) {
+            Ok(buff) => buff,
+            Err(error) => {
+                tracing::error!(?error,
+                            value = ?value,
+                            path = path,
 
-        self.actor.send(LocalUpdate {
-            path: path.to_owned(),
-            value: Some(Bytes::from_owner(buff)),
-        });
+                            "could not set metadata");
+                return;
+            }
+        };
 
-        Ok(())
+        if let Err(error) = self
+            .actor
+            .call(LocalUpdate {
+                path: path.to_owned(),
+                value: Some(Bytes::from_owner(buff)),
+            })
+            .await
+        {
+            tracing::error!(?error,
+                            value = ?value,
+                            path = path,
+                            "could not set metadata");
+        }
     }
 
     /// Clear metadata on the local instance
-    pub fn clear(&self, path: &str) {
-        self.actor.send(LocalUpdate {
-            path: path.to_owned(),
-            value: None,
-        });
+    pub async fn clear(&self, path: &str) {
+        if let Err(error) = self
+            .actor
+            .call(LocalUpdate {
+                path: path.to_owned(),
+                value: None,
+            })
+            .await
+        {
+            tracing::error!(?error, path = path, "could not clear metadata");
+        }
     }
 
     /// Get the PubSub for remote metadata update

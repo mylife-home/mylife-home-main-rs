@@ -121,7 +121,7 @@ impl Actor for InstanceInfoPublisher {
 }
 
 impl InstanceInfoPublisher {
-    fn refresh(&mut self) {
+    async fn refresh(&mut self) {
         let Some(r#type) = &self.r#type else {
             tracing::warn!("type not set, will not emit instance-info");
             return;
@@ -155,9 +155,7 @@ impl InstanceInfoPublisher {
             wifi: None,
         };
 
-        if let Err(error) = self.metadata.set("instance-info", &info) {
-            tracing::error!(?error, "cannot set instance info");
-        }
+        self.metadata.set("instance-info", &info).await;
     }
 
     fn get_hardware_info() -> HashMap<String, String> {
@@ -237,7 +235,7 @@ impl message::Message<SetType> for InstanceInfoPublisher {
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.r#type = Some(msg.name);
-        self.refresh();
+        self.refresh().await;
     }
 }
 
@@ -250,7 +248,7 @@ impl message::Message<AddComponent> for InstanceInfoPublisher {
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.versions.insert(msg.name, msg.version);
-        self.refresh();
+        self.refresh().await;
     }
 }
 
@@ -263,7 +261,7 @@ impl message::Message<AddCapability> for InstanceInfoPublisher {
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.capabilities.insert(msg.name);
-        self.refresh();
+        self.refresh().await;
     }
 }
 
@@ -275,7 +273,7 @@ impl message::Message<Refresh> for InstanceInfoPublisher {
         _msg: Refresh,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.refresh();
+        self.refresh().await;
     }
 }
 

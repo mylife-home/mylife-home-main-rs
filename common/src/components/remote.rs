@@ -191,13 +191,7 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                     let plugin = plugin_data.plugin();
 
                     let path = format!("plugins/{}", plugin.id());
-                    if let Err(error) = self.metadata.set(&path, plugin.deref()) {
-                        tracing::error!(
-                            ?error,
-                            plugin_id = plugin.id(),
-                            "could not set metadata for plugin"
-                        );
-                    }
+                    self.metadata.set(&path, plugin.deref()).await;
                 }
             }
 
@@ -206,7 +200,7 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                     let plugin = plugin_data.plugin();
 
                     let path = format!("plugins/{}", plugin.id());
-                    self.metadata.clear(&path);
+                    self.metadata.clear(&path).await;
                 }
             }
 
@@ -221,13 +215,7 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                         plugin: plugin.id().to_owned(),
                     };
 
-                    if let Err(error) = self.metadata.set(&path, &comp_meta) {
-                        tracing::error!(
-                            ?error,
-                            component_id = id,
-                            "could not set metadata for component"
-                        );
-                    }
+                    self.metadata.set(&path, &comp_meta).await;
 
                     self.local_components
                         .insert(id.to_owned(), LocalComponent::new(plugin.clone()));
@@ -238,7 +226,7 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                 if component_data.instance().is_none() {
                     let id = component_data.component_id();
                     let path = format!("components/{}", id);
-                    self.metadata.clear(&path);
+                    self.metadata.clear(&path).await;
 
                     self.local_components.remove(id);
 
