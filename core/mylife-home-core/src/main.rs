@@ -1,3 +1,4 @@
+use clap::Parser;
 use common::{
     ActorsConfig, instance_info,
     utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
@@ -14,12 +15,19 @@ mod modules_include {
     use plugin_ui_base::*;
 }
 
+#[derive(Parser, Debug)]
+#[command(name = "mylife-home-core")]
+#[command(about = "Mylife Home Core")]
+struct Cli {
+    /// config file
+    #[arg(long, default_value = "config.toml")]
+    config: String,
+}
+
 #[tokio::main]
 async fn main() {
-    // FIXME
-    std::env::set_current_dir("./core/mylife-home-core").unwrap();
-
-    config::init("config.toml");
+    let cli = Cli::parse();
+    config::init(&cli.config);
     logger::init();
     modules::init();
 

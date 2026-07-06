@@ -11,10 +11,12 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 common = { path = "../../common" }
 futures = { workspace = true }
 kameo = { workspace = true, features = ["console"] }
 kameo_actors = { workspace = true }
+libc = { workspace = true }
 plugin_runtime = { path = "../plugin-runtime" }
 plugin_logic_base = { path = "../plugins/logic-base" }
 plugin_ui_base = { path = "../plugins/ui-base" }
@@ -23,4 +25,3 @@ serde_json = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time", "fs"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-libc = "0.2.186"
