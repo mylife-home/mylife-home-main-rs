@@ -3,7 +3,7 @@ use std::{collections::HashMap, io};
 use common::{
     bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError},
     instance_info::InstanceInfoPublisherHandle,
-    utils::actors::CallError,
+    utils::{actors::CallError, config},
 };
 use kameo::{message, prelude::*};
 use serde::{Deserialize, Serialize};
@@ -21,8 +21,8 @@ mod rpc_services;
 
 const STORE_NAME: &str = "store";
 
-#[derive(Debug)]
-pub struct StoreConfig {
+#[derive(Debug, Clone, Deserialize)]
+struct StoreConfig {
     pub path: String,
     pub mount_point: Option<String>,
 }
@@ -77,7 +77,9 @@ impl StoreHandle {
     }
 }
 
-pub async fn init_actor(actors: &mut SpawnedActors, config: StoreConfig) {
+pub async fn init_actor(actors: &mut SpawnedActors) {
+    let config = config::section::<StoreConfig>("store");
+
     let (store, _) = SpawnedActor::start::<Store>(config).await;
 
     store.register(STORE_NAME);
@@ -310,7 +312,50 @@ impl Store {
         }
 
         let content = serde_json::to_string_pretty(&items)?;
+
+        if let Some(mount_point) = &self.mount_point {
+            Self::remount(mount_point, false)?;
+        }
+
         fs::write(&self.path, content).await?;
+
+        if let Some(mount_point) = &self.mount_point {
+            if let Err(error) = Self::remount(mount_point, true) {
+                tracing::error!(
+                    ?error,
+                    mount_point,
+                    "could not set mount point back to read-only"
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    fn remount(path: &str, read_only: bool) -> io::Result<()> {
+        use std::{ffi::CString, ptr};
+
+        let target = CString::new(path)?;
+
+        // MS_REMOUNT is required to change flags on an already-mounted filesystem
+        let mut flags = libc::MS_REMOUNT;
+        if read_only {
+            flags |= libc::MS_RDONLY;
+        }
+
+        let ret = unsafe {
+            libc::mount(
+                ptr::null(), // source: ignored on remount
+                target.as_ptr(),
+                ptr::null(), // filesystemtype: ignored on remount
+                flags,
+                ptr::null(), // data: no extra mount options
+            )
+        };
+
+        if ret != 0 {
+            return Err(io::Error::last_os_error());
+        }
 
         Ok(())
     }

@@ -3,8 +3,6 @@ use common::{
     utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
 };
 
-use crate::store::StoreConfig;
-
 mod bindings;
 mod components;
 mod modules;
@@ -34,14 +32,7 @@ async fn main() {
     )
     .await;
 
-    store::init_actor(
-        &mut actors,
-        StoreConfig {
-            path: "store.json".to_owned(),
-            mount_point: None,
-        },
-    )
-    .await;
+    store::init_actor(&mut actors).await;
     components::init_plugins().await;
     components::init_actor(&mut actors).await;
     bindings::init_actor(&mut actors).await;
