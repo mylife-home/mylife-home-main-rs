@@ -203,7 +203,7 @@ impl message::Message<client::Online> for Metadata {
                 })
                 .collect();
             // sort desc
-            records.sort_by(|a, b| a.priority.cmp(&b.priority));
+            records.sort_by(|a, b| b.priority.cmp(&a.priority));
 
             for record in records {
                 self.publish(record.path, Some(record.value.clone()));
