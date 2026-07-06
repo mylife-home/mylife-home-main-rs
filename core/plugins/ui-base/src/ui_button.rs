@@ -1,0 +1,29 @@
+use std::convert::Infallible;
+
+use plugin_macros::{MylifePlugin, mylife_actions};
+use plugin_runtime::{MylifePluginHooks, State, WakeHandle};
+
+#[derive(MylifePlugin, Debug)]
+#[mylife_plugin(usage = "ui")]
+pub struct UiButton {
+    #[mylife_state]
+    value: State<bool>,
+}
+
+impl MylifePluginHooks for UiButton {
+    type Error = Infallible;
+
+    fn new(_id: &str, _waker: WakeHandle) -> Self {
+        UiButton {
+            value: Default::default(),
+        }
+    }
+}
+
+#[mylife_actions]
+impl UiButton {
+    #[mylife_action]
+    fn action(&mut self, arg: bool) {
+        self.value.set(arg);
+    }
+}

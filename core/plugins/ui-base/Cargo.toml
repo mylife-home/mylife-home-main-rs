@@ -1,0 +1,15 @@
+[package]
+name = "plugin_ui_base"
+version = "1.0.0"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+
+[dependencies]
+plugin_runtime = { path = "../../plugin-runtime" }
+plugin_macros = { path = "../../plugin-macros" }
+inventory = { workspace = true }
+lazy_static = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
