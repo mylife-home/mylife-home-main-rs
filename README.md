@@ -21,6 +21,5 @@ Then each plugin can have a MessageSender instance, which can be used in another
 ## TODO
 
 core:
-- component manager: store
-- bindings
+- component manager: store fs mount test
 - plugins
