@@ -1,4 +1,4 @@
-use std::{convert::Infallible};
+use std::convert::Infallible;
 
 use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{MylifePluginHooks, State, WakeHandle};
