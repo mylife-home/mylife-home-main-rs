@@ -1,0 +1,44 @@
+[
+  {
+    "type": "binding",
+    "config": {
+      "sourceComponent": "step-relay",
+      "sourceState": "value",
+      "targetComponent": "light",
+      "targetAction": "action"
+    }
+  },
+  {
+    "type": "binding",
+    "config": {
+      "sourceComponent": "button",
+      "sourceState": "value",
+      "targetComponent": "step-relay",
+      "targetAction": "action"
+    }
+  },
+  {
+    "type": "component",
+    "config": {
+      "id": "button",
+      "plugin": "ui-base.ui-button",
+      "config": {}
+    }
+  },
+  {
+    "type": "component",
+    "config": {
+      "id": "step-relay",
+      "plugin": "logic-base.step-relay",
+      "config": {}
+    }
+  },
+  {
+    "type": "component",
+    "config": {
+      "id": "light",
+      "plugin": "ui-base.ui-state-bool",
+      "config": {}
+    }
+  }
+]

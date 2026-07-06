@@ -16,7 +16,10 @@ mod modules_include {
 
 #[tokio::main]
 async fn main() {
-    config::init("core.toml");
+    // FIXME
+    std::env::set_current_dir("./core/mylife-home-core").unwrap();
+
+    config::init("config.toml");
     logger::init();
     modules::init();
 
