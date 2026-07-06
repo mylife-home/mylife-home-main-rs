@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{MylifePluginHooks, State, WakeHandle};
 
-#[derive(MylifePlugin, Debug)]
+#[derive(MylifePlugin, Debug, Default)]
 #[mylife_plugin(usage = "ui")]
 pub struct UiStateBool {
     #[mylife_state]
@@ -14,9 +14,7 @@ impl MylifePluginHooks for UiStateBool {
     type Error = Infallible;
 
     fn new(_id: &str, _waker: WakeHandle) -> Self {
-        UiStateBool {
-            value: Default::default(),
-        }
+        Default::default()
     }
 }
 

@@ -4,13 +4,15 @@ use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{MylifePluginHooks, State, WakeHandle};
 
 #[derive(MylifePlugin, Debug, Default)]
-#[mylife_plugin(usage = "ui")]
-pub struct UiStateText {
+#[mylife_plugin(usage = "logic")]
+pub struct SwitchToButton {
+    switch_: bool,
+
     #[mylife_state]
-    value: State<String>,
+    value: State<bool>,
 }
 
-impl MylifePluginHooks for UiStateText {
+impl MylifePluginHooks for SwitchToButton {
     type Error = Infallible;
 
     fn new(_id: &str, _waker: WakeHandle) -> Self {
@@ -19,9 +21,15 @@ impl MylifePluginHooks for UiStateText {
 }
 
 #[mylife_actions]
-impl UiStateText {
+impl SwitchToButton {
     #[mylife_action]
-    fn action(&mut self, arg: String) {
-        self.value.set(arg);
+    fn action(&mut self, arg: bool) {
+        if self.switch_ == arg {
+            return;
+        }
+
+        self.switch_ = arg;
+        self.value.set(true);
+        self.value.set(false);
     }
 }

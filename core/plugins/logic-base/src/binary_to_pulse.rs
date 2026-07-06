@@ -4,13 +4,16 @@ use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{MylifePluginHooks, State, WakeHandle};
 
 #[derive(MylifePlugin, Debug, Default)]
-#[mylife_plugin(usage = "ui")]
-pub struct UiButton {
+#[mylife_plugin(usage = "logic")]
+pub struct BinaryToPulse {
     #[mylife_state]
-    value: State<bool>,
+    off: State<bool>,
+
+    #[mylife_state]
+    on: State<bool>,
 }
 
-impl MylifePluginHooks for UiButton {
+impl MylifePluginHooks for BinaryToPulse {
     type Error = Infallible;
 
     fn new(_id: &str, _waker: WakeHandle) -> Self {
@@ -19,9 +22,15 @@ impl MylifePluginHooks for UiButton {
 }
 
 #[mylife_actions]
-impl UiButton {
+impl BinaryToPulse {
     #[mylife_action]
     fn action(&mut self, arg: bool) {
-        self.value.set(arg);
+        if arg {
+            self.on.set(true);
+            self.on.set(false);
+        } else {
+            self.off.set(true);
+            self.off.set(false);
+        }
     }
 }

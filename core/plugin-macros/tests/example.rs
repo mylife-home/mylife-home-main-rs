@@ -11,7 +11,7 @@ use crate::utils::TestMetadata;
 
 mod utils;
 
-#[derive(MylifePlugin, Debug)]
+#[derive(MylifePlugin, Debug, Default)]
 #[mylife_plugin(
     name = "example-plugin", // Optional, infered from struct name
     description = "plugin description", // Optional

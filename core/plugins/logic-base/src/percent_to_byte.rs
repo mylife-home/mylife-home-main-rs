@@ -4,13 +4,13 @@ use plugin_macros::{MylifePlugin, mylife_actions};
 use plugin_runtime::{MylifePluginHooks, State, WakeHandle};
 
 #[derive(MylifePlugin, Debug, Default)]
-#[mylife_plugin(usage = "ui")]
-pub struct UiStatePercent {
-    #[mylife_state(r#type = "range[0;100]")]
+#[mylife_plugin(usage = "logic")]
+pub struct PercentToByte {
+    #[mylife_state(r#type = "range[0;255]")]
     value: State<i64>,
 }
 
-impl MylifePluginHooks for UiStatePercent {
+impl MylifePluginHooks for PercentToByte {
     type Error = Infallible;
 
     fn new(_id: &str, _waker: WakeHandle) -> Self {
@@ -19,9 +19,9 @@ impl MylifePluginHooks for UiStatePercent {
 }
 
 #[mylife_actions]
-impl UiStatePercent {
+impl PercentToByte {
     #[mylife_action(r#type = "range[0;100]")]
-    fn action(&mut self, arg: i64) {
-        self.value.set(arg);
+    fn set_value(&mut self, arg: i64) {
+        self.value.set(arg * 255 / 100);
     }
 }
