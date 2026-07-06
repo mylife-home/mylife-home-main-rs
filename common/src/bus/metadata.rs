@@ -47,7 +47,7 @@ impl MetadataHandle {
     }
 
     /// Set metadata on the local instance
-    pub async fn set<T: Serialize + fmt::Debug>(&self, path: &str, value: &T) {
+    pub async fn set<T: Serialize + fmt::Debug>(&self, path: &str, value: &T, priority: i64) {
         let buff = match serde_json::to_vec(value) {
             Ok(buff) => buff,
             Err(error) => {
@@ -65,6 +65,7 @@ impl MetadataHandle {
             .call(LocalUpdate {
                 path: path.to_owned(),
                 value: Some(Bytes::from_owner(buff)),
+                priority,
             })
             .await
         {
@@ -82,6 +83,7 @@ impl MetadataHandle {
             .call(LocalUpdate {
                 path: path.to_owned(),
                 value: None,
+                priority: 0,
             })
             .await
         {
@@ -110,10 +112,16 @@ pub async fn init_actor(actors: &mut SpawnedActors, config: MetadataConfig) {
 #[derive(Debug)]
 struct Metadata {
     instance_name: Arc<String>,
-    metadata: HashMap<String, Bytes>,
+    metadata: HashMap<String, MetadataValue>,
     remote: Option<Remote>,
 
     client: ClientHandle,
+}
+
+#[derive(Debug)]
+struct MetadataValue {
+    value: Bytes,
+    priority: i64,
 }
 
 impl Actor for Metadata {
@@ -178,8 +186,27 @@ impl message::Message<client::Online> for Metadata {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         if msg.is_online() {
-            for (path, value) in self.metadata.iter() {
-                self.publish(path, Some(value.clone()));
+            #[derive(Debug, PartialEq, PartialOrd)]
+            struct Record<'a> {
+                priority: i64,
+                path: &'a str,
+                value: &'a Bytes,
+            }
+
+            let mut records: Vec<_> = self
+                .metadata
+                .iter()
+                .map(|(path, value)| Record {
+                    priority: value.priority,
+                    path,
+                    value: &value.value,
+                })
+                .collect();
+            // sort desc
+            records.sort_by(|a, b| a.priority.cmp(&b.priority));
+
+            for record in records {
+                self.publish(record.path, Some(record.value.clone()));
             }
         }
     }
@@ -209,7 +236,11 @@ impl message::Message<LocalUpdate> for Metadata {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         if let Some(value) = msg.value {
-            self.metadata.insert(msg.path.clone(), value.clone());
+            let mvalue = MetadataValue {
+                value: value.clone(),
+                priority: msg.priority,
+            };
+            self.metadata.insert(msg.path.clone(), mvalue);
             self.publish(&msg.path, Some(value));
             tracing::trace!(path = msg.path, "set");
         } else {
@@ -327,6 +358,7 @@ impl Remote {
 struct LocalUpdate {
     path: String,
     value: Option<Bytes>,
+    priority: i64,
 }
 
 #[derive(Debug, Clone)]

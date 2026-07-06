@@ -155,7 +155,7 @@ impl InstanceInfoPublisher {
             wifi: None,
         };
 
-        self.metadata.set("instance-info", &info).await;
+        self.metadata.set("instance-info", &info, 0).await;
     }
 
     fn get_hardware_info() -> HashMap<String, String> {

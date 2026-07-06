@@ -20,6 +20,6 @@ plugin_logic_base = { path = "../plugins/logic-base" }
 plugin_ui_base = { path = "../plugins/ui-base" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time", "fs"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }

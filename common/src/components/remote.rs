@@ -23,6 +23,10 @@ const DOMAIN: &str = "components";
 
 const REMOTE_NAME: &str = "bus.remote";
 
+// on connection, plugin metadata must be published before component metadata
+const METADATA_PLUGIN_PRIORITY: i64 = 100;
+const METADATA_COMPONENT_PRIORITY: i64 = 0;
+
 #[derive(Debug)]
 pub struct RemoteConfig {
     pub instance_name: Arc<String>,
@@ -191,7 +195,9 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                     let plugin = plugin_data.plugin();
 
                     let path = format!("plugins/{}", plugin.id());
-                    self.metadata.set(&path, plugin.deref()).await;
+                    self.metadata
+                        .set(&path, plugin.deref(), METADATA_PLUGIN_PRIORITY)
+                        .await;
                 }
             }
 
@@ -215,7 +221,9 @@ impl message::Message<registry::RegistryUpdated> for Remote {
                         plugin: plugin.id().to_owned(),
                     };
 
-                    self.metadata.set(&path, &comp_meta).await;
+                    self.metadata
+                        .set(&path, &comp_meta, METADATA_COMPONENT_PRIORITY)
+                        .await;
 
                     self.local_components
                         .insert(id.to_owned(), LocalComponent::new(plugin.clone()));

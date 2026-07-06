@@ -1,8 +1,14 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io};
 
-use common::utils::actors::CallError;
-use kameo::{error::Infallible, message, prelude::*};
+use common::{
+    bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError},
+    instance_info::InstanceInfoPublisherHandle,
+    utils::actors::CallError,
+};
+use kameo::{message, prelude::*};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::fs;
 
 use crate::{
     bindings::{BindingConfig, BindingKey},
@@ -11,10 +17,15 @@ use crate::{
 
 use common::utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors};
 
+mod rpc_services;
+
 const STORE_NAME: &str = "store";
 
 #[derive(Debug)]
-pub struct StoreConfig {}
+pub struct StoreConfig {
+    pub path: String,
+    pub mount_point: Option<String>,
+}
 
 /// Client access to the store actor
 #[derive(Debug, Clone)]
@@ -24,6 +35,10 @@ impl StoreHandle {
     /// Create a new access
     pub fn new() -> Result<Self, HandleLookupError> {
         Ok(Self(ActorHandle::from_name(STORE_NAME)?))
+    }
+
+    fn from_actor_ref(actor_ref: ActorRef<Store>) -> Self {
+        Self(ActorHandle::from_ref(actor_ref, STORE_NAME))
     }
 
     /// Set a component in the store
@@ -55,6 +70,11 @@ impl StoreHandle {
     pub async fn binding_list(&self) -> Result<Vec<BindingConfig>, CallError> {
         self.0.call(BindingList).await
     }
+
+    /// Save the store
+    pub async fn save(&self) -> Result<(), CallError<SaveError>> {
+        self.0.call(Save).await
+    }
 }
 
 pub async fn init_actor(actors: &mut SpawnedActors, config: StoreConfig) {
@@ -67,24 +87,55 @@ pub async fn init_actor(actors: &mut SpawnedActors, config: StoreConfig) {
 
 #[derive(Debug)]
 struct Store {
+    path: String,
+    mount_point: Option<String>,
+    rpc: RpcHandle,
     components: HashMap<String, ComponentConfig>,
     bindings: HashMap<BindingKey, BindingConfig>,
 }
 
+#[derive(Debug, Error)]
+enum StoreActorError {
+    #[error("Failed to lookup actor handle: {0}")]
+    HandleLookupError(#[from] HandleLookupError),
+    #[error("Failed to add rpc service: {0}")]
+    RpcServiceAddError(#[from] CallError<RpcServiceAddError>),
+    #[error("Failed to remove rpc service: {0}")]
+    RpcServiceRemoveError(#[from] CallError<RpcServiceRemoveError>),
+    #[error("Failed to load store: {0}")]
+    LoadError(#[from] LoadError),
+}
+
 impl Actor for Store {
     type Args = StoreConfig;
-    type Error = Infallible;
+    type Error = StoreActorError;
 
-    async fn on_start(config: Self::Args, _actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
-        let components = HashMap::new();
-        let bindings = HashMap::new();
+    async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
+        let instance_info = InstanceInfoPublisherHandle::new();
 
-        // TODO: load
+        let mut _self = Self {
+            path: config.path,
+            mount_point: config.mount_point,
+            rpc: RpcHandle::new()?,
+            components: HashMap::new(),
+            bindings: HashMap::new(),
+        };
 
-        Ok(Self {
-            components,
-            bindings,
-        })
+        _self.load().await?;
+
+        let self_handle = StoreHandle::from_actor_ref(actor_ref);
+
+        _self
+            .rpc
+            .register_service(
+                "store.save",
+                rpc_services::SaveRpcService::new(self_handle.clone()),
+            )
+            .await?;
+
+        instance_info.add_capability("store-api");
+
+        Ok(_self)
     }
 
     async fn on_stop(
@@ -92,6 +143,11 @@ impl Actor for Store {
         _actor_ref: WeakActorRef<Self>,
         _reason: ActorStopReason,
     ) -> Result<(), Self::Error> {
+        self.components.clear();
+        self.bindings.clear();
+
+        self.rpc.unregister_service("store.save").await?;
+
         Ok(())
     }
 }
@@ -107,8 +163,14 @@ impl message::Message<ComponentSet> for Store {
         msg: ComponentSet,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let id = msg.0.id.clone();
-        self.components.insert(id, msg.0);
+        self.set_component(msg.0);
+    }
+}
+
+impl Store {
+    fn set_component(&mut self, config: ComponentConfig) {
+        let id = config.id.clone();
+        self.components.insert(id, config);
     }
 }
 
@@ -153,8 +215,14 @@ impl message::Message<BindingSet> for Store {
         msg: BindingSet,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let id = msg.0.clone().into();
-        self.bindings.insert(id, msg.0);
+        self.set_binding(msg.0);
+    }
+}
+
+impl Store {
+    fn set_binding(&mut self, config: BindingConfig) {
+        let id = config.clone().into();
+        self.bindings.insert(id, config);
     }
 }
 
@@ -191,15 +259,74 @@ impl message::Message<BindingList> for Store {
 #[derive(Debug)]
 pub struct Save;
 
-#[derive(Debug, Error)]
-pub enum SaveError {}
-
 impl message::Message<Save> for Store {
     type Reply = Result<(), SaveError>;
 
-    async fn handle(&mut self, msg: Save, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
-        todo!()
+    async fn handle(&mut self, _msg: Save, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
+        self.save().await
     }
 }
 
-// TODO: store.load + rpc service for store.save + capability
+#[derive(Debug, Error)]
+pub enum LoadError {
+    #[error("got io error while loading store: {0}")]
+    Io(#[from] io::Error),
+    #[error("got deserialization error while loading store: {0}")]
+    Deserialization(#[from] serde_json::Error),
+}
+
+#[derive(Debug, Error)]
+pub enum SaveError {
+    #[error("got io error while saving store: {0}")]
+    Io(#[from] io::Error),
+    #[error("got serialization error while saving store: {0}")]
+    Deserialization(#[from] serde_json::Error),
+}
+
+impl Store {
+    async fn load(&mut self) -> Result<(), LoadError> {
+        let content = fs::read_to_string(&self.path).await?;
+        let items: Vec<FileItem> = serde_json::from_str(&content)?;
+
+        for item in items {
+            match item {
+                FileItem::Binding(config) => self.set_binding(config),
+                FileItem::Component(config) => self.set_component(config),
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn save(&self) -> Result<(), SaveError> {
+        let mut items = Vec::with_capacity(self.bindings.len() + self.components.len());
+
+        for (_, config) in &self.bindings {
+            items.push(FileItemRef::Binding(&config));
+        }
+
+        for (_, config) in &self.components {
+            items.push(FileItemRef::Component(&config));
+        }
+
+        let content = serde_json::to_string_pretty(&items)?;
+        fs::write(&self.path, content).await?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", content = "config", rename_all = "kebab-case")]
+enum FileItem {
+    Binding(BindingConfig),
+    Component(ComponentConfig),
+}
+
+/// Serialization version of FileItem which capture items by ref to avoid to copy
+#[derive(Serialize)]
+#[serde(tag = "type", content = "config", rename_all = "kebab-case")]
+enum FileItemRef<'a> {
+    Binding(&'a BindingConfig),
+    Component(&'a ComponentConfig),
+}
