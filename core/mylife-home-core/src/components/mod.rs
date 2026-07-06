@@ -26,6 +26,7 @@ const LOCAL_COMPONENTS_NAME: &str = "components.local";
 
 /// Configuration to setup one component
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ComponentConfig {
     pub id: String,
     pub plugin: String,

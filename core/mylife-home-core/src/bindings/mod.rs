@@ -25,10 +25,11 @@ const BINDINGS_NAME: &str = "bindings";
 
 /// Configuration to setup one binding
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BindingConfig {
-    pub source_id: String,
+    pub source_component: String,
     pub source_state: String,
-    pub target_id: String,
+    pub target_component: String,
     pub target_action: String,
 }
 
@@ -36,7 +37,7 @@ impl fmt::Display for BindingConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!(
             "{}.{} -> {}.{}",
-            self.source_id, self.source_state, self.target_id, self.target_action
+            self.source_component, self.source_state, self.target_component, self.target_action
         ))
     }
 }
@@ -314,18 +315,18 @@ impl message::Message<BindingList> for Bindings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct BindingKey {
-    source_id: String,
+    source_component: String,
     source_state: String,
-    target_id: String,
+    target_component: String,
     target_action: String,
 }
 
 impl From<BindingConfig> for BindingKey {
     fn from(value: BindingConfig) -> Self {
         Self {
-            source_id: value.source_id,
+            source_component: value.source_component,
             source_state: value.source_state,
-            target_id: value.target_id,
+            target_component: value.target_component,
             target_action: value.target_action,
         }
     }
@@ -335,7 +336,7 @@ impl fmt::Display for BindingKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!(
             "{}.{} -> {}.{}",
-            self.source_id, self.source_state, self.target_id, self.target_action
+            self.source_component, self.source_state, self.target_component, self.target_action
         ))
     }
 }
@@ -343,9 +344,9 @@ impl fmt::Display for BindingKey {
 #[derive(Debug)]
 struct Binding {
     registry: RegistryHandle,
-    source_id: String,
+    source_component: String,
     source_state: String,
-    target_id: String,
+    target_component: String,
     target_action: String,
     source_value: Option<Value>, // only if online
     target_online: bool,
@@ -355,9 +356,9 @@ impl Binding {
     pub fn new(registry: RegistryHandle, config: &BindingConfig) -> Self {
         Self {
             registry,
-            source_id: config.source_id.clone(),
+            source_component: config.source_component.clone(),
             source_state: config.source_state.clone(),
-            target_id: config.target_id.clone(),
+            target_component: config.target_component.clone(),
             target_action: config.target_action.clone(),
             source_value: None,
             target_online: false,
@@ -372,12 +373,12 @@ impl Binding {
     }
 
     async fn init_source_value(&mut self) {
-        let source_component = match self.find_component(&self.source_id).await {
+        let source_component = match self.find_component(&self.source_component).await {
             Ok(comp) => comp,
             Err(error) => {
                 tracing::error!(
                     ?error,
-                    component_id = self.source_id,
+                    component_id = self.source_component,
                     "failed to lookup for source component"
                 );
                 return;
@@ -387,7 +388,7 @@ impl Binding {
         if let Some(source_component) = source_component {
             let Some(value) = source_component.state.get(&self.source_state) else {
                 tracing::error!(
-                    component_id = self.source_id,
+                    component_id = self.source_component,
                     state_name = self.source_state,
                     "no such state on component"
                 );
@@ -402,12 +403,12 @@ impl Binding {
     }
 
     async fn init_target_online(&mut self) {
-        let target_component = match self.find_component(&self.target_id).await {
+        let target_component = match self.find_component(&self.target_component).await {
             Ok(comp) => comp,
             Err(error) => {
                 tracing::error!(
                     ?error,
-                    component_id = self.target_id,
+                    component_id = self.target_component,
                     "failed to lookup for target component"
                 );
                 return;
@@ -436,14 +437,14 @@ impl Binding {
     }
 
     pub fn process_state_change(&mut self, msg: &registry::ComponentStateChanged) {
-        if msg.component_id() == self.source_id && msg.state() == self.source_state {
+        if msg.component_id() == self.source_component && msg.state() == self.source_state {
             self.source_value = Some(msg.value().clone());
             self.apply_binding();
         }
     }
 
     pub fn component_added(&mut self, id: &str) {
-        if id == self.target_id {
+        if id == self.target_component {
             self.target_online = true;
             self.apply_binding();
         }
@@ -452,11 +453,11 @@ impl Binding {
     }
 
     pub fn component_removed(&mut self, id: &str) {
-        if id == self.source_id {
+        if id == self.source_component {
             self.source_value = None;
         }
 
-        if id == self.target_id {
+        if id == self.target_component {
             self.target_online = false
         }
     }
@@ -466,7 +467,7 @@ impl Binding {
             && let Some(value) = &self.source_value
         {
             self.registry.component_execute_action(
-                self.target_id.clone(),
+                self.target_component.clone(),
                 self.target_action.clone(),
                 value.clone(),
             );
