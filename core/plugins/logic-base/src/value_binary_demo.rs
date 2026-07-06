@@ -9,7 +9,7 @@ use plugin_runtime::{MylifePluginHooks, State, WakeHandle};
 
 #[derive(MylifePlugin, Debug)]
 #[mylife_plugin(description = "step relay", usage = "logic")] // name=
-pub struct ValueBinary {
+pub struct ValueBinaryDemo {
     id: String,
 
     #[mylife_config(description = "initial value (useless only config example")] // type=, name=
@@ -18,15 +18,15 @@ pub struct ValueBinary {
     #[mylife_state(description = "actual value")] // type=, name=
     state: State<bool>,
 
-    updates: Arc<UpdateSync<ValueBinary>>,
+    updates: Arc<UpdateSync<ValueBinaryDemo>>,
 }
 
 // impl Drop if terminate needed
-impl MylifePluginHooks for ValueBinary {
+impl MylifePluginHooks for ValueBinaryDemo {
     type Error = Infallible;
 
     fn new(id: &str, waker: WakeHandle) -> Self {
-        ValueBinary {
+        ValueBinaryDemo {
             id: String::from(id),
             config: Default::default(),
             state: Default::default(),
@@ -53,7 +53,7 @@ impl MylifePluginHooks for ValueBinary {
 }
 
 #[mylife_actions]
-impl ValueBinary {
+impl ValueBinaryDemo {
     // can return Result<(), Self::Error> or nothing
     #[mylife_action(description = "set value to on")] // type=, name=
     fn on(&mut self, arg: bool) -> Result<(), Infallible> {
