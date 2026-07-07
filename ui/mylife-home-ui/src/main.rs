@@ -4,6 +4,7 @@ use common::{
     utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
 };
 
+mod model;
 mod web;
 
 #[derive(Parser, Debug)]
