@@ -3,14 +3,15 @@ PWD := $(CURDIR)
 .PHONY: run build fmt
 
 ui-setup:
-	cd webapp && npm install
-	cd webapp/bundler && npm install
+	cd web-app && npm install
+	cd web-app/bundler && npm install
+
 
 ui-run:
-	cd webapp/bundler && npm run dev
+	cd web-app/bundler && npm run dev
 
 ui-build:
-	cd webapp/bundler && npm run build	
+	cd web-app/bundler && npm run build	
 
 run:
 	RUST_LOG=$${RUST_LOG:-debug} cargo run --manifest-path mylife-home-ui/Cargo.toml
