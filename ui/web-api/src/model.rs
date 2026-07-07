@@ -4,6 +4,13 @@ use ts_rs::TS;
 
 use crate::register_ts;
 
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "model.ts")]
+#[ts(type = "string")]
+pub struct Resource(pub String);
+
+register_ts!(Resource);
+
 /// Style is a list of CSS class names (static for now).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export_to = "model.ts")]
@@ -40,7 +47,7 @@ pub struct Window {
     pub style: Style,
     pub height: i32,
     pub width: i32,
-    pub background_resource: String,
+    pub background_resource: Resource,
     pub controls: Vec<Control>,
 }
 
@@ -70,7 +77,7 @@ register_ts!(Control);
 pub struct ControlDisplay {
     pub component_id: String,
     pub component_state: String,
-    pub default_resource: String,
+    pub default_resource: Resource,
     pub map: Vec<ControlDisplayMapItem>,
 }
 
@@ -84,7 +91,7 @@ pub struct ControlDisplayMapItem {
     pub max: i32,
     #[ts(type = "string | boolean")]
     pub value: serde_json::Value,
-    pub resource: String,
+    pub resource: Resource,
 }
 
 register_ts!(ControlDisplayMapItem);
