@@ -4,6 +4,8 @@ use common::{
     utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
 };
 
+mod web;
+
 #[derive(Parser, Debug)]
 #[command(name = "mylife-home-ui")]
 #[command(about = "Mylife Home UI")]

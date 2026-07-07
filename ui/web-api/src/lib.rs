@@ -1,5 +1,7 @@
 use ts_rs::Config;
 
+pub mod model;
+pub mod registry;
 pub mod socket;
 
 // Generation helpers
