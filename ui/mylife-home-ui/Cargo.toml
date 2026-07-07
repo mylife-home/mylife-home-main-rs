@@ -4,3 +4,7 @@ version = "1.0.0"
 edition = "2024"
 
 [dependencies]
+axum = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+common = { path = "../../common" }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time", "fs"] }

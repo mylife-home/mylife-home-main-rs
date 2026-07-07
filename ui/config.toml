@@ -1,0 +1,9 @@
+[observability]
+logger_output_console = true
+kameo_console_listen_address = "%{KAMEO_CONSOLE_LISTEN_ADDRESS|127.0.0.1:9999}"
+
+[bus]
+server_address = "%{BUS_SERVER|rpi-dev-home-main:1883}"
+
+[model]
+store_path = "ui/mylife-home-ui/store.json"
