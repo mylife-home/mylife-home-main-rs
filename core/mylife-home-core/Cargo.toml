@@ -1,5 +1,5 @@
 [package]
-name = "mylife_home_core"
+name = "mylife-home-core"
 version = "1.0.0"
 edition = "2024"
 
