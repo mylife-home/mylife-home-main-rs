@@ -6,7 +6,7 @@ run:
 	RUST_LOG=$${RUST_LOG:-debug} cargo run --manifest-path mylife-home-core/Cargo.toml
 
 build:
-	cargo build --manifest-path mylife-home-core/Cargo.toml
+	cargo build --release --manifest-path mylife-home-core/Cargo.toml
 
 fmt:
 	cargo fmt --all
