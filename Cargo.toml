@@ -1,11 +1,12 @@
 [workspace]
 members = [
+  "common",
   "core/mylife-home-core",
   "core/plugin-runtime",
   "core/plugin-macros",
   "core/plugins/logic-base",
   "core/plugins/ui-base",
-  "common"
+  "ui/mylife-home-ui"
 ]
 resolver = "2"
 

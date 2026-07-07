@@ -1,0 +1,40 @@
+import React, { FunctionComponent } from 'react';
+import { useSelector } from 'react-redux';
+import { getOnline } from '../store/selectors/online';
+import { isReady } from '../store/selectors/view';
+import Offline from './offline';
+import Loading from './loading';
+import View from './view';
+
+const Application: FunctionComponent = () => (
+  <div className="mylife-window-root">
+    {/* preload resources */}
+    <img src='loading.svg' style={{ display: 'none' }} />
+    <img src='offline.svg' style={{ display: 'none' }} />
+
+    <AppContent />
+  </div>
+);
+
+export default Application;
+
+const AppContent: FunctionComponent = () => {
+  const { online, ready } = useConnect();
+
+  if (!online) {
+    return <Offline />;
+  }
+
+  if (!ready) {
+    return <Loading />;
+  }
+
+  return <View />;
+};
+
+function useConnect() {
+  return {
+    online: useSelector(getOnline),
+    ready: useSelector(isReady),
+  };
+}

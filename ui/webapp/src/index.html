@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyLife Home UI</title>
+
+    <!-- iOS specifics -->
+    <link rel="apple-touch-icon" href="mylife.svg">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
+    <!-- This helps to track errors on mobile (which have no easily accessible dev tools) -->
+    <script>
+      window.onerror = function (msg, url, lineNo, columnNo, error) {
+      var string = msg.toLowerCase();
+      var substring = "script error";
+      var message = [
+        'Message: ' + msg,
+        'URL: ' + url,
+        'Line: ' + lineNo,
+        'Column: ' + columnNo,
+        'Error object: ' + JSON.stringify(error)
+      ].join(' - ');
+
+      alert(message);
+
+      return false;
+    };
+    </script>
+
+  </head>
+  <body>
+    <div id="content">
+      <div class="mylife-overlay">
+        <img src="loading.svg">
+      </div>
+    </div>
+
+    <script type="module" src="app/main.tsx"></script>
+  </body>
+</html>
