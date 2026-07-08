@@ -1,14 +1,11 @@
 use axum::{
-    Json, Router,
-    extract::{Path, State},
-    http::{StatusCode, header},
-    response::{IntoResponse, Response},
-    routing::get,
+    Json, Router, extract::{Path, State}, http::{StatusCode, Uri, header}, response::{IntoResponse, Response}, routing::get,
 };
 use common::{
     components::registry::RegistryHandle,
     utils::{actors::HandleLookupError, config},
 };
+use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::oneshot;
@@ -52,8 +49,7 @@ impl WebServer {
         let app = Router::new()
             //.nest("/repository", repository_router())
             .nest("/resources", resources_router())
-            //.route_service("/images/favicon.ico", ServeFile::new(favicon))
-            //.fallback_service(static_service)
+            .merge(setup_static())
             .with_state(state);
 
         let listener = TcpListener::bind((config.listen_address))
@@ -85,6 +81,36 @@ impl WebServer {
         if let Err(error) = self.task.await {
             tracing::error!(?error, "could not join web server task");
         }
+    }
+}
+
+#[derive(Embed)]
+#[folder = "../web-app/dist/"]  // relative to crate root
+struct StaticContent;
+
+fn setup_static() -> Router<AppState> {
+    for path in StaticContent::iter() {
+        tracing::debug!(path = path.as_ref(), "serving static file");
+    }
+
+    Router::new().fallback(static_handler)
+}
+
+async fn static_handler(uri: Uri) -> Response {
+    // strip leading '/', map '' to index.html (root request)
+    let path = uri.path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+
+    match StaticContent::get(path) {
+        Some(content) => {
+            let mime = mime_guess::from_path(path).first_or_octet_stream();
+            (
+                [(header::CONTENT_TYPE, mime.as_ref())],
+                content.data, // Cow<'static, [u8]>
+            )
+                .into_response()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
