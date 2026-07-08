@@ -783,11 +783,8 @@ impl Remote {
         })?;
 
         if member.member_type() != MemberType::State {
-            return Err(HandleStateError::MemberNotFound {
-                instance: plugin_key.instance,
-                plugin_id: plugin_key.id,
-                member: state.to_owned(),
-            });
+            // We can get called for actions message received on MQTT bus, just ignore them.
+            return Ok(());
         }
 
         let value = encoding::read_value(member.value_type(), value).map_err(|e| {
