@@ -34,7 +34,7 @@ async fn main() {
     )
     .await;
 
-    // store::init_actor(&mut actors).await;
+    model::init_actor(&mut actors).await;
 
     let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
     instance_info_handle.add_component("ui", env!("CARGO_PKG_VERSION"));
