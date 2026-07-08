@@ -36,9 +36,10 @@ pub struct ModelBuilder {
 impl ModelBuilder {
     pub fn build(&mut self, definition: definition::Definition) -> Result<(), ModelBuildError> {
         for definition::DefinitionResource { id, mime, data } in definition.resources {
-            use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+            // STANDARD = javascript base64
+            use base64::{Engine, engine::general_purpose::STANDARD};
 
-            let data = Bytes::from_owner(URL_SAFE_NO_PAD.decode(data).map_err(|error| {
+            let data = Bytes::from_owner(STANDARD.decode(data).map_err(|error| {
                 ModelBuildError::ResourceDecodeError {
                     resource_id: id.clone(),
                     error,
@@ -49,7 +50,7 @@ impl ModelBuilder {
             let hash = self.set_resource(mime, data);
             self.resource_translation.insert(id.clone(), hash.clone());
 
-            tracing::info!(id, hash, len, "creating resource");
+            tracing::debug!(id, hash, len, "creating resource");
         }
 
         // serialize styles as a resource and get the hash
@@ -57,7 +58,7 @@ impl ModelBuilder {
             let data = Bytes::from_owner(Self::create_css(definition.styles));
             let len = data.len();
             let hash = self.set_resource("text/css", data);
-            tracing::info!(hash, len, "creating css");
+            tracing::debug!(hash, len, "creating css");
             hash
         };
 
@@ -80,7 +81,7 @@ impl ModelBuilder {
         );
         let len = data.len();
         self.model_hash = self.set_resource("application/json", data);
-        tracing::info!(hash = self.model_hash, len, "creating resource from model");
+        tracing::debug!(hash = self.model_hash, len, "creating resource from model");
 
         Ok(())
     }
@@ -98,6 +99,7 @@ impl ModelBuilder {
     }
 
     fn compute_hash(data: &[u8]) -> String {
+        // URL_SAFE_NO_PAD = javascript base64url
         use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 
         let digest = md5::compute(data);
@@ -169,6 +171,12 @@ impl ModelBuilder {
         let Some(id) = resource else {
             return Ok(None);
         };
+
+        // TODO: we should be more strict here
+        // a resource should be either set or null, but not empty
+        if id == "" {
+            return Ok(None);
+        }
 
         let Some(hash) = self.resource_translation.get(&id) else {
             return Err(ModelBuildError::ResourceNotFound(id));
