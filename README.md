@@ -23,3 +23,5 @@ Then each plugin can have a MessageSender instance, which can be used in another
 core:
 - component manager: store fs mount test
 - plugins
+- metadata ordering no guarantee makes studio crash when core is --release (not always)
+  see if 2 rust common are ok with that (rust is stronger wrt to this ordering)
