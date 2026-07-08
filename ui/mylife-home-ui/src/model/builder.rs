@@ -2,9 +2,27 @@ use std::collections::HashMap;
 
 use bytes::Bytes;
 use serde_json::Value;
+use thiserror::Error;
 use web_api::model as api;
 
-use crate::model::{RequiredComponentState, Resource, SetDefinitionError, definition};
+use crate::model::{RequiredComponentState, Resource, definition};
+
+
+#[derive(Debug, Error)]
+pub enum ModelBuildError {
+    #[error("could not decode resource '{resource_id}': {error}")]
+    ResourceDecodeError {
+        resource_id: String,
+        #[source]
+        error: base64::DecodeError,
+    },
+
+    #[error("got reference to non existing resource '{0}'")]
+    ResourceNotFound(String),
+
+    #[error("could not serialize model")]
+    ModelSerializationError(#[source] serde_json::Error),
+}
 
 /// Handle transient state while builder a new model from definition
 #[derive(Debug, Default)]
@@ -16,12 +34,12 @@ pub struct ModelBuilder {
 }
 
 impl ModelBuilder {
-    pub fn build(&mut self, definition: definition::Definition) -> Result<(), SetDefinitionError> {
+    pub fn build(&mut self, definition: definition::Definition) -> Result<(), ModelBuildError> {
         for definition::DefinitionResource { id, mime, data } in definition.resources {
             use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 
             let data = Bytes::from_owner(URL_SAFE_NO_PAD.decode(data).map_err(|error| {
-                SetDefinitionError::ResourceDecodeError {
+                ModelBuildError::ResourceDecodeError {
                     resource_id: id.clone(),
                     error,
                 }
@@ -58,7 +76,7 @@ impl ModelBuilder {
         // serialize the model as a resource and get the hash
         let data = Bytes::from_owner(
             serde_json::to_vec_pretty(&model)
-                .map_err(SetDefinitionError::ModelSerializationError)?,
+                .map_err(ModelBuildError::ModelSerializationError)?,
         );
         let len = data.len();
         self.model_hash = self.set_resource("application/json", data);
@@ -89,7 +107,7 @@ impl ModelBuilder {
     fn translate_window(
         &self,
         window: definition::Window,
-    ) -> Result<api::Window, SetDefinitionError> {
+    ) -> Result<api::Window, ModelBuildError> {
         Ok(api::Window {
             id: window.id,
             style: self.translate_style(&window.style),
@@ -107,7 +125,7 @@ impl ModelBuilder {
     fn translate_control(
         &self,
         control: definition::Control,
-    ) -> Result<api::Control, SetDefinitionError> {
+    ) -> Result<api::Control, ModelBuildError> {
         let display = if let Some(display) = control.display {
             Some(api::ControlDisplay {
                 component_id: display.component_id,
@@ -147,13 +165,13 @@ impl ModelBuilder {
     fn translate_resource(
         &self,
         resource: Option<definition::Resource>,
-    ) -> Result<Option<api::Resource>, SetDefinitionError> {
+    ) -> Result<Option<api::Resource>, ModelBuildError> {
         let Some(id) = resource else {
             return Ok(None);
         };
 
         let Some(hash) = self.resource_translation.get(&id) else {
-            return Err(SetDefinitionError::ResourceNotFound(id));
+            return Err(ModelBuildError::ResourceNotFound(id));
         };
 
         Ok(Some(api::Resource(hash.clone())))

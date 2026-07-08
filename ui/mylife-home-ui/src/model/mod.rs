@@ -20,6 +20,8 @@ use serde::Deserialize;
 use thiserror::Error;
 use tokio::fs;
 
+use crate::model::builder::ModelBuildError;
+
 mod builder;
 mod definition;
 mod rpc_services;
@@ -49,7 +51,7 @@ impl ModelHandle {
     pub async fn set_definition(
         &self,
         definition: definition::Definition,
-    ) -> Result<(), CallError<SetDefinitionError>> {
+    ) -> Result<(), CallError<ModelBuildError>> {
         self.0.call(SetDefinition(definition)).await?;
 
         Ok(())
@@ -108,7 +110,7 @@ enum ModelActorError {
     #[error("Failed to remove rpc service: {0}")]
     RpcServiceRemoveError(#[from] CallError<RpcServiceRemoveError>),
     #[error("Failed to set definition: {0}")]
-    SetDefinitionError(#[from] SetDefinitionError),
+    ModelBuildError(#[from] ModelBuildError),
 }
 
 impl Actor for Model {
@@ -163,7 +165,7 @@ pub enum LoadDefinitionError {
 }
 
 impl Model {
-    async fn load(&mut self) -> Result<(), SetDefinitionError> {
+    async fn load(&mut self) -> Result<(), ModelBuildError> {
         let definition = match self.load_definition().await {
             Ok(definition) => definition,
             Err(error) => {
@@ -223,24 +225,8 @@ impl Model {
 #[derive(Clone, Debug)]
 struct SetDefinition(definition::Definition);
 
-#[derive(Debug, Error)]
-pub enum SetDefinitionError {
-    #[error("could not decode resource '{resource_id}': {error}")]
-    ResourceDecodeError {
-        resource_id: String,
-        #[source]
-        error: base64::DecodeError,
-    },
-
-    #[error("got reference to non existing resource '{0}'")]
-    ResourceNotFound(String),
-
-    #[error("could not serialize model")]
-    ModelSerializationError(#[source] serde_json::Error),
-}
-
 impl message::Message<SetDefinition> for Model {
-    type Reply = Result<(), SetDefinitionError>;
+    type Reply = Result<(), ModelBuildError>;
 
     async fn handle(
         &mut self,
@@ -255,7 +241,7 @@ impl Model {
     fn set_definition(
         &mut self,
         definition: definition::Definition,
-    ) -> Result<(), SetDefinitionError> {
+    ) -> Result<(), ModelBuildError> {
         let mut builder = builder::ModelBuilder::default();
         builder.build(definition)?;
 
