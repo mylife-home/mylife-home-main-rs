@@ -2,7 +2,12 @@ use std::{collections::HashMap, io};
 
 use bytes::Bytes;
 use common::{
-    bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError}, instance_info::InstanceInfoPublisherHandle, utils::{actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors}, config},
+    bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError},
+    instance_info::InstanceInfoPublisherHandle,
+    utils::{
+        actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
+        config,
+    },
 };
 use kameo::{
     Actor,
@@ -15,6 +20,7 @@ use serde::Deserialize;
 use thiserror::Error;
 use tokio::fs;
 
+mod builder;
 mod definition;
 mod rpc_services;
 
@@ -161,7 +167,11 @@ impl Model {
         let definition = match self.load_definition().await {
             Ok(definition) => definition,
             Err(error) => {
-                tracing::warn!(?error, store_path = self.store_path, "could not load model store, using default model");
+                tracing::warn!(
+                    ?error,
+                    store_path = self.store_path,
+                    "could not load model store, using default model"
+                );
                 Self::default_definition()
             }
         };
@@ -214,7 +224,20 @@ impl Model {
 struct SetDefinition(definition::Definition);
 
 #[derive(Debug, Error)]
-pub enum SetDefinitionError {}
+pub enum SetDefinitionError {
+    #[error("could not decode resource '{resource_id}': {error}")]
+    ResourceDecodeError {
+        resource_id: String,
+        #[source]
+        error: base64::DecodeError,
+    },
+
+    #[error("got reference to non existing resource '{0}'")]
+    ResourceNotFound(String),
+
+    #[error("could not serialize model")]
+    ModelSerializationError(#[source] serde_json::Error),
+}
 
 impl message::Message<SetDefinition> for Model {
     type Reply = Result<(), SetDefinitionError>;
@@ -229,7 +252,17 @@ impl message::Message<SetDefinition> for Model {
 }
 
 impl Model {
-    fn set_definition(&mut self, definition: definition::Definition) -> Result<(), SetDefinitionError> {
-        todo!()
+    fn set_definition(
+        &mut self,
+        definition: definition::Definition,
+    ) -> Result<(), SetDefinitionError> {
+        let mut builder = builder::ModelBuilder::default();
+        builder.build(definition)?;
+
+        self.model_hash = builder.model_hash;
+        self.resources = builder.resources;
+        self.required_component_states = builder.required_component_states;
+
+        Ok(())
     }
 }

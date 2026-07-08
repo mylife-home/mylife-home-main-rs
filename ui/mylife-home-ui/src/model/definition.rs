@@ -8,13 +8,11 @@ pub type DefaultWindow = HashMap<String, String>;
 pub type Style = Vec<String>;
 pub type Resource = String;
 
-pub type ControlDisplay = api::ControlDisplay;
-pub type ControlDisplayMapItem = api::ControlDisplayMapItem;
 pub type ControlText = api::ControlText;
-pub type ControlTextContextItem = api::ControlTextContextItem;
+// pub type ControlTextContextItem = api::ControlTextContextItem;
 pub type Action = api::Action;
-pub type ActionComponent = api::ActionComponent;
-pub type ActionWindow = api::ActionWindow;
+// pub type ActionComponent = api::ActionComponent;
+// pub type ActionWindow = api::ActionWindow;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +47,24 @@ pub struct Control {
     pub text: Option<ControlText>,
     pub primary_action: Option<Action>,
     pub secondary_action: Option<Action>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ControlDisplay {
+    pub component_id: String,
+    pub component_state: String,
+    pub default_resource: Option<Resource>,
+    pub map: Vec<ControlDisplayMapItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ControlDisplayMapItem {
+    pub min: i32,
+    pub max: i32,
+    pub value: serde_json::Value,
+    pub resource: Option<Resource>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

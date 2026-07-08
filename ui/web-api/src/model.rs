@@ -77,7 +77,7 @@ register_ts!(Control);
 pub struct ControlDisplay {
     pub component_id: String,
     pub component_state: String,
-    pub default_resource: Resource,
+    pub default_resource: Option<Resource>,
     pub map: Vec<ControlDisplayMapItem>,
 }
 
@@ -91,7 +91,7 @@ pub struct ControlDisplayMapItem {
     pub max: i32,
     #[ts(type = "string | boolean")]
     pub value: serde_json::Value,
-    pub resource: Resource,
+    pub resource: Option<Resource>,
 }
 
 register_ts!(ControlDisplayMapItem);
