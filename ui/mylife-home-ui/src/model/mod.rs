@@ -51,7 +51,7 @@ impl ModelHandle {
     pub async fn set_definition(
         &self,
         definition: definition::Definition,
-    ) -> Result<(), CallError<ModelBuildError>> {
+    ) -> Result<(), CallError<SetDefinitionError>> {
         self.0.call(SetDefinition(definition)).await?;
 
         Ok(())
@@ -159,7 +159,7 @@ impl Actor for Model {
 #[derive(Debug, Error)]
 pub enum LoadDefinitionError {
     #[error("got io error while loading store: {0}")]
-    Io(#[from] io::Error),
+    IoError(#[from] io::Error),
     #[error("got deserialization error while loading store: {0}")]
     Deserialization(#[from] serde_json::Error),
 }
@@ -225,15 +225,32 @@ impl Model {
 #[derive(Clone, Debug)]
 struct SetDefinition(definition::Definition);
 
+#[derive(Debug, Error)]
+pub enum SetDefinitionError {
+    #[error("error building model: {0}")]
+    ModelBuildError(#[from]ModelBuildError),
+    #[error("got io error while saving store: {0}")]
+    IoError(#[from] io::Error),
+    #[error("got serialization error while saving store: {0}")]
+    Serialization(#[from] serde_json::Error),
+}
+
 impl message::Message<SetDefinition> for Model {
-    type Reply = Result<(), ModelBuildError>;
+    type Reply = Result<(), SetDefinitionError>;
 
     async fn handle(
         &mut self,
         msg: SetDefinition,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.set_definition(msg.0)
+        // prepare definition's json (set_definition consumes it)
+        let content = serde_json::to_string_pretty(&msg.0)?;
+
+        self.set_definition(msg.0)?;
+
+        fs::write(&self.store_path, content).await?;
+
+        Ok(())
     }
 }
 
