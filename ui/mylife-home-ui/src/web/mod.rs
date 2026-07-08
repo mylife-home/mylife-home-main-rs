@@ -1,15 +1,18 @@
 use axum::{
-    Router,
+    Json, Router,
     extract::{Path, State},
     http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::get,
 };
-use common::{components::registry::RegistryHandle, utils::{actors::HandleLookupError, config}};
-use serde::Deserialize;
+use common::{
+    components::registry::RegistryHandle,
+    utils::{actors::HandleLookupError, config},
+};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::{io, net::TcpListener, task};
 use tokio::sync::oneshot;
+use tokio::{io, net::TcpListener};
 
 use crate::model::ModelHandle;
 
@@ -41,7 +44,7 @@ pub enum WebServerError {
 impl WebServer {
     pub async fn new() -> Result<Self, WebServerError> {
         let config: WebConfig = config::section("web");
-        let state = AppState { 
+        let state = AppState {
             registry: RegistryHandle::new()?,
             model: ModelHandle::new()?,
         };
@@ -53,7 +56,9 @@ impl WebServer {
             //.fallback_service(static_service)
             .with_state(state);
 
-        let listener = TcpListener::bind((config.listen_address)).await.map_err(WebServerError::BindError)?;
+        let listener = TcpListener::bind((config.listen_address))
+            .await
+            .map_err(WebServerError::BindError)?;
 
         let (tx, rx) = oneshot::channel();
         let task = tokio::spawn(async move {
@@ -76,7 +81,6 @@ impl WebServer {
         if let Some(tx) = self.shutdown.take() {
             let _ = tx.send(());
         }
-
 
         if let Err(error) = self.task.await {
             tracing::error!(?error, "could not join web server task");
@@ -123,19 +127,38 @@ fn resources_router() -> Router<AppState> {
     Router::new().route("/{*hash}", get(resource))
 }
 
-async fn resource(State(state): State<AppState>, Path(hash): Path<String>) -> Response {
-    match state.model.get_resource(&hash).await {
-        Ok(res) => (
-            [
-                (header::CONTENT_TYPE, res.mime()),
-                (
-                    header::CACHE_CONTROL,
-                    "public, max-age=31557600, s-maxage=31557600", // 1 year
-                ),
-            ],
-            res.data().clone(),
-        )
-            .into_response(),
-        Err(err) => StatusCode::NOT_FOUND.into_response(),
+async fn resource(
+    State(state): State<AppState>,
+    Path(hash): Path<String>,
+) -> Result<Response, WebError> {
+    let res = state.model.get_resource(&hash).await?;
+
+    let headers = [
+        (header::CONTENT_TYPE, res.mime()),
+        (
+            header::CACHE_CONTROL,
+            "public, max-age=31557600, s-maxage=31557600", // 1 year
+        ),
+    ];
+
+    Ok((headers, res.data().clone()).into_response())
+}
+
+#[derive(Debug, Serialize)]
+pub struct WebError {
+    error: String,
+}
+
+impl<E: std::error::Error> From<E> for WebError {
+    fn from(value: E) -> Self {
+        WebError {
+            error: format!("{}", value),
+        }
+    }
+}
+
+impl IntoResponse for WebError {
+    fn into_response(self) -> Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(self)).into_response()
     }
 }
