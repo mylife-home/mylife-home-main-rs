@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use bytes::Bytes;
 use serde_json::Value;
@@ -6,7 +6,6 @@ use thiserror::Error;
 use web_api::model as api;
 
 use crate::model::{RequiredComponentState, Resource, definition};
-
 
 #[derive(Debug, Error)]
 pub enum ModelBuildError {
@@ -76,8 +75,7 @@ impl ModelBuilder {
 
         // serialize the model as a resource and get the hash
         let data = Bytes::from_owner(
-            serde_json::to_vec_pretty(&model)
-                .map_err(ModelBuildError::ModelSerializationError)?,
+            serde_json::to_vec_pretty(&model).map_err(ModelBuildError::ModelSerializationError)?,
         );
         let len = data.len();
         self.model_hash = self.set_resource("application/json", data);
@@ -91,8 +89,8 @@ impl ModelBuilder {
         self.resources.insert(
             hash.clone(),
             Resource {
-                mime: mime.into(),
-                data,
+                mime: Arc::new(mime.into()),
+                data: Arc::new(data),
             },
         );
         hash
@@ -106,10 +104,7 @@ impl ModelBuilder {
         URL_SAFE_NO_PAD.encode(digest.0)
     }
 
-    fn translate_window(
-        &self,
-        window: definition::Window,
-    ) -> Result<api::Window, ModelBuildError> {
+    fn translate_window(&self, window: definition::Window) -> Result<api::Window, ModelBuildError> {
         Ok(api::Window {
             id: window.id,
             style: self.translate_style(&window.style),

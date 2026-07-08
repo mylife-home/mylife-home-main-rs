@@ -34,6 +34,7 @@ async fn main() {
     )
     .await;
 
+    model::init_pubsubs(&mut actors).await;
     model::init_actor(&mut actors).await;
 
     let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();

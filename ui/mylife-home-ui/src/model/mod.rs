@@ -1,20 +1,24 @@
-use std::{collections::HashMap, io};
+use std::{collections::HashMap, io, sync::Arc};
 
 use bytes::Bytes;
 use common::{
     bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError},
     instance_info::InstanceInfoPublisherHandle,
     utils::{
-        actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
+        actors::{
+            ActorHandle, CallError, HandleLookupError, PublisherHandle, SpawnedActor,
+            SpawnedActors, SubscriberHandle, spawn_pubsub,
+        },
         config,
     },
 };
 use kameo::{
     Actor,
     actor::{ActorRef, WeakActorRef},
-    error::ActorStopReason,
+    error::{ActorStopReason, Infallible},
     message,
 };
+use kameo_actors::pubsub;
 use maplit::hashmap;
 use serde::Deserialize;
 use thiserror::Error;
@@ -28,6 +32,9 @@ mod rpc_services;
 
 const MODEL_NAME: &str = "model";
 
+/// Name of the PubSub actor that delivers model update
+const MODEL_UPDATE_PUBSUB_NAME: &str = "model.update";
+
 #[derive(Debug, Clone, Deserialize)]
 struct ModelConfig {
     pub store_path: String,
@@ -35,16 +42,28 @@ struct ModelConfig {
 
 /// Client access to the registry actor
 #[derive(Debug, Clone)]
-pub struct ModelHandle(ActorHandle<Model>);
+pub struct ModelHandle {
+    actor: ActorHandle<Model>,
+    on_update: SubscriberHandle<ModelUpdate>,
+}
 
 impl ModelHandle {
     /// Create a new access
     pub fn new() -> Result<Self, HandleLookupError> {
-        Ok(Self(ActorHandle::from_name(MODEL_NAME)?))
+        Ok(Self {
+            actor: ActorHandle::from_name(MODEL_NAME)?,
+            on_update: SubscriberHandle::from_name(MODEL_UPDATE_PUBSUB_NAME)?,
+        })
     }
 
-    fn from_actor_ref(actor_ref: ActorRef<Model>) -> Self {
-        Self(ActorHandle::from_ref(actor_ref, MODEL_NAME))
+    fn from_actor_ref(
+        actor_ref: ActorRef<Model>,
+        on_update: ActorHandle<pubsub::PubSub<ModelUpdate>>,
+    ) -> Self {
+        Self {
+            actor: ActorHandle::from_ref(actor_ref, MODEL_NAME),
+            on_update: on_update.into(),
+        }
     }
 
     /// Set the definition
@@ -52,12 +71,29 @@ impl ModelHandle {
         &self,
         definition: definition::Definition,
     ) -> Result<(), CallError<SetDefinitionError>> {
-        self.0.call(SetDefinition(definition)).await?;
+        self.actor.call(SetDefinition(definition)).await?;
 
         Ok(())
     }
 
-    // TODO: get resource, get model hash, get model
+    pub async fn get_resource(
+        &self,
+        hash: impl Into<String>,
+    ) -> Result<Resource, CallError<GetResourceError>> {
+        self.actor.call(GetResource(hash.into())).await
+    }
+
+    pub async fn get_model(&self) -> Result<ModelUpdate, CallError> {
+        self.actor.call(GetModel).await
+    }
+
+    pub fn on_update(&self) -> &SubscriberHandle<ModelUpdate> {
+        &self.on_update
+    }
+}
+
+pub async fn init_pubsubs(actors: &mut SpawnedActors) {
+    actors.add(spawn_pubsub::<ModelUpdate>(MODEL_UPDATE_PUBSUB_NAME).await);
 }
 
 pub async fn init_actor(actors: &mut SpawnedActors) {
@@ -70,10 +106,10 @@ pub async fn init_actor(actors: &mut SpawnedActors) {
     actors.add(model);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Resource {
-    mime: String,
-    data: Bytes,
+    mime: Arc<String>,
+    data: Arc<Bytes>,
 }
 
 impl Resource {
@@ -95,10 +131,13 @@ struct RequiredComponentState {
 #[derive(Debug)]
 struct Model {
     store_path: String,
+
     rpc: RpcHandle,
-    model_hash: String,
+    on_update: PublisherHandle<ModelUpdate>,
+
+    model_hash: Arc<String>,
+    required_component_states: Arc<[RequiredComponentState]>,
     resources: HashMap<String, Resource>,
-    required_component_states: Vec<RequiredComponentState>,
 }
 
 #[derive(Debug, Error)]
@@ -123,14 +162,15 @@ impl Actor for Model {
         let mut _self = Self {
             store_path: config.store_path,
             rpc: RpcHandle::new()?,
-            model_hash: "".to_owned(),
+            on_update: PublisherHandle::from_name(MODEL_UPDATE_PUBSUB_NAME)?,
+            model_hash: Arc::new(String::new()),
+            required_component_states: Vec::new().into_boxed_slice().into(),
             resources: HashMap::new(),
-            required_component_states: Vec::new(),
         };
 
         _self.load().await?;
 
-        let self_handle = ModelHandle::from_actor_ref(actor_ref);
+        let self_handle = ModelHandle::from_actor_ref(actor_ref, _self.on_update.clone().into());
 
         _self
             .rpc
@@ -228,7 +268,7 @@ struct SetDefinition(definition::Definition);
 #[derive(Debug, Error)]
 pub enum SetDefinitionError {
     #[error("error building model: {0}")]
-    ModelBuildError(#[from]ModelBuildError),
+    ModelBuildError(#[from] ModelBuildError),
     #[error("got io error while saving store: {0}")]
     IoError(#[from] io::Error),
     #[error("got serialization error while saving store: {0}")]
@@ -262,10 +302,85 @@ impl Model {
         let mut builder = builder::ModelBuilder::default();
         builder.build(definition)?;
 
-        self.model_hash = builder.model_hash;
+        self.model_hash = Arc::new(builder.model_hash);
+        self.required_component_states =
+            builder.required_component_states.into_boxed_slice().into();
         self.resources = builder.resources;
-        self.required_component_states = builder.required_component_states;
+
+        self.on_update.publish(ModelUpdate::new(
+            self.model_hash.clone(),
+            self.required_component_states.clone(),
+        ));
 
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+struct GetResource(String);
+
+#[derive(Debug, Error)]
+pub enum GetResourceError {
+    #[error("resource not found '{0}")]
+    NotFound(String),
+}
+
+impl message::Message<GetResource> for Model {
+    type Reply = Result<Resource, GetResourceError>;
+
+    async fn handle(
+        &mut self,
+        msg: GetResource,
+        _ctx: &mut message::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        Ok(self
+            .resources
+            .get(&msg.0)
+            .ok_or_else(|| GetResourceError::NotFound(msg.0.clone()))?
+            .clone())
+    }
+}
+
+#[derive(Clone, Debug)]
+struct GetModel;
+
+impl message::Message<GetModel> for Model {
+    type Reply = Result<ModelUpdate, Infallible>;
+
+    async fn handle(
+        &mut self,
+        _msg: GetModel,
+        _ctx: &mut message::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        Ok(ModelUpdate::new(
+            self.model_hash.clone(),
+            self.required_component_states.clone(),
+        ))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelUpdate {
+    model_hash: Arc<String>,
+    required_component_states: Arc<[RequiredComponentState]>,
+}
+
+impl ModelUpdate {
+    pub fn new(
+        model_hash: Arc<String>,
+        required_component_states: Arc<[RequiredComponentState]>,
+    ) -> Self {
+        Self {
+            model_hash,
+            required_component_states,
+        }
+    }
+
+    pub fn model_hash(&self) -> &str {
+        &self.model_hash
+    }
+
+    pub fn required_component_states(&self) -> &[RequiredComponentState] {
+        &self.required_component_states
     }
 }

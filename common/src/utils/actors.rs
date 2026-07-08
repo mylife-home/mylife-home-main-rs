@@ -143,6 +143,22 @@ impl<Message: Send + Clone + 'static> PublisherHandle<Message> {
     }
 }
 
+impl<Message: Send + Clone + 'static> From<PublisherHandle<Message>>
+    for ActorHandle<PubSub<Message>>
+{
+    fn from(value: PublisherHandle<Message>) -> Self {
+        value.0
+    }
+}
+
+impl<Message: Send + Clone + 'static> From<ActorHandle<PubSub<Message>>>
+    for PublisherHandle<Message>
+{
+    fn from(value: ActorHandle<PubSub<Message>>) -> Self {
+        PublisherHandle(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SubscriberHandle<M: Send + Clone + 'static>(ActorHandle<PubSub<M>>);
 
@@ -155,6 +171,22 @@ impl<M: Send + Clone + 'static> SubscriberHandle<M> {
     /// Subscribe to the PubSub
     pub fn subscribe<A: Actor + message::Message<M>>(&self, actor_ref: ActorRef<A>) {
         self.0.send(pubsub::Subscribe(actor_ref));
+    }
+}
+
+impl<Message: Send + Clone + 'static> From<SubscriberHandle<Message>>
+    for ActorHandle<PubSub<Message>>
+{
+    fn from(value: SubscriberHandle<Message>) -> Self {
+        value.0
+    }
+}
+
+impl<Message: Send + Clone + 'static> From<ActorHandle<PubSub<Message>>>
+    for SubscriberHandle<Message>
+{
+    fn from(value: ActorHandle<PubSub<Message>>) -> Self {
+        SubscriberHandle(value)
     }
 }
 
