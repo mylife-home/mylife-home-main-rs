@@ -1,7 +1,8 @@
+use std::{collections::HashMap, io};
+
+use bytes::Bytes;
 use common::{
-    bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError},
-    instance_info::InstanceInfoPublisherHandle,
-    utils::actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
+    bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError}, instance_info::InstanceInfoPublisherHandle, utils::{actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors}, config},
 };
 use kameo::{
     Actor,
@@ -9,14 +10,20 @@ use kameo::{
     error::ActorStopReason,
     message,
 };
+use maplit::hashmap;
+use serde::Deserialize;
 use thiserror::Error;
-
-use crate::model::definition::Definition;
+use tokio::fs;
 
 mod definition;
 mod rpc_services;
 
 const MODEL_NAME: &str = "model";
+
+#[derive(Debug, Clone, Deserialize)]
+struct ModelConfig {
+    pub store_path: String,
+}
 
 /// Client access to the registry actor
 #[derive(Debug, Clone)]
@@ -35,7 +42,7 @@ impl ModelHandle {
     /// Set the definition
     pub async fn set_definition(
         &self,
-        definition: Definition,
+        definition: definition::Definition,
     ) -> Result<(), CallError<SetDefinitionError>> {
         self.0.call(SetDefinition(definition)).await?;
 
@@ -46,7 +53,9 @@ impl ModelHandle {
 }
 
 pub async fn init_actor(actors: &mut SpawnedActors) {
-    let (model, _) = SpawnedActor::start::<Model>(()).await;
+    let config = config::section::<ModelConfig>("model");
+
+    let (model, _) = SpawnedActor::start::<Model>(config).await;
 
     model.register(MODEL_NAME);
 
@@ -54,8 +63,34 @@ pub async fn init_actor(actors: &mut SpawnedActors) {
 }
 
 #[derive(Debug)]
+pub struct Resource {
+    mime: String,
+    data: Bytes,
+}
+
+impl Resource {
+    pub fn mime(&self) -> &str {
+        &self.mime
+    }
+
+    pub fn data(&self) -> &Bytes {
+        &self.data
+    }
+}
+
+#[derive(Debug)]
+struct RequiredComponentState {
+    id: String,
+    state: String,
+}
+
+#[derive(Debug)]
 struct Model {
+    store_path: String,
     rpc: RpcHandle,
+    model_hash: String,
+    resources: HashMap<String, Resource>,
+    required_component_states: Vec<RequiredComponentState>,
 }
 
 #[derive(Debug, Error)]
@@ -66,18 +101,26 @@ enum ModelActorError {
     RpcServiceAddError(#[from] CallError<RpcServiceAddError>),
     #[error("Failed to remove rpc service: {0}")]
     RpcServiceRemoveError(#[from] CallError<RpcServiceRemoveError>),
+    #[error("Failed to set definition: {0}")]
+    SetDefinitionError(#[from] SetDefinitionError),
 }
 
 impl Actor for Model {
-    type Args = ();
+    type Args = ModelConfig;
     type Error = ModelActorError;
 
-    async fn on_start(_args: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
+    async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         let instance_info = InstanceInfoPublisherHandle::new();
 
         let mut _self = Self {
+            store_path: config.store_path,
             rpc: RpcHandle::new()?,
+            model_hash: "".to_owned(),
+            resources: HashMap::new(),
+            required_component_states: Vec::new(),
         };
+
+        _self.load().await?;
 
         let self_handle = ModelHandle::from_actor_ref(actor_ref);
 
@@ -105,8 +148,70 @@ impl Actor for Model {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum LoadDefinitionError {
+    #[error("got io error while loading store: {0}")]
+    Io(#[from] io::Error),
+    #[error("got deserialization error while loading store: {0}")]
+    Deserialization(#[from] serde_json::Error),
+}
+
+impl Model {
+    async fn load(&mut self) -> Result<(), SetDefinitionError> {
+        let definition = match self.load_definition().await {
+            Ok(definition) => definition,
+            Err(error) => {
+                tracing::warn!(?error, store_path = self.store_path, "could not load model store, using default model");
+                Self::default_definition()
+            }
+        };
+
+        self.set_definition(definition)
+    }
+
+    async fn load_definition(&self) -> Result<definition::Definition, LoadDefinitionError> {
+        let content = fs::read_to_string(&self.store_path).await?;
+        let definition: definition::Definition = serde_json::from_str(&content)?;
+
+        Ok(definition)
+    }
+
+    fn default_definition() -> definition::Definition {
+        definition::Definition {
+            resources: vec![],
+            windows: vec![definition::Window {
+                id: "default-window".to_owned(),
+                style: vec![],
+                width: 300,
+                height: 100,
+                background_resource: None,
+                controls: vec![definition::Control {
+                    id: "default-control".to_owned(),
+                    style: vec![],
+                    x: 0,
+                    y: 0,
+                    width: 300,
+                    height: 100,
+                    display: None,
+                    text: Some(definition::ControlText {
+                        format: "return 'No definition has been set';".to_owned(),
+                        context: vec![],
+                    }),
+                    primary_action: None,
+                    secondary_action: None,
+                }],
+            }],
+            default_window: hashmap! {
+                "desktop".to_owned() => "default-window".to_owned(),
+                "mobile".to_owned() => "default-window".to_owned(),
+            },
+            styles: vec![],
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
-struct SetDefinition(Definition);
+struct SetDefinition(definition::Definition);
 
 #[derive(Debug, Error)]
 pub enum SetDefinitionError {}
@@ -119,12 +224,12 @@ impl message::Message<SetDefinition> for Model {
         msg: SetDefinition,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.set_definition(msg.0).await
+        self.set_definition(msg.0)
     }
 }
 
 impl Model {
-    async fn set_definition(&mut self, definition: Definition) -> Result<(), SetDefinitionError> {
+    fn set_definition(&mut self, definition: definition::Definition) -> Result<(), SetDefinitionError> {
         todo!()
     }
 }

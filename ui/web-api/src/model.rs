@@ -47,7 +47,7 @@ pub struct Window {
     pub style: Style,
     pub height: i32,
     pub width: i32,
-    pub background_resource: Resource,
+    pub background_resource: Option<Resource>,
     pub controls: Vec<Control>,
 }
 
