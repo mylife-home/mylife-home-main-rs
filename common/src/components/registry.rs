@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use kameo::{message, prelude::*};
+use kameo::{error::Infallible, message, prelude::*};
 use thiserror::Error;
 
 use crate::{
@@ -92,6 +92,10 @@ impl RegistryHandle {
         self.actor.call(ComponentRemove { component_id }).await?;
 
         Ok(())
+    }
+
+    pub async fn get_component_ids(&self) -> Result<Vec<Arc<String>>, CallError> {
+        self.actor.call(GetComponentIds).await
     }
 
     /// Get info on a component
@@ -593,6 +597,18 @@ impl message::Message<ComponentGet> for Registry {
     }
 }
 
+impl message::Message<GetComponentIds> for Registry {
+    type Reply = Result<Vec<Arc<String>>, Infallible>;
+
+    async fn handle(
+        &mut self,
+        _msg: GetComponentIds,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        Ok(self.components.keys().cloned().collect())
+    }
+}
+
 impl message::Message<ComponentAction> for Registry {
     type Reply = ();
 
@@ -645,6 +661,10 @@ struct ComponentAdd {
 struct ComponentRemove {
     component_id: String,
 }
+
+/// Registry command: get component ids
+#[derive(Debug, Clone)]
+struct GetComponentIds;
 
 /// Registry command: get a component
 #[derive(Debug, Clone)]

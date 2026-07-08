@@ -1,8 +1,18 @@
+use std::{collections::HashMap};
+
 use axum::{
-    Json, Router, extract::{Path, State}, http::{StatusCode, Uri, header}, response::{IntoResponse, Response}, routing::get,
+    Json, Router,
+    extract::{Path, State},
+    http::{StatusCode, Uri, header},
+    response::{IntoResponse, Response},
+    routing::get,
 };
 use common::{
-    components::registry::RegistryHandle,
+    components::{
+        metadata::{MemberType, PluginUsage, Type},
+        registry::RegistryHandle,
+        types::Value,
+    },
     utils::{actors::HandleLookupError, config},
 };
 use rust_embed::Embed;
@@ -47,12 +57,12 @@ impl WebServer {
         };
 
         let app = Router::new()
-            //.nest("/repository", repository_router())
+            .nest("/repository", repository_router())
             .nest("/resources", resources_router())
             .merge(setup_static())
             .with_state(state);
 
-        let listener = TcpListener::bind((config.listen_address))
+        let listener = TcpListener::bind(config.listen_address)
             .await
             .map_err(WebServerError::BindError)?;
 
@@ -85,7 +95,7 @@ impl WebServer {
 }
 
 #[derive(Embed)]
-#[folder = "../web-app/dist/"]  // relative to crate root
+#[folder = "../web-app/dist/"] // relative to crate root
 struct StaticContent;
 
 fn setup_static() -> Router<AppState> {
@@ -115,7 +125,7 @@ async fn static_handler(uri: Uri) -> Response {
 }
 
 // ----- repository routes -----------------------------------------------------
-/*
+
 fn repository_router() -> Router<AppState> {
     Router::new()
         .route("/action/{component_id}/{action_name}", get(action))
@@ -123,29 +133,85 @@ fn repository_router() -> Router<AppState> {
         .route("/state/{component_id}", get(state))
 }
 
+#[derive(Debug, Error)]
+enum ComponentActionError {
+    #[error("component is not a UI component")]
+    NotUi,
+    #[error("action not found")]
+    ActionNotFound,
+    #[error("action type must be boolean")]
+    ActionNotBool,
+}
+
 async fn action(
     State(state): State<AppState>,
     Path((component_id, action_name)): Path<(String, String)>,
-) -> StatusCode {
-    // execute true then false, as in the Node version
-    state.registry.execute_action(&component_id, &action_name, true);
-    state.registry.execute_action(&component_id, &action_name, false);
-    StatusCode::OK
+) -> Result<(), WebError> {
+    let info = state.registry.get_component(component_id.clone()).await?;
+    if info.plugin.usage() != PluginUsage::Ui {
+        return Err(ComponentActionError::NotUi.into());
+    }
+
+    let Some(member) = info.plugin.members().get(&action_name) else {
+        return Err(ComponentActionError::ActionNotFound.into());
+    };
+
+    if member.member_type() != MemberType::Action {
+        return Err(ComponentActionError::ActionNotFound.into());
+    }
+
+    if !matches!(member.value_type(), Type::Bool) {
+        return Err(ComponentActionError::ActionNotBool.into());
+    }
+
+    // execute true then false
+    state.registry.component_execute_action(
+        component_id.clone(),
+        action_name.clone(),
+        Value::Bool(true),
+    );
+    state.registry.component_execute_action(
+        component_id.clone(),
+        action_name.clone(),
+        Value::Bool(false),
+    );
+
+    tracing::debug!(component_id, action_name, "ran ui action on component");
+
+    Ok(())
 }
 
-async fn components(State(state): State<AppState>) -> Json<Vec<String>> {
-    let ids = state.registry.component_ids();
-    Json(ids)
+async fn components(State(state): State<AppState>) -> Result<Json<Vec<String>>, WebError> {
+    let ids = state.registry.get_component_ids().await?.into_iter().map(|id| id.as_ref().clone()).collect();
+    Ok(Json(ids))
 }
 
 async fn state(
     State(state): State<AppState>,
     Path(component_id): Path<String>,
-) -> Json<serde_json::Value> {
-    let states = state.registry.component_states(&component_id);
-    Json(states)
+) -> Result<Json<HashMap<String, serde_json::Value>>, WebError> {
+    let info = state.registry.get_component(component_id).await?;
+
+    let state = HashMap::from_iter(info.state.into_iter().map(|(key, value)| {
+        (
+            key,
+            match value {
+                None => serde_json::Value::Null,
+                Some(Value::Range(value)) => serde_json::Value::Number(value.into()),
+                Some(Value::Text(value)) => serde_json::Value::String(value),
+                Some(Value::Float(value)) => serde_json::Value::Number(
+                    serde_json::Number::from_f64(value).expect("could not translate number"),
+                ),
+                Some(Value::Bool(value)) => serde_json::Value::Bool(value),
+                Some(Value::Enum(value)) => serde_json::Value::String(value),
+                Some(Value::Complex) => panic!("complex unsupported"),
+            },
+        )
+    }));
+
+    Ok(Json(state))
 }
-*/
+
 // ----- resource routes -------------------------------------------------------
 
 fn resources_router() -> Router<AppState> {
