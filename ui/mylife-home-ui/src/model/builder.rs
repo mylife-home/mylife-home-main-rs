@@ -75,7 +75,7 @@ impl ModelBuilder {
 
         // serialize the model as a resource and get the hash
         let data = Bytes::from_owner(
-            serde_json::to_vec_pretty(&model).map_err(ModelBuildError::ModelSerializationError)?,
+            serde_json::to_vec(&model).map_err(ModelBuildError::ModelSerializationError)?,
         );
         let len = data.len();
         self.model_hash = self.set_resource("application/json", data);

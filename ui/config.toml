@@ -7,3 +7,6 @@ server_address = "%{BUS_SERVER|rpi-dev-home-main:1883}"
 
 [model]
 store_path = "store.json"
+
+[web]
+listen_address = "0.0.0.0:1234"
