@@ -64,7 +64,7 @@ impl LocalComponentHandle {
     pub async fn terminate(&self) {
         if let Err(error) = self.actor_ref.stop_gracefully().await {
             tracing::error!(
-                ?error,
+                %error,
                 component_id = self.id,
                 "cannot stop component actor"
             );
@@ -78,7 +78,7 @@ impl LocalComponentHandle {
                 }
                 HookError::Error(error) => {
                     tracing::error!(
-                        ?error,
+                        %error,
                         component_id = self.id,
                         "component failed to shutdown"
                     );
@@ -294,7 +294,7 @@ impl Actor for LocalComponent {
 
                 if let Err(error) = ref_self.tell(ComponentWakeMessage).try_send() {
                     tracing::error!(
-                        ?error,
+                        %error,
                         component_id = id,
                         "cannot wake component: cannot send message"
                     );
@@ -315,7 +315,7 @@ impl Actor for LocalComponent {
         if let Err(e) = component_impl.configure(&config) {
             if let Err(error) = registry.component_remove(id.clone()).await {
                 tracing::error!(
-                    ?error,
+                    %error,
                     component_id = id,
                     "can not remove component that failed during configure",
                 );
@@ -327,7 +327,7 @@ impl Actor for LocalComponent {
         if let Err(e) = component_impl.init() {
             if let Err(error) = registry.component_remove(id.clone()).await {
                 tracing::error!(
-                    ?error,
+                    %error,
                     component_id = id,
                     "can not remove component that failed during init",
                 );
@@ -390,7 +390,7 @@ impl message::Message<ComponentExecuteAction> for LocalComponent {
             .execute_action(msg.name(), msg.value().clone())
         {
             tracing::error!(
-                ?error,
+                %error,
                 component = self.id,
                 action = msg.name(),
                 value = ?msg.value(),

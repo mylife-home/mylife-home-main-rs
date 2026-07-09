@@ -1066,7 +1066,7 @@ impl ComponentData {
             })
             .try_send()
         {
-            tracing::error!(?error, component_id = %self.component_id, "could not send action to actor component");
+            tracing::error!(%error, component_id = %self.component_id, "could not send action to actor component");
         }
     }
 

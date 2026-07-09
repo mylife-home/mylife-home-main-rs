@@ -220,7 +220,7 @@ impl Model {
             Ok(definition) => definition,
             Err(error) => {
                 tracing::warn!(
-                    ?error,
+                    %error,
                     store_path = self.store_path,
                     "could not load model store, using default model"
                 );

@@ -130,7 +130,7 @@ impl InstanceInfoPublisher {
         let hostname = match utils::hostname() {
             Ok(value) => value,
             Err(error) => {
-                tracing::error!(?error, "could not read hostname");
+                tracing::error!(%error, "could not read hostname");
                 "<unknown>".to_owned()
             }
         };
@@ -138,7 +138,7 @@ impl InstanceInfoPublisher {
         let system_uptime = match system_uptime() {
             Ok(value) => value,
             Err(error) => {
-                tracing::error!(?error, "could not read uptime");
+                tracing::error!(%error, "could not read uptime");
                 Duration::ZERO
             }
         };
@@ -169,7 +169,7 @@ impl InstanceInfoPublisher {
                 return hardware;
             }
             Err(error) => {
-                tracing::debug!(?error, "could not read /proc/cpuinfo");
+                tracing::debug!(%error, "could not read /proc/cpuinfo");
                 hardware.insert("main".to_owned(), env::consts::ARCH.to_owned());
                 return hardware;
             }
@@ -196,7 +196,7 @@ impl InstanceInfoPublisher {
         let content = match fs::read_to_string("/etc/os-release") {
             Ok(content) => content,
             Err(error) => {
-                tracing::error!(?error, "could not read /etc/os-release");
+                tracing::error!(%error, "could not read /etc/os-release");
                 return None;
             }
         };
@@ -219,7 +219,7 @@ impl InstanceInfoPublisher {
         match fs::read_to_string("/proc/sys/kernel/osrelease") {
             Ok(content) => Some(content.trim_end().to_owned()),
             Err(error) => {
-                tracing::error!(?error, "could not read /proc/sys/kernel/osrelease");
+                tracing::error!(%error, "could not read /proc/sys/kernel/osrelease");
                 None
             }
         }

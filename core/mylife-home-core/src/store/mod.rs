@@ -322,7 +322,7 @@ impl Store {
         if let Some(mount_point) = &self.mount_point {
             if let Err(error) = Self::remount(mount_point, true) {
                 tracing::error!(
-                    ?error,
+                    %error,
                     mount_point,
                     "could not set mount point back to read-only"
                 );

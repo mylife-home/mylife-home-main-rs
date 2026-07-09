@@ -51,7 +51,7 @@ impl MetadataHandle {
         let buff = match serde_json::to_vec(value) {
             Ok(buff) => buff,
             Err(error) => {
-                tracing::error!(?error,
+                tracing::error!(%error,
                             value = ?value,
                             path = path,
 
@@ -69,7 +69,7 @@ impl MetadataHandle {
             })
             .await
         {
-            tracing::error!(?error,
+            tracing::error!(%error,
                             value = ?value,
                             path = path,
                             "could not set metadata");
@@ -87,7 +87,7 @@ impl MetadataHandle {
             })
             .await
         {
-            tracing::error!(?error, path = path, "could not clear metadata");
+            tracing::error!(%error, path = path, "could not clear metadata");
         }
     }
 

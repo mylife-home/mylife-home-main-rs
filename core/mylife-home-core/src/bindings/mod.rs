@@ -253,7 +253,7 @@ impl Bindings {
 
         if let Err(error) = self.store.binding_set(config.clone()).await {
             tracing::error!(
-                ?error,
+                %error,
                 binding = %config,
                 "could not add binding to store"
             );
@@ -285,7 +285,7 @@ impl message::Message<BindingRemove> for Bindings {
 
         if let Err(error) = self.store.binding_clear(msg.0.clone()).await {
             tracing::error!(
-                ?error,
+                %error,
                 binding = %msg.0,
                 "could not remove binding from store"
             );
@@ -377,7 +377,7 @@ impl Binding {
             Ok(comp) => comp,
             Err(error) => {
                 tracing::error!(
-                    ?error,
+                    %error,
                     component_id = self.source_component,
                     "failed to lookup for source component"
                 );
@@ -407,7 +407,7 @@ impl Binding {
             Ok(comp) => comp,
             Err(error) => {
                 tracing::error!(
-                    ?error,
+                    %error,
                     component_id = self.target_component,
                     "failed to lookup for target component"
                 );

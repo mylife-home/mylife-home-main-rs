@@ -527,7 +527,7 @@ where
             Ok(req) => req,
             Err(error) => {
                 tracing::error!(
-                    ?error,
+                    %error,
                     address = self.address,
                     "could not deserialize request"
                 );
@@ -549,7 +549,7 @@ where
         let payload = match serde_json::to_vec(&reply) {
             Ok(payload) => Bytes::from_owner(payload),
             Err(error) => {
-                tracing::error!(?error, address = self.address, "could not serialize reply");
+                tracing::error!(%error, address = self.address, "could not serialize reply");
                 return;
             }
         };

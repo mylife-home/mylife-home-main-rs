@@ -160,7 +160,7 @@ impl message::Message<client::Message> for Remote {
             if let Err(error) = self.execute_local_action(component_id, member_name, msg.payload())
             {
                 tracing::error!(
-                    ?error,
+                    %error,
                     component_id,
                     action = member_name,
                     "cannot execute local component action"
@@ -171,7 +171,7 @@ impl message::Message<client::Message> for Remote {
                 self.handle_state_change(topic.instance, component_id, member_name, msg.payload())
             {
                 tracing::error!(
-                    ?error,
+                    %error,
                     component_id,
                     state = member_name,
                     "cannot update local component state"
@@ -326,7 +326,7 @@ impl message::Message<registry::ComponentExecuteAction> for Remote {
     ) -> Self::Reply {
         if let Err(error) = self.execute_action(msg.component_id(), msg.name(), msg.value()) {
             tracing::error!(
-                ?error,
+                %error,
                 component_id = msg.component_id(),
                 action = msg.name(),
                 "cannot execute component action",
@@ -397,7 +397,7 @@ impl Remote {
             Ok(plugin) => Arc::new(plugin),
             Err(error) => {
                 tracing::error!(
-                    ?error,
+                    %error,
                     instance = msg.instance(),
                     plugin_id = id,
                     "Cannot read plugin metadata"
@@ -425,7 +425,7 @@ impl Remote {
             .await
         {
             tracing::error!(
-                ?error,
+                %error,
                 instance = msg.instance(),
                 plugin_id = id,
                 "cannot add plugin to registry"
@@ -472,7 +472,7 @@ impl Remote {
             Ok(component) => component,
             Err(error) => {
                 tracing::error!(
-                    ?error,
+                    %error,
                     instance = msg.instance(),
                     component_id = id,
                     "Cannot read component metadata",
@@ -518,7 +518,7 @@ impl Remote {
     async fn remove_remote_component(&mut self, id: &str, msg: &RemoteUpdate) {
         if let Err(error) = self.registry.component_remove(id.to_owned()).await {
             tracing::error!(
-                ?error,
+                %error,
                 instance = msg.instance(),
                 component_id = id,
                 "cannot remove component from registry"
@@ -573,7 +573,7 @@ impl Remote {
             Ok(handle) => handle,
             Err(error) => {
                 tracing::error!(
-                    ?error,
+                    %error,
                     instance,
                     component_id,
                     "cannot add component to registry",
@@ -684,7 +684,7 @@ impl Remote {
                 .await
             {
                 tracing::error!(
-                    ?error,
+                    %error,
                     instance,
                     plugin_id = id,
                     "cannot remove plugin from registry",

@@ -225,7 +225,7 @@ impl message::Message<Subscribe> for Client {
 
         if self.subscriptions.insert(topic.to_owned()) {
             if let Err(error) = mqtt_client.subscribe(vec![topic.to_owned()]) {
-                tracing::error!(?error, topic, "failed to subscribe to topic");
+                tracing::error!(%error, topic, "failed to subscribe to topic");
             }
 
             tracing::trace!(topic, "subscribed to topic");
@@ -254,7 +254,7 @@ impl message::Message<Unsubscribe> for Client {
 
         if self.subscriptions.remove(topic) {
             if let Err(error) = mqtt_client.unsubscribe(vec![topic.to_owned()]) {
-                tracing::error!(?error, topic, "failed to unsubscribe from topic");
+                tracing::error!(%error, topic, "failed to unsubscribe from topic");
             }
 
             tracing::trace!(topic, "unsubscribed from topic");
@@ -327,7 +327,7 @@ impl Client {
             }
 
             MqttEvent::Error(error) => {
-                tracing::error!(?error, "got mqtt error");
+                tracing::error!(%error, "got mqtt error");
             }
         }
     }
@@ -389,7 +389,7 @@ impl Client {
         };
 
         if let Err(error) = mqtt_client.publish(topic.to_string(), payload, retain) {
-            tracing::error!(?error, %topic, "failed to publish message to topic");
+            tracing::error!(%error, %topic, "failed to publish message to topic");
         }
     }
 
@@ -419,7 +419,7 @@ impl Client {
 
         if let Err(error) = mqtt_client.subscribe(subscriptions) {
             let topics = self.subscriptions.iter().cloned().collect::<Vec<_>>();
-            tracing::error!(?error, ?topics, "failed to subscribe to topics");
+            tracing::error!(%error, ?topics, "failed to subscribe to topics");
         }
     }
 
@@ -447,7 +447,7 @@ impl Client {
             match encoding::read_bool(msg.payload()) {
                 Ok(value) => value,
                 Err(error) => {
-                    tracing::error!(?error, payload = ?msg.payload(), "error reading online value");
+                    tracing::error!(%error, payload = ?msg.payload(), "error reading online value");
                     return;
                 }
             }
@@ -480,7 +480,7 @@ struct TempSubscription<'a> {
 impl<'a> TempSubscription<'a> {
     pub fn new(client: &'a MqttClient, topic: String) -> Self {
         if let Err(error) = client.subscribe(vec![topic.clone()]) {
-            tracing::error!(?error, topic, "failed to subscribe to topic");
+            tracing::error!(%error, topic, "failed to subscribe to topic");
         }
 
         Self { client, topic }
@@ -491,7 +491,7 @@ impl Drop for TempSubscription<'_> {
     fn drop(&mut self) {
         if let Err(error) = self.client.unsubscribe(vec![self.topic.clone()]) {
             tracing::error!(
-                ?error,
+                %error,
                 topic = self.topic,
                 "failed to unsubscribe from topic"
             );

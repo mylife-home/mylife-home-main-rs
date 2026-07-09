@@ -244,7 +244,7 @@ impl LocalComponents {
 
         if let Err(error) = self.store.component_set(config.clone()).await {
             tracing::error!(
-                ?error,
+                %error,
                 component_id = config.id,
                 "could not add component to store"
             );
@@ -280,7 +280,7 @@ impl message::Message<ComponentRemove> for LocalComponents {
 
         if let Err(error) = self.store.component_clear(&msg.0).await {
             tracing::error!(
-                ?error,
+                %error,
                 component_id = msg.0,
                 "could not remove component from store"
             );

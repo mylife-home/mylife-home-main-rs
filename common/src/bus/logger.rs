@@ -248,7 +248,7 @@ impl LogPublisher {
         let payload = match serde_json::to_vec(&record) {
             Ok(payload) => Bytes::from_owner(payload),
             Err(error) => {
-                tracing::error!(?error, ?record, "cannot serialize log record");
+                tracing::error!(%error, ?record, "cannot serialize log record");
                 return;
             }
         };
@@ -292,7 +292,7 @@ impl Remote {
         let record = match serde_json::from_slice::<LogRecord>(msg.payload()) {
             Ok(record) => record,
             Err(error) => {
-                tracing::error!(?error, instance, "unable to read log record");
+                tracing::error!(%error, instance, "unable to read log record");
                 return;
             }
         };

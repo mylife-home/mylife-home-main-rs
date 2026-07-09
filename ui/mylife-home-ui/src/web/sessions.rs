@@ -85,7 +85,7 @@ impl SessionManager {
         let handle = match SessionHandle::start(id, socket).await {
             Ok(handle) => handle,
             Err(error) => {
-                tracing::error!(?error, %id, "error starting websocket session");
+                tracing::error!(%error, %id, "error starting websocket session");
                 return;
             }
         };
@@ -152,7 +152,7 @@ impl SessionHandle {
     /// Terminate session
     pub async fn terminate(&self) {
         if let Err(error) = self.actor.stop_gracefully().await {
-            tracing::error!(?error, session = %self.id, "cannot stop session actor");
+            tracing::error!(%error, session = %self.id, "cannot stop session actor");
             return;
         }
 
@@ -162,7 +162,7 @@ impl SessionHandle {
                     panic!("session {} actor panicked at shutdown: {}", self.id, p);
                 }
                 HookError::Error(error) => {
-                    tracing::error!(?error, session = %self.id, "session failed to shutdown");
+                    tracing::error!(%error, session = %self.id, "session failed to shutdown");
                 }
             }
         }
@@ -335,7 +335,7 @@ impl Session {
             let msg = match serde_json::from_slice::<SocketMessage>(text.as_bytes()) {
                 Ok(msg) => msg,
                 Err(error) => {
-                    tracing::error!(?error, session = %self.id, ?msg, "failed to deserialize message wrapper");
+                    tracing::error!(%error, session = %self.id, ?msg, "failed to deserialize message wrapper");
                     return;
                 }
             };
@@ -353,7 +353,7 @@ impl Session {
                 let action = match serde_json::from_value::<ActionMessage>(msg.clone().data) {
                     Ok(action) => action,
                     Err(error) => {
-                        tracing::error!(?error, session = %self.id, ?msg, "failed to deserialize action message");
+                        tracing::error!(%error, session = %self.id, ?msg, "failed to deserialize action message");
                         return;
                     }
                 };
@@ -372,7 +372,7 @@ impl Session {
         let data = match serde_json::to_value(data) {
             Ok(data) => data,
             Err(error) => {
-                tracing::error!(?error, session = %self.id, ?data, "failed to serialize message data");
+                tracing::error!(%error, session = %self.id, ?data, "failed to serialize message data");
                 return;
             }
         };
@@ -382,7 +382,7 @@ impl Session {
         let msg = match serde_json::to_string(&msg) {
             Ok(data) => data,
             Err(error) => {
-                tracing::error!(?error, session = %self.id, ?msg, "failed to serialize message wrapper");
+                tracing::error!(%error, session = %self.id, ?msg, "failed to serialize message wrapper");
                 return;
             }
         };
@@ -394,7 +394,7 @@ impl Session {
         tracing::trace!(session = %self.id, ?msg, ">>");
 
         if let Err(error) = self.ws_sink.send(msg).await {
-            tracing::error!(?error, "ws send error");
+            tracing::error!(%error, "ws send error");
         }
     }
 }

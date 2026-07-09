@@ -66,7 +66,7 @@ impl WebServer {
             });
 
             if let Err(error) = server.await {
-                tracing::error!(?error, "web server error");
+                tracing::error!(%error, "web server error");
             }
 
             state.sessions.shutdown().await;
@@ -84,7 +84,7 @@ impl WebServer {
         }
 
         if let Err(error) = self.task.await {
-            tracing::error!(?error, "could not join web server task");
+            tracing::error!(%error, "could not join web server task");
         }
     }
 }
