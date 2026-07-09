@@ -1,4 +1,4 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use axum::{
     Json, Router,
@@ -182,7 +182,13 @@ async fn action(
 }
 
 async fn components(State(state): State<AppState>) -> Result<Json<Vec<String>>, WebError> {
-    let ids = state.registry.get_component_ids().await?.into_iter().map(|id| id.as_ref().clone()).collect();
+    let ids = state
+        .registry
+        .get_component_ids()
+        .await?
+        .into_iter()
+        .map(|id| id.as_ref().clone())
+        .collect();
     Ok(Json(ids))
 }
 
