@@ -225,37 +225,40 @@ impl Actor for Session {
         _actor_ref: WeakActorRef<Self>,
         mailbox_rx: &mut MailboxReceiver<Self>,
     ) -> Result<Option<Signal<Self>>, Self::Error> {
-        let heartbeat = tokio::time::sleep_until(self.heartbeat.next_deadline());
-        tokio::pin!(heartbeat);
+        loop {
+            let heartbeat = tokio::time::sleep_until(self.heartbeat.next_deadline());
+            tokio::pin!(heartbeat);
 
-        tokio::select! {
-            signal = mailbox_rx.recv() => Ok(signal),
+            tokio::select! {
+                signal = mailbox_rx.recv() => {
+                    return Ok(signal);
+                }
 
-            ws_msg = self.ws_stream.next() => {
-                match ws_msg {
-                    Some(Ok(msg)) => { self.handle_ws(msg).await; Ok(None) }
-                    Some(Err(e)) => {
-                        tracing::error!(error = %e, session = ?self.id, "ws stream error, stopping session");
-                        Ok(Some(Signal::Stop))
-                    }
-                    None => {
-                        tracing::debug!(session = ?self.id, "ws stream ended, stopping session");
-                        Ok(Some(Signal::Stop))
+                ws_msg = self.ws_stream.next() => {
+                    match ws_msg {
+                        Some(Ok(msg)) => { self.handle_ws(msg).await; }
+                        Some(Err(e)) => {
+                            tracing::error!(error = %e, session = ?self.id, "ws stream error, stopping session");
+                            return Ok(Some(Signal::Stop));
+                        }
+                        None => {
+                            tracing::debug!(session = ?self.id, "ws stream ended, stopping session");
+                            return Ok(Some(Signal::Stop));
+                        }
                     }
                 }
-            }
 
-            _ = &mut heartbeat => {
-                match self.heartbeat.on_elapsed() {
-                    HeartbeatAction::Ping => {
-                        self.send_raw(Message::Ping(Vec::new().into())).await;
-                        Ok(None)
+                _ = &mut heartbeat => {
+                    match self.heartbeat.on_elapsed() {
+                        HeartbeatAction::Ping => {
+                            self.send_raw(Message::Ping(Vec::new().into())).await;
+                        }
+                        HeartbeatAction::Stop => {
+                            tracing::debug!(session = ?self.id, "pong timeout, stopping session");
+                            return Ok(Some(Signal::Stop));
+                        }
+                        HeartbeatAction::None => {},
                     }
-                    HeartbeatAction::Stop => {
-                        tracing::debug!(session = ?self.id, "pong timeout, stopping session");
-                        Ok(Some(Signal::Stop))
-                    }
-                    HeartbeatAction::None => Ok(None),
                 }
             }
         }
