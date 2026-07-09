@@ -123,9 +123,19 @@ impl Resource {
 }
 
 #[derive(Debug)]
-struct RequiredComponentState {
+pub struct RequiredComponentState {
     id: String,
     state: String,
+}
+
+impl RequiredComponentState {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn state(&self) -> &str {
+        &self.state
+    }
 }
 
 #[derive(Debug)]
@@ -376,11 +386,11 @@ impl ModelUpdate {
         }
     }
 
-    pub fn model_hash(&self) -> &str {
+    pub fn model_hash(&self) -> &Arc<String> {
         &self.model_hash
     }
 
-    pub fn required_component_states(&self) -> &[RequiredComponentState] {
+    pub fn required_component_states(&self) -> &Arc<[RequiredComponentState]> {
         &self.required_component_states
     }
 }
