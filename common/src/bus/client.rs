@@ -317,9 +317,11 @@ impl Client {
             MqttEvent::Message {
                 topic,
                 payload,
-                retain,
+                retain: _,
             } => {
-                let msg = Message::new(topic, payload, retain);
+                // On receive, retain=true means this is a retained message being delivered
+                // because we just subscribed. Only meaningful in clear_resident_state.
+                let msg = Message::new(topic, payload);
                 self.process_instance_online_message(&msg);
                 self.on_message.publish(msg);
             }
@@ -502,16 +504,14 @@ impl Drop for TempSubscription<'_> {
 pub struct Message {
     topic: Arc<String>,
     payload: Arc<Bytes>,
-    retain: bool,
 }
 
 impl Message {
     /// Create a new Message with the given topic, payload and retain flag.
-    fn new(topic: String, payload: Bytes, retain: bool) -> Self {
+    fn new(topic: String, payload: Bytes) -> Self {
         Self {
             topic: Arc::new(topic),
             payload: Arc::new(payload),
-            retain,
         }
     }
 
@@ -523,11 +523,6 @@ impl Message {
     /// Get the payload of the message.
     pub fn payload(&self) -> &Arc<Bytes> {
         &self.payload
-    }
-
-    /// Get the retain flag of the message.
-    pub fn retain(&self) -> bool {
-        self.retain
     }
 
     /// Parse the topic to extract usefull parts
