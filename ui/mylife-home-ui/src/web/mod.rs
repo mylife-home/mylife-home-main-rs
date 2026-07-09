@@ -1,5 +1,9 @@
+use std::sync::Arc;
+
 use axum::{
-    Json, Router, http::StatusCode, response::{IntoResponse, Response},
+    Json, Router,
+    http::StatusCode,
+    response::{IntoResponse, Response},
 };
 use common::{
     components::registry::RegistryHandle,
@@ -9,10 +13,11 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::{io, net::TcpListener, sync::oneshot};
 
-use crate::model::ModelHandle;
+use crate::{model::ModelHandle, web::sessions::SessionManager};
 
 mod repository;
 mod resources;
+mod sessions;
 mod webapp;
 
 #[derive(Debug, Deserialize)]
@@ -40,13 +45,15 @@ impl WebServer {
         let state = AppState {
             registry: RegistryHandle::new()?,
             model: ModelHandle::new()?,
+            sessions: Arc::new(SessionManager::new()),
         };
 
         let app = Router::new()
             .nest("/repository", repository::router())
             .nest("/resources", resources::router())
-            .merge(webapp::setup())
-            .with_state(state);
+            .nest("/websocket", sessions::router())
+            .merge(webapp::router())
+            .with_state(state.clone());
 
         let listener = TcpListener::bind(config.listen_address)
             .await
@@ -61,6 +68,8 @@ impl WebServer {
             if let Err(error) = server.await {
                 tracing::error!(?error, "web server error");
             }
+
+            state.sessions.shutdown().await;
         });
 
         Ok(Self {
@@ -84,6 +93,7 @@ impl WebServer {
 struct AppState {
     registry: RegistryHandle,
     model: ModelHandle,
+    sessions: Arc<SessionManager>,
 }
 
 #[derive(Debug, Serialize)]

@@ -6,12 +6,11 @@ use axum::{
 use rust_embed::Embed;
 
 use super::AppState;
-
 #[derive(Embed)]
 #[folder = "../web-app/dist/"] // relative to crate root
 struct StaticContent;
 
-pub fn setup() -> Router<AppState> {
+pub fn router() -> Router<AppState> {
     for path in StaticContent::iter() {
         tracing::debug!(path = path.as_ref(), "serving static file");
     }
