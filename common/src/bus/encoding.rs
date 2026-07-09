@@ -179,17 +179,13 @@ fn write_range(range: &RangeInclusive<i64>, value: i64) -> Bytes {
 }
 
 fn read_enum(values: &[String], buffer: &Bytes) -> Result<String, DecodingError> {
-    let index = read_u8(buffer)? as usize;
-    if index >= values.len() {
+    let value = read_string(buffer)?;
+    if !values.contains(&value) {
         return Err(DecodingError);
     }
-    Ok(values[index].clone())
+    Ok(value)
 }
 
-fn write_enum(values: &[String], value: &str) -> Bytes {
-    if let Some(index) = values.iter().position(|v| v == value) {
-        write_u8(index as u8)
-    } else {
-        panic!("Value '{}' is not a valid enum variant", value);
-    }
+fn write_enum(_values: &[String], value: &str) -> Bytes {
+    write_string(value)
 }
