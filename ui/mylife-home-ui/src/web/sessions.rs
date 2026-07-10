@@ -322,46 +322,46 @@ impl Session {
             ids.insert(comp_state.id().clone());
         }
 
-        let ids: Vec<_> = ids.into_iter().collect();
-
         // Get existing state
-        let results = join_all(ids.iter().cloned().map(|id| self.registry.get_component(id))).await;
+        let states = join_all(ids.into_iter().map(|id| self.get_component_state(id))).await;
+        let reset = Reset(HashMap::from_iter(states.into_iter().filter_map(|x| x)));
 
-        let mut reset = HashMap::new();
+        self.send(MessageType::State, &reset).await;
+    }
 
-        for (id, result) in ids.into_iter().zip(results) {
-            match result {
-                Ok(comp) => {
-                    let mut states = HashMap::new();
+    async fn get_component_state(&self, component_id: String) -> Option<(String, ComponentStates)> {
+        match self.registry.get_component(component_id.clone()).await {
+            Ok(comp) => {
+                let mut states = HashMap::new();
 
-                    for (name, value) in comp.state.into_iter() {
-                        // value can be unset
-                        let Some(value) = value else {
-                            continue
-                        };
-                        
-                        if !self.required_component_states.contains(&ComponentState {
-                            id: Cow::Borrowed(id.as_str()), state: Cow::Borrowed(name.as_str())
-                        }) {
-                            continue;
-                        }
-                        
-                        states.insert(name, Self::serialize_value(&value));
+                for (name, value) in comp.state.into_iter() {
+                    // value can be unset
+                    let Some(value) = value else {
+                        continue;
+                    };
+                    
+                    if !self.required_component_states.contains(&ComponentState {
+                        id: Cow::Borrowed(component_id.as_str()), state: Cow::Borrowed(name.as_str())
+                    }) {
+                        continue;
                     }
+                    
+                    states.insert(name, Self::serialize_value(&value));
+                }
 
-                    reset.insert(id, ComponentStates(states));
+                Some((component_id, ComponentStates(states)))
+            }
+            Err(error) => {
+                if let CallError::HandlerError(he) = &error && matches!(he.kind(), ComponentGetErrorKind::NotFound) {
+                    // Not found is OK, the component is not online now
+                } else {
+                    tracing::error!(%error, component_id, "registry error while getting component");
                 }
-                Err(error) => {
-                    if let CallError::HandlerError(he) = &error && matches!(he.kind(), ComponentGetErrorKind::NotFound) {
-                        // Not found is OK, the component is not online now
-                    } else {
-                        tracing::error!(%error, component_id = id, "registry error while getting component");
-                    }
-                }
+
+                None
             }
         }
 
-        self.send(MessageType::State, &Reset(reset)).await;
     }
 
     fn serialize_value(value: &Value) -> serde_json::Value {
