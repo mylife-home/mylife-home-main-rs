@@ -129,11 +129,11 @@ pub struct RequiredComponentState {
 }
 
 impl RequiredComponentState {
-    pub fn id(&self) -> &str {
+    pub fn id(&self) -> &String {
         &self.id
     }
 
-    pub fn state(&self) -> &str {
+    pub fn state(&self) -> &String {
         &self.state
     }
 }
