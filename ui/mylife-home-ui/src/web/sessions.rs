@@ -9,7 +9,7 @@ use axum::{
 };
 use common::{
     components::{
-        registry::{RegistryHandle, RegistryUpdated},
+        registry::{ComponentGetErrorKind, RegistryHandle, RegistryUpdated},
         types::Value,
     },
     utils::actors::{CallError, HandleLookupError},
@@ -22,7 +22,8 @@ use futures::{
 use kameo::{Actor, error::HookError, mailbox::Signal, message, prelude::*};
 use serde::Serialize;
 use std::{
-    collections::HashMap,
+    borrow::Cow,
+    collections::{HashMap, HashSet},
     fmt,
     sync::{
         Mutex, MutexGuard,
@@ -32,9 +33,11 @@ use std::{
 use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::time::Instant;
-use web_api::socket::{ActionMessage, MessageType, SocketMessage};
+use web_api::{
+    registry::{ComponentStates, Reset}, socket::{ActionMessage, MessageType, SocketMessage},
+};
 
-use crate::model::{ModelHandle, ModelUpdate, RequiredComponentState};
+use crate::model::{ModelHandle, ModelUpdate};
 
 use super::AppState;
 
@@ -189,7 +192,7 @@ struct Session {
     ws_stream: SplitStream<WebSocket>,
     ws_sink: SplitSink<WebSocket, Message>,
     heartbeat: Heartbeat,
-    required_component_states: Arc<[RequiredComponentState]>,
+    required_component_states: HashSet<ComponentState<'static>>,
 }
 
 impl Actor for Session {
@@ -209,7 +212,7 @@ impl Actor for Session {
             ws_stream,
             ws_sink,
             heartbeat: Heartbeat::new(),
-            required_component_states: Vec::new().into_boxed_slice().into(),
+            required_component_states: HashSet::new(),
         };
 
         _self.registry.on_update().subscribe(actor_ref.clone());
@@ -304,10 +307,72 @@ impl Session {
     async fn model_update(&mut self, model: ModelUpdate) {
         self.send(MessageType::ModelHash, model.model_hash().as_ref())
             .await;
-        self.required_component_states = model.required_component_states().clone();
 
-        // TODO
-        // m.sendInitialComponentStates(session)
+        self.required_component_states.clear();
+
+        // initial states index
+        let mut ids = HashSet::new();
+
+        for comp_state in model.required_component_states().iter() {
+            self.required_component_states.insert(ComponentState {
+                id: Cow::Owned(comp_state.id().clone()),
+                state: Cow::Owned(comp_state.state().clone()),
+            });
+
+            ids.insert(comp_state.id().clone());
+        }
+
+        let ids: Vec<_> = ids.into_iter().collect();
+
+        // Get existing state
+        let results = join_all(ids.iter().cloned().map(|id| self.registry.get_component(id))).await;
+
+        let mut reset = HashMap::new();
+
+        for (id, result) in ids.into_iter().zip(results) {
+            match result {
+                Ok(comp) => {
+                    let mut states = HashMap::new();
+
+                    for (name, value) in comp.state.into_iter() {
+                        // value can be unset
+                        let Some(value) = value else {
+                            continue
+                        };
+                        
+                        if !self.required_component_states.contains(&ComponentState {
+                            id: Cow::Borrowed(id.as_str()), state: Cow::Borrowed(name.as_str())
+                        }) {
+                            continue;
+                        }
+                        
+                        states.insert(name, Self::serialize_value(&value));
+                    }
+
+                    reset.insert(id, ComponentStates(states));
+                }
+                Err(error) => {
+                    if let CallError::HandlerError(he) = &error && matches!(he.kind(), ComponentGetErrorKind::NotFound) {
+                        // Not found is OK, the component is not online now
+                    } else {
+                        tracing::error!(%error, component_id = id, "registry error while getting component");
+                    }
+                }
+            }
+        }
+
+        self.send(MessageType::State, &Reset(reset)).await;
+    }
+
+    fn serialize_value(value: &Value) -> serde_json::Value {
+        match value {
+            Value::Range(value) => serde_json::Value::from(*value),
+            Value::Text(value) => serde_json::Value::from(value.as_str()),
+            Value::Float(value) => serde_json::Value::from(*value),
+            Value::Bool(value) => serde_json::Value::from(*value),
+            Value::Enum(value) => serde_json::Value::from(value.as_str()),
+            Value::Complex => panic!("complet not supported"),
+        }
     }
 
     fn execute_action(&mut self, component_id: String, action: String) {
@@ -397,6 +462,12 @@ impl Session {
             tracing::error!(%error, "ws send error");
         }
     }
+}
+
+#[derive(Debug, Hash, PartialEq, Eq)]
+struct ComponentState<'a> {
+    pub id: Cow<'a, str>,
+    pub state: Cow<'a, str>,
 }
 
 /// What the session should do when the heartbeat deadline elapses.
