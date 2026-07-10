@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use web_api::model as api;
+use ui_web_api::model as api;
 
 pub type DefaultWindow = HashMap<String, String>;
 pub type Style = Vec<String>;

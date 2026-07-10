@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 common = { path = "../../common" }
-web-api = { path = "../web-api" }
+ui-web-api = { path = "../web-api" }
 axum = { workspace = true, features = ["ws"] }
 base64 = { workspace = true }
 bytes = { workspace = true }

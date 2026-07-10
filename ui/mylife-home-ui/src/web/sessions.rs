@@ -33,7 +33,7 @@ use std::{
 use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::time::Instant;
-use web_api::{
+use ui_web_api::{
     registry::{ComponentAdd, ComponentRemove, ComponentStates, Reset, StateChange},
     socket::{ActionMessage, MessageType, SocketMessage},
 };

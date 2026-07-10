@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use bytes::Bytes;
 use serde_json::Value;
 use thiserror::Error;
-use web_api::model as api;
+use ui_web_api::model as api;
 
 use crate::model::{RequiredComponentState, Resource, definition};
 
