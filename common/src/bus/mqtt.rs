@@ -41,7 +41,7 @@ const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
 const COMMAND_QUEUE_CAPACITY: usize = 128;
 
 /// Capacity for the broadcast channel used to publish events to subscribers.
-const EVENT_QUEUE_CAPACITY: usize = 128;
+const EVENT_QUEUE_CAPACITY: usize = 1024 * 1024;
 
 /// Maximum allowed size for MQTT packets. This is used to prevent unbounded memory
 /// usage when reading from the socket.
