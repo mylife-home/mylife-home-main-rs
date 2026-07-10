@@ -9,6 +9,7 @@ use axum::{
 };
 use common::{
     components::{
+        metadata::MemberType,
         registry::{ComponentGetErrorKind, RegistryHandle, RegistryUpdated},
         types::Value,
     },
@@ -22,7 +23,6 @@ use futures::{
 use kameo::{Actor, error::HookError, mailbox::Signal, message, prelude::*};
 use serde::Serialize;
 use std::{
-    borrow::Cow,
     collections::{HashMap, HashSet},
     fmt,
     sync::{
@@ -34,7 +34,8 @@ use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::time::Instant;
 use web_api::{
-    registry::{ComponentStates, Reset}, socket::{ActionMessage, MessageType, SocketMessage},
+    registry::{ComponentAdd, ComponentRemove, ComponentStates, Reset, StateChange},
+    socket::{ActionMessage, MessageType, SocketMessage},
 };
 
 use crate::model::{ModelHandle, ModelUpdate};
@@ -192,7 +193,7 @@ struct Session {
     ws_stream: SplitStream<WebSocket>,
     ws_sink: SplitSink<WebSocket, Message>,
     heartbeat: Heartbeat,
-    required_component_states: HashSet<ComponentState<'static>>,
+    required_component_states: HashMap<String, HashSet<String>>,
 }
 
 impl Actor for Session {
@@ -212,7 +213,7 @@ impl Actor for Session {
             ws_stream,
             ws_sink,
             heartbeat: Heartbeat::new(),
-            required_component_states: HashSet::new(),
+            required_component_states: HashMap::new(),
         };
 
         _self.registry.on_update().subscribe(actor_ref.clone());
@@ -288,7 +289,67 @@ impl message::Message<RegistryUpdated> for Session {
         msg: RegistryUpdated,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        // TODO
+        match msg {
+            RegistryUpdated::ComponentStateChanged(change) => {
+                if let Some(required_states) =
+                    self.required_component_states.get(change.component_id())
+                    && required_states.contains(change.state())
+                {
+                    self.send(
+                        MessageType::Change,
+                        &StateChange {
+                            id: change.component_id().to_owned(),
+                            name: change.state().to_owned(),
+                            value: Self::serialize_value(change.value()),
+                        },
+                    )
+                    .await;
+                }
+            }
+
+            RegistryUpdated::ComponentAdded(added) => {
+                if let Some(required_states) =
+                    self.required_component_states.get(added.component_id())
+                {
+                    // Note: we have no value at this time
+                    let mut states = HashMap::new();
+
+                    for (name, member) in added.plugin().members() {
+                        if member.member_type() == MemberType::State
+                            && required_states.contains(name)
+                        {
+                            states.insert(name.clone(), serde_json::Value::Null);
+                        }
+                    }
+
+                    self.send(
+                        MessageType::Add,
+                        &ComponentAdd {
+                            id: added.component_id().to_owned(),
+                            attributes: ComponentStates(states),
+                        },
+                    )
+                    .await;
+                }
+            }
+
+            RegistryUpdated::ComponentRemoved(remove) => {
+                if self
+                    .required_component_states
+                    .contains_key(remove.component_id())
+                {
+                    self.send(
+                        MessageType::Remove,
+                        &ComponentRemove {
+                            id: remove.component_id().to_owned(),
+                        },
+                    )
+                    .await;
+                }
+            }
+
+            _ => {}
+        }
     }
 }
 
@@ -310,20 +371,21 @@ impl Session {
 
         self.required_component_states.clear();
 
-        // initial states index
-        let mut ids = HashSet::new();
-
         for comp_state in model.required_component_states().iter() {
-            self.required_component_states.insert(ComponentState {
-                id: Cow::Owned(comp_state.id().clone()),
-                state: Cow::Owned(comp_state.state().clone()),
-            });
-
-            ids.insert(comp_state.id().clone());
+            self.required_component_states
+                .entry(comp_state.id().clone())
+                .or_default()
+                .insert(comp_state.state().clone());
         }
 
         // Get existing state
-        let states = join_all(ids.into_iter().map(|id| self.get_component_state(id))).await;
+        let states = join_all(
+            self.required_component_states
+                .keys()
+                .cloned()
+                .map(|id| self.get_component_state(id)),
+        )
+        .await;
         let reset = Reset(HashMap::from_iter(states.into_iter().filter_map(|x| x)));
 
         self.send(MessageType::State, &reset).await;
@@ -333,26 +395,30 @@ impl Session {
         match self.registry.get_component(component_id.clone()).await {
             Ok(comp) => {
                 let mut states = HashMap::new();
+                let required_states = self
+                    .required_component_states
+                    .get(&component_id)
+                    .expect("failed to get states");
 
                 for (name, value) in comp.state.into_iter() {
                     // value can be unset
                     let Some(value) = value else {
                         continue;
                     };
-                    
-                    if !self.required_component_states.contains(&ComponentState {
-                        id: Cow::Borrowed(component_id.as_str()), state: Cow::Borrowed(name.as_str())
-                    }) {
+
+                    if !required_states.contains(&name) {
                         continue;
                     }
-                    
+
                     states.insert(name, Self::serialize_value(&value));
                 }
 
                 Some((component_id, ComponentStates(states)))
             }
             Err(error) => {
-                if let CallError::HandlerError(he) = &error && matches!(he.kind(), ComponentGetErrorKind::NotFound) {
+                if let CallError::HandlerError(he) = &error
+                    && matches!(he.kind(), ComponentGetErrorKind::NotFound)
+                {
                     // Not found is OK, the component is not online now
                 } else {
                     tracing::error!(%error, component_id, "registry error while getting component");
@@ -361,7 +427,6 @@ impl Session {
                 None
             }
         }
-
     }
 
     fn serialize_value(value: &Value) -> serde_json::Value {
@@ -462,12 +527,6 @@ impl Session {
             tracing::error!(%error, "ws send error");
         }
     }
-}
-
-#[derive(Debug, Hash, PartialEq, Eq)]
-struct ComponentState<'a> {
-    pub id: Cow<'a, str>,
-    pub state: Cow<'a, str>,
 }
 
 /// What the session should do when the heartbeat deadline elapses.
