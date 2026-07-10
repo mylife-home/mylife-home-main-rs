@@ -81,6 +81,8 @@ impl ModelBuilder {
         self.model_hash = self.set_resource("application/json", data);
         tracing::debug!(hash = self.model_hash, len, "creating resource from model");
 
+        self.extract_required_component_states(model);
+
         Ok(())
     }
 
@@ -208,7 +210,7 @@ impl ModelBuilder {
     ///
     /// TODO: review style layout: could be directly css key and css values as string directly
     /// ```
-    pub fn create_css(styles: Vec<definition::DefinitionStyle>) -> String {
+    fn create_css(styles: Vec<definition::DefinitionStyle>) -> String {
         let mut css_rules = Vec::with_capacity(styles.len());
 
         for style in styles {
@@ -263,5 +265,29 @@ impl ModelBuilder {
         }
 
         result
+    }
+
+    fn extract_required_component_states(&mut self, model: api::Model) {
+        for window in model.windows {
+            for control in window.controls {
+                if let Some(display) = control.display {
+                    if display.component_id != "" && display.component_state != "" {
+                        self.required_component_states.push(RequiredComponentState {
+                            id: display.component_id,
+                            state: display.component_state,
+                        });
+                    }
+                }
+
+                if let Some(text) = control.text {
+                    for item in text.context {
+                        self.required_component_states.push(RequiredComponentState {
+                            id: item.component_id,
+                            state: item.component_state,
+                        });
+                    }
+                }
+            }
+        }
     }
 }
