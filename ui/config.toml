@@ -1,5 +1,5 @@
 [observability]
-logger_output_console = true
+logger_level = "%{LOG_LEVEL|debug}"
 kameo_console_listen_address = "%{KAMEO_CONSOLE_LISTEN_ADDRESS|127.0.0.1:9999}"
 
 [bus]

@@ -34,7 +34,6 @@ pub async fn wait_for_shutdown_signal() {
 
 #[derive(Debug, serde::Deserialize)]
 pub struct ObservabilityConfig {
-    #[serde(default)]
-    pub logger_output_console: bool,
+    pub logger_level: Option<logger::ConfigLogLevel>,
     pub kameo_console_listen_address: Option<String>,
 }

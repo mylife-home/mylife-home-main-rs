@@ -16,7 +16,7 @@ ui-build:
 	cd web-app/bundler && npm run build	
 
 run:
-	RUST_LOG=$${RUST_LOG:-debug} cargo run --manifest-path mylife-home-ui/Cargo.toml
+	cargo run --manifest-path mylife-home-ui/Cargo.toml
 
 build:
 	cargo build --release --manifest-path mylife-home-ui/Cargo.toml

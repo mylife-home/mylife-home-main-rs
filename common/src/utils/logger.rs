@@ -6,12 +6,13 @@ use std::{
     },
 };
 
+use serde::{Deserialize, Deserializer, de::Error as SerdeError};
 use tracing::{
     Event, Metadata, Subscriber,
     field::{Field, Visit},
+    level_filters::LevelFilter,
 };
 use tracing_subscriber::{
-    EnvFilter,
     filter::FilterExt,
     layer::{Context, Filter, Layer},
     prelude::*,
@@ -70,9 +71,8 @@ pub fn init() {
         sinks: SINKS.clone(),
     };
     let registry = tracing_subscriber::registry().with(fanout);
-
-    if config.logger_output_console {
-        registry.with(console_layer()).init();
+    if let Some(console_level) = config.logger_level {
+        registry.with(console_layer(console_level.into())).init();
     } else {
         registry.init();
     }
@@ -190,11 +190,11 @@ impl Visit for FieldVisitor {
     }
 }
 
-fn console_layer<S>() -> impl Layer<S>
+fn console_layer<S>(level: tracing::Level) -> impl Layer<S>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    let filter = EventsOnly.and(EnvFilter::from_default_env());
+    let filter = EventsOnly.and(LevelFilter::from_level(level));
     tracing_subscriber::fmt::layer().with_filter(filter)
 }
 
@@ -203,5 +203,40 @@ struct EventsOnly;
 impl<S> Filter<S> for EventsOnly {
     fn enabled(&self, meta: &Metadata<'_>, _: &Context<'_, S>) -> bool {
         meta.is_event()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConfigLogLevel(tracing::Level);
+
+impl From<ConfigLogLevel> for tracing::Level {
+    fn from(value: ConfigLogLevel) -> Self {
+        value.0
+    }
+}
+
+impl From<tracing::Level> for ConfigLogLevel {
+    fn from(value: tracing::Level) -> Self {
+        Self(value)
+    }
+}
+
+impl<'de> Deserialize<'de> for ConfigLogLevel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        let level = match value.trim().to_ascii_lowercase().as_str() {
+            "error" => tracing::Level::ERROR,
+            "warn" | "warning" => tracing::Level::WARN,
+            "info" => tracing::Level::INFO,
+            "debug" => tracing::Level::DEBUG,
+            "trace" => tracing::Level::TRACE,
+            other => {
+                return Err(SerdeError::custom(format!("invalid log level: {}", other)));
+            }
+        };
+        Ok(Self(level))
     }
 }
