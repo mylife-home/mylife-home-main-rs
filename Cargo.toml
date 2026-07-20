@@ -6,6 +6,8 @@ members = [
   "core/plugin-macros",
   "core/plugins/logic-base",
   "core/plugins/ui-base",
+  "studio/mylife-home-studio",
+  "studio/web-api",
   "ui/mylife-home-ui",
   "ui/web-api"
 ]
