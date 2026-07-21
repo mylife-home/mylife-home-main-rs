@@ -6,7 +6,7 @@ kameo_console_listen_address = "%{KAMEO_CONSOLE_LISTEN_ADDRESS|0.0.0.0:9999}"
 server_address = "%{BUS_SERVER|localhost:1883}"
 
 [model]
-store_path = "${DATA_PATH|/data}/store.json"
+store_path = "%{DATA_PATH|/data}/store.json"
 
 [web]
 listen_address = "0.0.0.0:%{WEB_PORT|80}"
