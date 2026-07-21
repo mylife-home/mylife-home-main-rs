@@ -1,0 +1,4 @@
+**/node_modules/
+**/web-app/dist/
+**/web-app/src/app/api/
+target/
