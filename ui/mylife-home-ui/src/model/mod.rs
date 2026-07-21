@@ -191,6 +191,7 @@ impl Actor for Model {
             .await?;
 
         instance_info.add_capability("ui-api");
+        instance_info.add_capability("ui-manager");
 
         Ok(_self)
     }
