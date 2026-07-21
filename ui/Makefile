@@ -19,7 +19,7 @@ run:
 	cargo run --manifest-path mylife-home-ui/Cargo.toml
 
 build:
-	cargo build --release --manifest-path mylife-home-ui/Cargo.toml
+	cargo build --release --target x86_64-unknown-linux-musl --manifest-path mylife-home-ui/Cargo.toml
 
 fmt:
 	cargo fmt --all
