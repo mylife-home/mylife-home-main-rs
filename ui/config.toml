@@ -9,4 +9,4 @@ server_address = "%{BUS_SERVER|rpi-dev-home-main:1883}"
 store_path = "store.json"
 
 [web]
-listen_address = "0.0.0.0:8001"
+listen_address = "0.0.0.0:%{WEB_PORT|8001}"
