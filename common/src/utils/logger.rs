@@ -71,8 +71,12 @@ pub fn init() {
         sinks: SINKS.clone(),
     };
     let registry = tracing_subscriber::registry().with(fanout);
-    if let Some(console_level) = config.logger_level {
-        registry.with(console_layer(console_level.into())).init();
+    if let Some(console_level) = config
+        .logger_level
+        .map(Into::<Option<tracing::Level>>::into)
+        .flatten()
+    {
+        registry.with(console_layer(console_level)).init();
     } else {
         registry.init();
     }
@@ -207,16 +211,16 @@ impl<S> Filter<S> for EventsOnly {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ConfigLogLevel(tracing::Level);
+pub struct ConfigLogLevel(Option<tracing::Level>);
 
-impl From<ConfigLogLevel> for tracing::Level {
+impl From<ConfigLogLevel> for Option<tracing::Level> {
     fn from(value: ConfigLogLevel) -> Self {
         value.0
     }
 }
 
-impl From<tracing::Level> for ConfigLogLevel {
-    fn from(value: tracing::Level) -> Self {
+impl From<Option<tracing::Level>> for ConfigLogLevel {
+    fn from(value: Option<tracing::Level>) -> Self {
         Self(value)
     }
 }
@@ -228,11 +232,12 @@ impl<'de> Deserialize<'de> for ConfigLogLevel {
     {
         let value = String::deserialize(deserializer)?;
         let level = match value.trim().to_ascii_lowercase().as_str() {
-            "error" => tracing::Level::ERROR,
-            "warn" | "warning" => tracing::Level::WARN,
-            "info" => tracing::Level::INFO,
-            "debug" => tracing::Level::DEBUG,
-            "trace" => tracing::Level::TRACE,
+            "off" => None,
+            "error" => Some(tracing::Level::ERROR),
+            "warn" | "warning" => Some(tracing::Level::WARN),
+            "info" => Some(tracing::Level::INFO),
+            "debug" => Some(tracing::Level::DEBUG),
+            "trace" => Some(tracing::Level::TRACE),
             other => {
                 return Err(SerdeError::custom(format!("invalid log level: {}", other)));
             }
