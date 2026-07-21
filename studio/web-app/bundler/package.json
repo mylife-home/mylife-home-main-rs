@@ -1,0 +1,12 @@
+{
+  "name": "bundler",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "clean": "rm -rf ../dist"
+  },
+  "dependencies": {
+    "vite": "^8.1.5"
+  }
+}

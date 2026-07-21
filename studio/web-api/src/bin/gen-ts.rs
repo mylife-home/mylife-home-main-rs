@@ -1,5 +1,5 @@
-use ts_rs::Config;
 use studio_web_api::TsExport;
+use ts_rs::Config;
 
 fn main() {
     let config = Config::from_env();
