@@ -176,6 +176,7 @@ impl Actor for LocalComponents {
             .await?;
 
         instance_info.add_capability("components-api");
+        instance_info.add_capability("components-manager");
 
         Ok(_self)
     }

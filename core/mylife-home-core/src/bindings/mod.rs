@@ -163,6 +163,7 @@ impl Actor for Bindings {
             .await?;
 
         instance_info.add_capability("bindings-api");
+        instance_info.add_capability("bindings-manager");
 
         Ok(_self)
     }
