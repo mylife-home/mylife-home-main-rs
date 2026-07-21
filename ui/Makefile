@@ -1,7 +1,7 @@
 PWD := $(CURDIR)
 DOCKER_REPOSITORY ?= vincenttr
 DOCKER_PACKAGE_NAME ?= mylife-home-ui
-DOCKER_PACKAGE_VERSION ?= $(shell cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+DOCKER_PACKAGE_VERSION ?= $(shell cargo metadata --no-deps --quiet --format-version 1 | jq -r '.packages[] | select(.name == "mylife-home-ui") | .version')
 DOCKER_IMAGE_TAG ?= $(DOCKER_REPOSITORY)/$(DOCKER_PACKAGE_NAME):$(DOCKER_PACKAGE_VERSION)
 DOCKER_IMAGE_LATEST_TAG ?= $(DOCKER_REPOSITORY)/$(DOCKER_PACKAGE_NAME):latest
 
