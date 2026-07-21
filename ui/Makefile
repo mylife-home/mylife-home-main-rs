@@ -1,6 +1,6 @@
 PWD := $(CURDIR)
 
-.PHONY: run build fmt
+.PHONY: ui-setup ui-gen-api ui-run ui-build run build fmt
 
 ui-setup:
 	cd web-app && npm install
