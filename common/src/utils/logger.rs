@@ -73,8 +73,7 @@ pub fn init() {
     let registry = tracing_subscriber::registry().with(fanout);
     if let Some(console_level) = config
         .logger_level
-        .map(Into::<Option<tracing::Level>>::into)
-        .flatten()
+        .and_then(Into::<Option<tracing::Level>>::into)
     {
         registry.with(console_layer(console_level)).init();
     } else {
