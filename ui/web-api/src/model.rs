@@ -75,8 +75,8 @@ register_ts!(Control);
 #[ts(export_to = "model.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ControlDisplay {
-    pub component_id: String,
-    pub component_state: String,
+    pub component_id: Option<String>,
+    pub component_state: Option<String>,
     pub default_resource: Option<Resource>,
     pub map: Vec<ControlDisplayMapItem>,
 }
@@ -87,9 +87,11 @@ register_ts!(ControlDisplay);
 #[ts(export_to = "model.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ControlDisplayMapItem {
-    pub min: i32,
-    pub max: i32,
-    #[ts(type = "string | boolean")]
+    #[ts(type = "number | null")]
+    pub min: Option<i64>,
+    #[ts(type = "number | null")]
+    pub max: Option<i64>,
+    #[ts(type = "number | null")]
     pub value: serde_json::Value,
     pub resource: Option<Resource>,
 }

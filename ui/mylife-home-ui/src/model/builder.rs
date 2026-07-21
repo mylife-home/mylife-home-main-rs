@@ -271,11 +271,11 @@ impl ModelBuilder {
         for window in model.windows {
             for control in window.controls {
                 if let Some(display) = control.display {
-                    if display.component_id != "" && display.component_state != "" {
-                        self.required_component_states.push(RequiredComponentState {
-                            id: display.component_id,
-                            state: display.component_state,
-                        });
+                    if let Some(id) = display.component_id
+                        && let Some(state) = display.component_state
+                    {
+                        self.required_component_states
+                            .push(RequiredComponentState { id, state });
                     }
                 }
 

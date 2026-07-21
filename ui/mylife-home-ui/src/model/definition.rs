@@ -52,8 +52,8 @@ pub struct Control {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ControlDisplay {
-    pub component_id: String,
-    pub component_state: String,
+    pub component_id: Option<String>,
+    pub component_state: Option<String>,
     pub default_resource: Option<Resource>,
     pub map: Vec<ControlDisplayMapItem>,
 }
@@ -61,8 +61,8 @@ pub struct ControlDisplay {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ControlDisplayMapItem {
-    pub min: i32,
-    pub max: i32,
+    pub min: Option<i64>,
+    pub max: Option<i64>,
     pub value: serde_json::Value,
     pub resource: Option<Resource>,
 }
