@@ -1,8 +1,7 @@
-import { Component } from '../../api/component-model';
-import { UiBreakingOperation, UiPluginData, UiElementPath, UiElementPathNode, UpdateProjectNotification, UiWindowData, UiControlData, UiResourceData, UiStyleData, UiTemplateData, UiViewData, UiTemplateInstanceData, UiTemplateExport, UiTemplateInstanceBinding } from '../../api/project-manager';
-import { DefaultWindow } from '../../api/ui-model';
-import { MemberType } from '../../api/component-model';
-import { DesignerTabActionData, OpenedProjectBase } from '../common/designer-types';
+import type { Component, MemberType } from '../../api/component-model';
+import type { UiBreakingOperation, UiPluginData, UiElementPath, UiElementPathNode, UpdateProjectNotification, UiWindowData, UiControlData, UiResourceData, UiStyleData, UiTemplateData, UiViewData, UiTemplateInstanceData, UiTemplateExport, UiTemplateInstanceBinding } from '../../api/project-manager';
+import type { DefaultWindow } from '../../api/ui-model';
+import type { DesignerTabActionData, OpenedProjectBase } from '../common/designer-types';
 import { Table } from '../common/types';
 
 export const enum ActionTypes {
@@ -98,7 +97,8 @@ export namespace ActionPayloads {
   export type SetTemplateInstanceBindings = { templateInstanceId: string; bindings: { [exportId: string]: { componentId: string; memberName: string; } }; };
 }
 
-export { DesignerTabActionData, DefaultWindow, MemberType, UiTemplateExport, UiTemplateInstanceBinding };
+export { MemberType } from '../../api/component-model';
+export type { DesignerTabActionData, DefaultWindow, UiTemplateExport, UiTemplateInstanceBinding };
 
 export interface UiResource extends UiResourceData {
   id: string;

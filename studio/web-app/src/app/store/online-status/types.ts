@@ -1,4 +1,4 @@
-import { Status } from '../../api/online';
+import type { Status } from '../../api/online';
 
 export const enum ActionTypes {
   SET_NOTIFICATION = 'online-status/set-notification',

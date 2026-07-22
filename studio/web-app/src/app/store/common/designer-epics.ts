@@ -12,7 +12,7 @@ import { ProjectType } from '../projects-list/types';
 import { ActionTypes as StatusActionTypes } from '../status/types';
 import { isOnline } from '../status/selectors';
 import { DesignerTabActionData, OpenedProjectBase } from './designer-types';
-import { ProjectCall, ProjectCallResult, SetNameProjectNotification, UpdateProjectNotification } from '../../../api/project-manager';
+import type { ProjectCall, ProjectCallResult, SetNameProjectNotification, UpdateProjectNotification } from '../../../api/project-manager';
 import { DeferredPayload } from './async-action';
 
 interface MapperResult {

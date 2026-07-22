@@ -4,7 +4,7 @@ import { from, Observable, range, zip } from 'rxjs';
 import { concatMap, map, withLatestFrom } from 'rxjs/operators';
 import { combineEpics, ofType, StateObservable } from 'redux-observable';
 
-import * as shared from '../../../api/deploy';
+import type * as shared from '../../../api/deploy';
 import { AppState } from '../types';
 import { setNotification, clearNotification, pushUpdates, uploadFilesProgress, downloadFileProgress } from './actions';
 import { hasDeployTab, getNotifierId, getFile } from './selectors';

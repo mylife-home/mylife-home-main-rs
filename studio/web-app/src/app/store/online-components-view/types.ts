@@ -1,4 +1,4 @@
-import { Member, PluginUsage, MemberType, ConfigItem, Plugin as NetPlugin, Component as NetComponent } from '../../api/component-model';
+import type { Member, PluginUsage, MemberType, ConfigItem, Plugin as NetPlugin, Component as NetComponent } from '../../api/component-model';
 import { Table } from '../common/types';
 
 export const enum ActionTypes {

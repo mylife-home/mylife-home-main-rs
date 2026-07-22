@@ -1,12 +1,13 @@
-import { PluginUsage, Member, ConfigItem, MemberType, ConfigType } from '../../api/component-model';
-import { 
+import { PluginUsage, MemberType } from '../../api/component-model';
+import type { Member, ConfigItem, ConfigType } from '../../api/component-model';
+import type { 
   CoreBindingData, CoreComponentData, coreImportData, CorePluginData, ImportFromOnlineConfig, ImportFromProjectConfig, BulkUpdatesStats, coreValidation, DeployChanges, 
   CoreTemplateExports, CoreTemplateConfigExport, CoreTemplateMemberExport, UpdateProjectNotification, CoreComponentDefinition, CoreComponentDefinitionType, CoreComponentConfiguration, CopyComponentsStats
 } from '../../api/project-manager';
-import { DesignerTabActionData, OpenedProjectBase } from '../common/designer-types';
+import type { DesignerTabActionData, OpenedProjectBase } from '../common/designer-types';
 import { Table } from '../common/types';
 
-export { CoreToolboxDisplay, SetNameProjectNotification } from '../../api/project-manager';
+export type { CoreToolboxDisplay, SetNameProjectNotification } from '../../api/project-manager';
 
 export const enum ActionTypes {
   SET_NOTIFIER = 'core-designer/set-notifier',
@@ -84,7 +85,8 @@ export type TemplateMemberExport = CoreTemplateMemberExport;
 
 export type ComponentConfiguration = CoreComponentConfiguration;
 
-export { DesignerTabActionData, PluginUsage, Member, ConfigItem, MemberType, ConfigType, CoreBindingData, ImportFromOnlineConfig, ImportFromProjectConfig, BulkUpdatesStats, coreValidation, coreImportData, DeployChanges, UpdateProjectNotification, CopyComponentsStats };
+export { PluginUsage, MemberType, ConfigType } from '../../api/component-model';
+export type { DesignerTabActionData, Member, ConfigItem, CoreBindingData, ImportFromOnlineConfig, ImportFromProjectConfig, BulkUpdatesStats, coreValidation, coreImportData, DeployChanges, UpdateProjectNotification, CopyComponentsStats };
 
 export type Use = 'unused' | 'external' | 'used';
 

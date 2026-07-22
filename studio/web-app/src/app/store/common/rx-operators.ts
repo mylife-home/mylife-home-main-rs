@@ -2,7 +2,7 @@ import { StateObservable } from 'redux-observable';
 import { asyncScheduler, Observable, of, Operator, OperatorFunction, SchedulerLike, Subscriber, Subscription, TeardownLogic } from 'rxjs';
 
 import { catchError, debounceTime, filter, map, tap, withLatestFrom } from 'rxjs/operators';
-import { Notification } from '../../../api/protocol';
+import type { Notification } from '../../../api/protocol';
 import { setError } from '../status/actions';
 import { AppState } from '../types';
 

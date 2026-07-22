@@ -2,7 +2,7 @@ import { createReducer, PayloadAction } from '@reduxjs/toolkit';
 import { ActionTypes as TabsActionTypes, NewTabAction, TabType, UpdateTabAction } from '../tabs/types';
 import { ActionTypes, ActionPayloads, CoreDesignerState, DesignerTabActionData, CoreOpenedProject, UpdateProjectNotification, SetNameProjectNotification, Plugin, Template, Component, Binding, MemberType, Instance, Selection, MultiSelectionIds, ComponentsSelection, BindingSelection, View, ComponentDefinition } from './types';
 import { createTable, tableAdd, tableRemove, tableRemoveAll, tableClear, tableSet, arrayAdd, arrayRemove, arraySet } from '../common/reducer-tools';
-import { ClearCoreBindingNotification, ClearCoreComponentNotification, ClearCorePluginNotification, ClearCoreTemplateNotification, CoreComponentDefinitionType, CorePluginData, RenameCoreComponentNotification, RenameCoreTemplateNotification, SetCoreBindingNotification, SetCoreComponentNotification, SetCorePluginNotification, SetCorePluginsNotification, SetCorePluginToolboxDisplayNotification, SetCoreTemplateNotification } from '../../../api/project-manager';
+import type { ClearCoreBindingNotification, ClearCoreComponentNotification, ClearCorePluginNotification, ClearCoreTemplateNotification, CoreComponentDefinitionType, CorePluginData, RenameCoreComponentNotification, RenameCoreTemplateNotification, SetCoreBindingNotification, SetCoreComponentNotification, SetCorePluginNotification, SetCorePluginsNotification, SetCorePluginToolboxDisplayNotification, SetCoreTemplateNotification } from '../../../api/project-manager';
 
 const initialState: CoreDesignerState = {
   openedProjects: createTable<CoreOpenedProject>(),

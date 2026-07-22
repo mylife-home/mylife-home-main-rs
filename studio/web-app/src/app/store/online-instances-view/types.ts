@@ -1,4 +1,4 @@
-import { InstanceInfo } from '../../api/online';
+import type { InstanceInfo } from '../../api/online';
 
 export const enum ActionTypes {
   SET_NOTIFICATION = 'online-instances-view/set-notification',

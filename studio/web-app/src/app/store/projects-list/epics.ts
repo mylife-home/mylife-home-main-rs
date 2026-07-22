@@ -1,7 +1,7 @@
 import { map } from 'rxjs/operators';
 import { combineEpics } from 'redux-observable';
 
-import { SetListNotification, ClearListNotification, RenameListNotification, UpdateListNotification, UiProjectInfo, CoreProjectInfo, ProjectType } from '../../../api/project-manager';
+import type { SetListNotification, ClearListNotification, RenameListNotification, UpdateListNotification, UiProjectInfo, CoreProjectInfo, ProjectType } from '../../../api/project-manager';
 import { createNotifierEpic } from '../common/notifier-epic';
 import { createSocketCallEpic } from '../common/call-epic';
 import { newUiDesignerTab, newCoreDesignerTab } from '../tabs/actions';

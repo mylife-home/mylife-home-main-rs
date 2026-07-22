@@ -1,5 +1,5 @@
 import { Table } from '../common/types';
-import { TaskMetadata, RecipeConfig, StepConfig, StepType, RecipeStepConfig, TaskStepConfig, TaskParameters, RunLogSeverity, RunError } from '../../api/deploy';
+import type { TaskMetadata, RecipeConfig, StepConfig, StepType, RecipeStepConfig, TaskStepConfig, TaskParameters, RunLogSeverity, RunError } from '../../api/deploy';
 
 export const enum ActionTypes {
   SET_NOTIFICATION = 'deploy/set-notification',

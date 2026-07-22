@@ -1,7 +1,7 @@
 import { combineEpics } from 'redux-observable';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { GitStatusNotification, GitCommit, GitRestore } from '../../../api/git';
+import type { GitStatusNotification, GitCommit, GitRestore } from '../../../api/git';
 import { DeferredPayload } from '../common/async-action';
 import { createSocketCallEpic } from '../common/call-epic';
 import { createNotifierEpic } from '../common/notifier-epic';

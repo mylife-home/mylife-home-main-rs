@@ -1,4 +1,8 @@
-import { GitStatus, GitDiff, GitDiffFile, diff, DEFAULT_STATUS } from '../../api/git';
+import type { GitStatus, GitDiff, GitDiffFile } from '../../api/git';
+import * as gitApi from '../../api/git';
+export { DEFAULT_STATUS } from '../../api/git';
+export type { GitStatus, GitDiff, GitDiffFile } from '../../api/git';
+export const diff = gitApi.diff;
 import { Table } from '../common/types';
 
 export const enum ActionTypes {
@@ -24,8 +28,6 @@ export namespace ActionPayloads {
   export type GitDiffDataClear = void;
   export type GitDiffStage = { type: 'all' | 'feature' | 'file'; id?: string; stage: boolean };
 }
-
-export { GitStatus, GitDiff, GitDiffFile, diff, DEFAULT_STATUS };
 
 export interface Feature {
   id: string;

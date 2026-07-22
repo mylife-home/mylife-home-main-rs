@@ -1,6 +1,6 @@
 import { createAction } from '@reduxjs/toolkit';
 import { createAsyncAction } from '../common/async-action';
-import { UiValidationError } from '../../../api/project-manager';
+import type { UiValidationError } from '../../../api/project-manager';
 import { ActionTypes, RefreshData, ActionPayloads } from './types';
 
 export const setNotifier = createAction<ActionPayloads.SetNotifier>(ActionTypes.SET_NOTIFIER);

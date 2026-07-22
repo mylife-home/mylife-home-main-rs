@@ -1,4 +1,4 @@
-import { CoreProjectInfo, UiProjectInfo, ProjectType } from '../../api/project-manager';
+import { type CoreProjectInfo, type UiProjectInfo, type ProjectType } from '../../api/project-manager';
 import { PluginUsage } from '../../api/component-model';
 import { Table } from '../common/types';
 
