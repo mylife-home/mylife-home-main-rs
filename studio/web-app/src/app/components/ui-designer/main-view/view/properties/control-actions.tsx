@@ -7,8 +7,8 @@ import Radio from '@material-ui/core/Radio';
 import Checkbox from '@material-ui/core/Checkbox';
 
 import { UiControl } from '../../../../../store/ui-designer/types';
-import { Action, ActionComponent, ActionWindow } from '../../../../../api/ui-model';
-import { MemberType } from '../../../../../api/component-model';
+import type { Action, ActionComponent, ActionWindow } from '../../../../../api/ui-model';
+import type { MemberType } from '../../../../../api/component-model';
 import { Group, Item } from '../../../../lib/properties-layout';
 import { createNewControlActionComponent, createNewControlActionWindow } from '../../common/templates';
 import WindowSelector from '../../common/window-selector';

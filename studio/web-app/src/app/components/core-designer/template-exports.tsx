@@ -15,7 +15,7 @@ import { Group, Item } from '../lib/properties-layout';
 import { useTabSelector } from '../lib/use-tab-selector';
 import DeleteButton from '../lib/delete-button';
 import { AppState } from '../../store/types';
-import { MemberType } from '../../store/core-designer/types';
+import type { MemberType } from '../../store/core-designer/types';
 import { getActiveTemplateId, getTemplate, getComponent, PropertyItem, getTemplateCandidateConfigExports, getTemplateCandidateMemberExports, getTemplateConfigItem, getTemplateMemberItem } from '../../store/core-designer/selectors';
 import { setTemplateExport } from '../../store/core-designer/actions';
 import { useClearTemplateExport } from './actions/behaviors';

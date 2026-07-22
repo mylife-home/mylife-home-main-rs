@@ -1,6 +1,6 @@
 import { createReducer, PayloadAction } from '@reduxjs/toolkit';
 import { arrayAdd, arrayRemove, createTable, tableAdd, tableRemove } from '../common/reducer-tools';
-import { MemberType } from '../core-designer/types';
+import type { MemberType } from '../core-designer/types';
 import { ActionTypes, OnlineComponentsViewState, Plugin, Component, State, NetPlugin, NetComponent, Instance, Update, SetPluginUpdate, ClearPluginUpdate, ClearComponentUpdate, SetComponentUpdate, SetStateUpdate } from './types';
 
 const initialState: OnlineComponentsViewState = {

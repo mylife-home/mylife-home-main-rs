@@ -1,5 +1,5 @@
 import { type CoreProjectInfo, type UiProjectInfo, type ProjectType } from '../../api/project-manager';
-import { PluginUsage } from '../../api/component-model';
+import type { PluginUsage } from '../../api/component-model';
 import { Table } from '../common/types';
 
 export const enum ActionTypes {

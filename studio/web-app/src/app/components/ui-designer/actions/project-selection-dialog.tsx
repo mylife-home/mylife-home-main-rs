@@ -10,9 +10,9 @@ import ListItem from '@material-ui/core/ListItem';
 import ListItemText from '@material-ui/core/ListItemText';
 
 import { TransitionProps, DialogText } from '../../dialogs/common';
-import { AppState } from '../../../store/types';
+import type { AppState } from '../../../store/types';
 import { getCoreProjectsIds, getCoreProjectInfo } from '../../../store/projects-list/selectors';
-import { PluginUsage } from '../../../store/projects-list/types';
+import type { PluginUsage } from '../../../store/projects-list/types';
 
 const useStyles = makeStyles((theme) => ({
   list: {

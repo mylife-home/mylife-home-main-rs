@@ -1,5 +1,4 @@
-import { PluginUsage, MemberType } from '../../api/component-model';
-import type { Member, ConfigItem, ConfigType } from '../../api/component-model';
+import type { Member, ConfigItem, ConfigType, PluginUsage, MemberType } from '../../api/component-model';
 import type { 
   CoreBindingData, CoreComponentData, coreImportData, CorePluginData, ImportFromOnlineConfig, ImportFromProjectConfig, BulkUpdatesStats, coreValidation, DeployChanges, 
   CoreTemplateExports, CoreTemplateConfigExport, CoreTemplateMemberExport, UpdateProjectNotification, CoreComponentDefinition, CoreComponentDefinitionType, CoreComponentConfiguration, CopyComponentsStats

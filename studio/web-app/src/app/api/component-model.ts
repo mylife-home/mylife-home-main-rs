@@ -25,12 +25,12 @@ export interface Plugin {
 
 // export { PluginUsage, MemberType, ConfigItem, ConfigType } from 'mylife-home-common/dist/components/metadata/plugin';
 
-export declare const enum MemberType {
+export const enum MemberType {
     ACTION = "action",
     STATE = "state"
 }
 
-export declare const enum PluginUsage {
+export const enum PluginUsage {
     SENSOR = "sensor",
     ACTUATOR = "actuator",
     LOGIC = "logic",
@@ -42,7 +42,7 @@ export interface ConfigItem {
     readonly valueType: ConfigType;
 }
 
-export declare const enum ConfigType {
+export const enum ConfigType {
     STRING = "string",
     BOOL = "bool",
     INTEGER = "integer",

@@ -1,7 +1,7 @@
 import { createSelector } from '@reduxjs/toolkit';
 import { AppState } from '../types';
 import { ById } from '../common/types';
-import { Member, MemberType, ConfigItem, ComponentsSelection, BindingSelection, View, Template, ComponentDefinition, Plugin, TemplateMemberExport, TemplateConfigExport, ComponentDefinitionProperties, ComponentDefinitionStats, InstanceStats, Component, ComponentDefinitionType } from './types';
+import type { Member, MemberType, ConfigItem, ComponentsSelection, BindingSelection, View, Template, ComponentDefinition, Plugin, TemplateMemberExport, TemplateConfigExport, ComponentDefinitionProperties, ComponentDefinitionStats, InstanceStats, Component, ComponentDefinitionType } from './types';
 
 const getCoreDesigner = (state: AppState) => state.coreDesigner;
 const getOpenedProjects = (state: AppState) => getCoreDesigner(state).openedProjects;

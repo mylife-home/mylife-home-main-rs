@@ -31,8 +31,8 @@ import TemplateSelector from '../../common/template-selector';
 import ComponentMemberSelector from '../../common/component-member-selector';
 import { useTemplateInstanceState, useGetExistingTemplateInstanceNames } from '../view-state';
 import { useSnapValue } from '../snap';
-import { AppState } from '../../../../../store/types';
-import { MemberType, UiTemplateExport, UiTemplateInstanceBinding } from '../../../../../store/ui-designer/types';
+import type { AppState } from '../../../../../store/types';
+import type { MemberType, UiTemplateExport, UiTemplateInstanceBinding } from '../../../../../store/ui-designer/types';
 import { getComponentsMap, getTemplateInstance, makeGetComponentsAndPlugins } from '../../../../../store/ui-designer/selectors';
 
 const useStyles = makeStyles((theme) => ({

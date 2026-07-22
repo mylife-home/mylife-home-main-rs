@@ -1,8 +1,7 @@
 import type { GitStatus, GitDiff, GitDiffFile } from '../../api/git';
-import * as gitApi from '../../api/git';
+export type { diff } from '../../api/git';
 export { DEFAULT_STATUS } from '../../api/git';
 export type { GitStatus, GitDiff, GitDiffFile } from '../../api/git';
-export const diff = gitApi.diff;
 import { Table } from '../common/types';
 
 export const enum ActionTypes {

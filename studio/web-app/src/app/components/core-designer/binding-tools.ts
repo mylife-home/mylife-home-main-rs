@@ -1,10 +1,10 @@
-import * as types from '../../store/core-designer/types';
+import { type CoreBindingData, MemberType } from '../../store/core-designer/types';
 import { BindingSource } from './main-view/binding-dnd';
 
-export function createBindingData(componentId: string, memberName: string, memberType: types.MemberType, newValue: { componentId: string; memberName: string; }) {
+export function createBindingData(componentId: string, memberName: string, memberType: MemberType, newValue: { componentId: string; memberName: string; }) {
   switch (memberType) {
-    case types.MemberType.STATE: {
-      const bindingData: types.CoreBindingData = {
+    case MemberType.STATE: {
+      const bindingData: CoreBindingData = {
         sourceComponent: componentId,
         sourceState: memberName,
         targetComponent: newValue.componentId,
@@ -14,8 +14,8 @@ export function createBindingData(componentId: string, memberName: string, membe
       return bindingData;
     }
 
-    case types.MemberType.ACTION: {
-      const bindingData: types.CoreBindingData = {
+    case MemberType.ACTION: {
+      const bindingData: CoreBindingData = {
         sourceComponent: newValue.componentId,
         sourceState: newValue.memberName,
         targetComponent: componentId,
