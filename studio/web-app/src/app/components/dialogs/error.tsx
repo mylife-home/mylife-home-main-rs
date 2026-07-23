@@ -1,4 +1,4 @@
-import React, { FunctionComponent, useState } from 'react';
+import React, { FunctionComponent, useCallback, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { makeStyles } from '@material-ui/core/styles';
 import Dialog from '@material-ui/core/Dialog';
@@ -48,6 +48,8 @@ const ErrorDialog: FunctionComponent = () => {
   const error = useSelector(getError);
   const close = useAction(clearError);
 
+  const onClose = useCallback(() => close(), [close]);
+
   if (!error) {
     return null;
   }
@@ -62,7 +64,7 @@ const ErrorDialog: FunctionComponent = () => {
   };
 
   return (
-    <Dialog aria-labelledby="dialog-title" open={true} onClose={close} scroll="paper" maxWidth="sm" fullWidth onKeyDown={handleKeyDown} disableBackdropClick>
+    <Dialog aria-labelledby="dialog-title" open={true} onClose={onClose} scroll="paper" maxWidth="sm" fullWidth onKeyDown={handleKeyDown} disableBackdropClick>
       <DialogTitle id="dialog-title" className={classes.title} disableTypography>
         <ErrorIcon />
         <Typography component="h2" variant="h6">{`Erreur`}</Typography>
@@ -71,7 +73,7 @@ const ErrorDialog: FunctionComponent = () => {
       <Content error={error} />
 
       <DialogActions>
-        <Button color="primary" onClick={close}>
+        <Button color="primary" onClick={onClose}>
           OK
         </Button>
       </DialogActions>
