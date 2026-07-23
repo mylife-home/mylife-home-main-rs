@@ -1,30 +1,31 @@
 {
     "compilerOptions": {
         "alwaysStrict": true,
-        "declaration": true,
-        "module": "commonjs",
-        "esModuleInterop": true,
-        "allowSyntheticDefaultImports": true,
         "experimentalDecorators": true,
         "emitDecoratorMetadata": true,
-        "target": "ES2019",
         "noImplicitAny": true,
+        
+        "module": "ESNext",
+        "target": "ES2019",
         "moduleResolution": "node",
-        "sourceMap": true,
-        "outDir": "dist",
-        "baseUrl": ".",
-        "jsx": "react",
-        "paths": {
-            "*": [
-                "node_modules/*",
-                "src/types/*"
-            ]
-        },
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
 
-        "resolveJsonModule": true
+        "noEmit": true,
+        "isolatedModules": true,
+
+        "jsx": "react-jsx",
+
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "types": [],
+
+        "baseUrl": ".",
+        "paths": {
+            "*": ["src/types/*"]
+        },
     },
     "include": [
         "src/**/*",
-        "shared/**/*"
     ]
 }

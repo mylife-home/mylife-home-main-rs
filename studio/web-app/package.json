@@ -12,7 +12,8 @@
     "url": "git+https://github.com/mylife-home/mylife-home-main.git"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc",
+    "typecheck-watch": "tsc --watch"
   },
   "devDependencies": {
     "@material-ui/core": "^4.11.0",
