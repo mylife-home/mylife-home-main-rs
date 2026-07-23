@@ -1,0 +1,1 @@
+/// <reference path="../bundler/node_modules/vite/client.d.ts" />
