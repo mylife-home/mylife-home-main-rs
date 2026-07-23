@@ -9,12 +9,12 @@ export default defineConfig({
   publicDir: path.resolve(base, 'static'),
   server: {
     host: true,
-    port: 8002,
+    port: 8102,
     allowedHosts: true,
     strictPort: true,
     proxy: {
       '/socket.io': {
-        target: 'ws://localhost:8102',
+        target: 'ws://localhost:8002',
         ws: true,
       },
     },
