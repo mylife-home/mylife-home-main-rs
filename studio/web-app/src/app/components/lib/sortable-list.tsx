@@ -111,7 +111,7 @@ export const SortableListItem: FunctionComponent<ListItemProps & { useChildAsPre
     if (!React.isValidElement(child)) {
       throw new Error('Invalid child');
     }
-    const childWithRef = React.cloneElement(child, { ref: preview });
+    const childWithRef = React.cloneElement(child, { ref: preview } as any);
 
     return (
       <MoveHandleContext.Provider value={moveHandleContext}>
