@@ -91,7 +91,7 @@ pub struct ControlDisplayMapItem {
     pub min: Option<i64>,
     #[ts(type = "number | null")]
     pub max: Option<i64>,
-    #[ts(type = "number | null")]
+    #[ts(type = "string | boolean | number | null")]
     pub value: serde_json::Value,
     pub resource: Option<Resource>,
 }
