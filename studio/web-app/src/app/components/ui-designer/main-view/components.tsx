@@ -12,7 +12,7 @@ import { ComponentIcon, StateIcon, ActionIcon } from '../../lib/icons';
 import { useTabSelector } from '../../lib/use-tab-selector';
 import { AppState } from '../../../store/types';
 import { getComponentsIds, getComponentAndPlugin } from '../../../store/ui-designer/selectors';
-import type { Member, MemberType } from '../../../api/component-model';
+import { type Member, MemberType } from '../../../api/component-model';
 
 const useStyles = makeStyles((theme) => ({
   list: {

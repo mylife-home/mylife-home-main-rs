@@ -1,4 +1,5 @@
 import { applyMiddleware, createStore } from 'redux';
+import { createLogger } from 'redux-logger';
 import { createEpicMiddleware } from 'redux-observable';
 import { asyncActionMiddleware } from './common/async-action';
 
@@ -9,8 +10,7 @@ const epicMiddleware = createEpicMiddleware();
 
 const middlewares = [asyncActionMiddleware, epicMiddleware];
 
-if (process.env.NODE_ENV !== 'production') {
-  const { createLogger } = require('redux-logger');
+if (import.meta.env.DEV) {
   middlewares.push(createLogger());
 }
 
