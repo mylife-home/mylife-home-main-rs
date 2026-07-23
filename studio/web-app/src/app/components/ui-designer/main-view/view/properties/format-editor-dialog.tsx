@@ -7,7 +7,7 @@ import DialogContent from '@material-ui/core/DialogContent';
 import DialogActions from '@material-ui/core/DialogActions';
 import Button from '@material-ui/core/Button';
 
-import { UiControlTextContextItemData, UiControlTextData } from '../../../../../../api/project-manager';
+import { UiControlTextContextItemData, UiControlTextData } from '../../../../../api/project-manager';
 import { TransitionProps } from '../../../../dialogs/common';
 import SplitPane from '../../../../lib/split-pane';
 import { useTabPanelId, TabIdContext } from '../../../../lib/tab-panel';

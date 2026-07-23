@@ -1,4 +1,4 @@
-import { UiActionData, UiControlDisplayData, UiControlDisplayMapItemData, UiControlTextContextItemData, UiControlTextData } from '../../../../../api/project-manager';
+import { UiActionData, UiControlDisplayData, UiControlDisplayMapItemData, UiControlTextContextItemData, UiControlTextData } from '../../../../api/project-manager';
 import { UiControl } from '../../../../store/ui-designer/types';
 import { clone } from '../../../lib/clone';
 

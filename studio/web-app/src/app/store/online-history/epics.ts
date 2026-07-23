@@ -1,4 +1,4 @@
-import type { ComponentSetHistoryRecord, HistoryRecord, StateHistoryRecord } from '../../../api/online';
+import type { ComponentSetHistoryRecord, HistoryRecord, StateHistoryRecord } from '../../api/online';
 import { setNotification, clearNotification, addHistoryItems } from './actions';
 import { hasOnlineHistoryTab, getNotifierId } from './selectors';
 import { HistoryItem, StateHistoryItem, ComponentHistoryItem } from './types';

@@ -34,7 +34,7 @@ import {
   CopyComponentsToTemplateCoreProjectCall,
   CopyComponentsCoreProjectCallResult,
   CopyComponentsStats,
-} from '../../../api/project-manager';
+} from '../../api/project-manager';
 
 export default createProjectManagementEpic({
   projectType: 'core',

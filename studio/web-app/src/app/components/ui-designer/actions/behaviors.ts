@@ -6,7 +6,7 @@ import { useFireAsync } from '../../lib/use-error-handling';
 import { AsyncDispatch } from '../../../store/types';
 import { validateProject, refreshComponentsFromOnline, refreshComponentsFromProject, applyRefreshComponents, deployProject } from '../../../store/ui-designer/actions';
 import { RefreshData } from '../../../store/ui-designer/types';
-import { UiValidationError } from '../../../../api/project-manager';
+import { UiValidationError } from '../../../api/project-manager';
 import { useSnackbar } from '../../dialogs/snackbar';
 import { useBusy } from '../../dialogs/busy';
 import { useShowValidationErrorsDialog } from './validation-errors-dialog';

@@ -12,7 +12,7 @@ import ListItemText from '@material-ui/core/ListItemText';
 
 import { ConfirmResult } from '../../dialogs/confirm';
 import { TransitionProps, DialogText, DialogSeparator } from '../../dialogs/common';
-import { UiBreakingOperation } from '../../../../api/project-manager';
+import { UiBreakingOperation } from '../../../api/project-manager';
 import ElementPathBreadcrumbs from '../main-view/common/element-path-breadcrumbs';
 
 const useStyles = makeStyles((theme) => ({

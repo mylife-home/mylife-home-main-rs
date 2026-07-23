@@ -43,7 +43,7 @@ import {
   SetTemplateInstanceTemplateUiProjectCall,
   SetTemplateInstanceBindingsUiProjectCall,
   SetTemplateBulkPatternsUiProjectCall,
-} from '../../../api/project-manager';
+} from '../../api/project-manager';
 
 type ControlProperties = Partial<Omit<UiControl, 'id' | 'controlId'>>;
 

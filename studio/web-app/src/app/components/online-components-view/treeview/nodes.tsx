@@ -162,7 +162,7 @@ function useFlashOnUpdate(value: any) {
 
 function useFlashOnTrigger() {
   const [flashing, setFlashing] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<number>();
 
   useEffect(() => () => {
     clearTimeout(timerRef.current);

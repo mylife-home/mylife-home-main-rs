@@ -8,7 +8,7 @@ import Button from '@material-ui/core/Button';
 
 import { ConfirmResult } from '../../dialogs/confirm';
 import { TransitionProps, DialogText, DialogSeparator } from '../../dialogs/common';
-import { DeployChanges } from '../../../../api/project-manager';
+import { DeployChanges } from '../../../api/project-manager';
 import DeployChangesList from './deploy-changes-list';
 
 export function useShowDhowDeployToOnlineDialog() {

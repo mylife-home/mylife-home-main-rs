@@ -14,7 +14,7 @@ import Autocomplete from '@material-ui/lab/Autocomplete';
 
 import { ConfirmResult } from '../../dialogs/confirm';
 import { TransitionProps, DialogText, DialogSeparator } from '../../dialogs/common';
-import { DeployChanges } from '../../../../api/project-manager';
+import { DeployChanges } from '../../../api/project-manager';
 import DeployChangesList from './deploy-changes-list';
 
 const useStyles = makeStyles((theme) => ({

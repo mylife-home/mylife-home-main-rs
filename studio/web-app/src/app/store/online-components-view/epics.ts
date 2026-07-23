@@ -1,6 +1,6 @@
 import { combineEpics } from 'redux-observable';
 
-import type * as shared from '../../../api/online';
+import type * as shared from '../../api/online';
 import { Update, SetPluginUpdate, ClearPluginUpdate, SetComponentUpdate, ClearComponentUpdate, SetStateUpdate, ActionTypes } from './types';
 import { setNotification, clearNotification, pushUpdates } from './actions';
 import { hasOnlineComponentsViewTab, getNotifierId } from './selectors';

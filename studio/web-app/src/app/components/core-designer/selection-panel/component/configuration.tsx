@@ -11,7 +11,7 @@ import { useTabPanelId } from '../../../lib/tab-panel';
 import { useTabSelector } from '../../../lib/use-tab-selector';
 import { useComponentData } from './common';
 import type { AppState } from '../../../../store/types';
-import type { ConfigItem, ConfigType, Template } from '../../../../store/core-designer/types';
+import { type ConfigItem, ConfigType, type Template } from '../../../../store/core-designer/types';
 import { configureComponent } from '../../../../store/core-designer/actions';
 import { getSelectedComponent, getActiveTemplate } from '../../../../store/core-designer/selectors';
 

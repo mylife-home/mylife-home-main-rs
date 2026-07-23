@@ -22,7 +22,7 @@ import { Group, Item } from '../../../../lib/properties-layout';
 import { useTabSelector } from '../../../../lib/use-tab-selector';
 import DeleteButton from '../../../../lib/delete-button';
 import { useFireAsync } from '../../../../lib/use-error-handling';
-import type { MemberType, UiTemplateExport } from '../../../../../store/ui-designer/types';
+import { MemberType, type UiTemplateExport } from '../../../../../store/ui-designer/types';
 import { MemberItem, makeGetTemplateCandidateExports, makeGetTemplateUsage } from '../../../../../store/ui-designer/selectors';
 import { useTemplateState } from '../view-state';
 import { useRemoveUsageConfirmDialog } from '../../common/remove-usage-confirm-dialog';

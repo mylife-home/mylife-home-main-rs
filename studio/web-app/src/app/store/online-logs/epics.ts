@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { tap, withLatestFrom, ignoreElements } from 'rxjs/operators';
 import { combineEpics, ofType, StateObservable } from 'redux-observable';
 import { createObjectCsvStringifier } from 'csv-writer-browser';
-import type { LogRecord } from '../../../api/logging';
+import type { LogRecord } from '../../api/logging';
 import { createNotifierEpic } from '../common/notifier-epic';
 import { setNotification, clearNotification, addLogItems } from './actions';
 import { hasOnlineLogsTab, getNotifierId, getItems } from './selectors';

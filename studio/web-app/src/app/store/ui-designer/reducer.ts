@@ -21,7 +21,7 @@ import {
   UiControlData,
   UiTemplateInstanceData,
   UiTemplateInstanceBinding,
-} from '../../../api/project-manager';
+} from '../../api/project-manager';
 import { createTable, tableAdd, tableRemove, tableSet, tableRemoveAll, tableClear, arrayAdd, arraySet, arrayRemove } from '../common/reducer-tools';
 import { ActionTypes as TabsActionTypes, UpdateTabAction, NewTabAction, TabType } from '../tabs/types';
 import { ActionTypes, UiDesignerState, UiOpenedProject, DesignerTabActionData, UiComponent, UiPlugin, UiResource, UiWindow, UiTemplate, UiControl, Selection, ActionPayloads, UiStyle, UiViewType, UiView, UiTemplateInstance } from './types';

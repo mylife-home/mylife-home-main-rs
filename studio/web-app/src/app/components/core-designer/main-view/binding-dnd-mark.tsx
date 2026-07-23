@@ -1,7 +1,7 @@
 import React, { FunctionComponent, useCallback, useMemo } from 'react';
 import { AppState } from '../../../store/types';
 import { getComponent, makeGetComponentDefinitionProperties } from '../../../store/core-designer/selectors';
-import type { MemberType } from '../../../store/core-designer/types';
+import { MemberType } from '../../../store/core-designer/types';
 
 import { Point } from '../drawing/types';
 import { Arrow } from '../drawing/konva';
