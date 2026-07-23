@@ -5,8 +5,8 @@ import Autocomplete from '@material-ui/lab/Autocomplete';
 import TextField from '@material-ui/core/TextField';
 import Typography from '@material-ui/core/Typography';
 
-import { AppState } from '../../../../store/types';
-import { Member, MemberType } from '../../../../../api/component-model';
+import { type AppState } from '../../../../store/types';
+import { type Member, MemberType } from '../../../../api/component-model';
 import { UiTemplate } from '../../../../store/ui-designer/types';
 import { makeGetComponentsAndPlugins, getComponentsMap, getComponent } from '../../../../store/ui-designer/selectors';
 import { TemplateIcon } from '../../../lib/icons';

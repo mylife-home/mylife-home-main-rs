@@ -1,7 +1,7 @@
 import { from, fromEvent, merge, Subject, asyncScheduler } from 'rxjs';
 import { filter, map, mapTo, observeOn } from 'rxjs/operators';
 import SocketIOClient from 'socket.io-client';
-import type { ServiceRequest, ServerMessage, ServiceResponse, Notification } from '../../../api/protocol';
+import type { ServiceRequest, ServerMessage, ServiceResponse, Notification } from '../../api/protocol';
 
 const TIMEOUT = 60000;
 

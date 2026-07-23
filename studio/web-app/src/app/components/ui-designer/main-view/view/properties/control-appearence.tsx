@@ -12,7 +12,7 @@ import CodeIcon from '@material-ui/icons/Code';
 import { AppState } from '../../../../../store/types';
 import { UiControl } from '../../../../../store/ui-designer/types';
 import { UiControlDisplayData, UiControlTextData } from '../../../../../api/project-manager';
-import type { MemberType } from '../../../../../api/component-model';
+import { MemberType } from '../../../../../api/component-model';
 import { getComponentMemberValueType } from '../../../../../store/ui-designer/selectors';
 import DeleteButton from '../../../../lib/delete-button';
 import { useFireAsync } from '../../../../lib/use-error-handling';

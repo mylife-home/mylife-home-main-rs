@@ -32,7 +32,7 @@ import ComponentMemberSelector from '../../common/component-member-selector';
 import { useTemplateInstanceState, useGetExistingTemplateInstanceNames } from '../view-state';
 import { useSnapValue } from '../snap';
 import type { AppState } from '../../../../../store/types';
-import type { MemberType, UiTemplateExport, UiTemplateInstanceBinding } from '../../../../../store/ui-designer/types';
+import { MemberType, type UiTemplateExport, type UiTemplateInstanceBinding } from '../../../../../store/ui-designer/types';
 import { getComponentsMap, getTemplateInstance, makeGetComponentsAndPlugins } from '../../../../../store/ui-designer/selectors';
 
 const useStyles = makeStyles((theme) => ({

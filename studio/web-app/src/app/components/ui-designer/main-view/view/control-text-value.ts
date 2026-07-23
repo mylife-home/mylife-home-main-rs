@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { UiControlTextContextItemData, UiControlTextData } from '../../../../../api/project-manager';
+import type { UiControlTextContextItemData, UiControlTextData } from '../../../../api/project-manager';
 
 export interface TestResult {
   result: string;

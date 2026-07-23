@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import { makeStyles } from '@material-ui/core/styles';
 import Typography from '@material-ui/core/Typography';
 
-import { UiControlTextContextItemData } from '../../../../../../api/project-manager';
+import { UiControlTextContextItemData } from '../../../../../api/project-manager';
 import { getComponentsMap, getPluginsMap } from '../../../../../store/ui-designer/selectors';
 import TestValueEditor from './test-value-editor';
 import { useTextValueDetails } from '../control-text-value';

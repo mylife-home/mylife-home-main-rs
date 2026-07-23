@@ -14,7 +14,7 @@ import ChevronRightIcon from '@material-ui/icons/ChevronRight';
 
 import { TransitionProps, DialogText } from '../../dialogs/common';
 import { ElementPathNode } from '../main-view/common/element-path-breadcrumbs';
-import { UiValidationError, UiElementPathNode } from '../../../../api/project-manager';
+import { UiValidationError, UiElementPathNode } from '../../../api/project-manager';
 
 const useStyles = makeStyles((theme) => ({
   tree: {

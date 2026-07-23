@@ -6,7 +6,7 @@ import { darken, makeStyles } from '@material-ui/core/styles';
 import Image from '../../common/image';
 import { useViewState, useControlState, useTemplateInstanceState } from '../view-state';
 import { useTextValue } from '../control-text-value';
-import { UiControlTextData } from '../../../../../../api/project-manager';
+import type { UiControlTextData } from '../../../../../api/project-manager';
 import { AppState } from '../../../../../store/types';
 import { getControl, getStylesMap, getTemplateInstance, getTemplate } from '../../../../../store/ui-designer/selectors';
 import { UiWindow } from '../../../../../store/ui-designer/types';

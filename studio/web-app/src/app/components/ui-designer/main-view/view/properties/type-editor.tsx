@@ -9,7 +9,7 @@ import Select from '@material-ui/core/Select';
 import MenuItem from '@material-ui/core/MenuItem';
 import Slider from '@material-ui/core/Slider';
 
-import { ControlDisplayMapItem } from '../../../../../../api/ui-model';
+import { ControlDisplayMapItem } from '../../../../../api/ui-model';
 import { useComponentStyles } from '../../../../lib/properties-layout';
 import StringEditor from '../../common/string-editor';
 import { parseType, Range, Enum } from '../../../../lib/member-types';

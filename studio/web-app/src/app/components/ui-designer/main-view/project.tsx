@@ -8,7 +8,7 @@ import { useTabPanelId } from '../../lib/tab-panel';
 import { AppState } from '../../../store/types';
 import { getDefaultWindow } from '../../../store/ui-designer/selectors';
 import { setDefaultWindow } from '../../../store/ui-designer/actions';
-import { DefaultWindow } from '../../../../api/ui-model';
+import { type DefaultWindow } from '../../../api/ui-model';
 import WindowSelector from './common/window-selector';
 import { Group, Item } from '../../lib/properties-layout';
 

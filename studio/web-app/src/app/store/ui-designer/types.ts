@@ -97,7 +97,7 @@ export namespace ActionPayloads {
   export type SetTemplateInstanceBindings = { templateInstanceId: string; bindings: { [exportId: string]: { componentId: string; memberName: string; } }; };
 }
 
-export type { MemberType } from '../../api/component-model';
+export { MemberType } from '../../api/component-model';
 export type { DesignerTabActionData, DefaultWindow, UiTemplateExport, UiTemplateInstanceBinding };
 
 export interface UiResource extends UiResourceData {

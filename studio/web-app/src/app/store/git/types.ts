@@ -1,8 +1,9 @@
 import type { GitStatus, GitDiff, GitDiffFile } from '../../api/git';
-export type { diff } from '../../api/git';
-export { DEFAULT_STATUS } from '../../api/git';
-export type { GitStatus, GitDiff, GitDiffFile } from '../../api/git';
+import type { diff } from '../../api/git';
 import { Table } from '../common/types';
+export { DEFAULT_STATUS } from '../../api/git';
+export type { diff };
+export type { GitStatus, GitDiff, GitDiffFile };
 
 export const enum ActionTypes {
   SET_NOTIFICATION = 'git/set-notification',
