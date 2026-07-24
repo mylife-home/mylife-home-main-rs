@@ -12,7 +12,7 @@ ui-gen-api:
 ui-run:
 	cd web-app/bundler && npm run dev
 
-ui-lint:
+ui-check:
 	cd web-app && npm run typecheck-watch
 
 ui-build:
