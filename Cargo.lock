@@ -1044,7 +1044,20 @@ dependencies = [
 name = "mylife-home-studio"
 version = "1.0.0"
 dependencies = [
+ "axum",
+ "clap",
  "common",
+ "futures",
+ "kameo",
+ "kameo_actors",
+ "mime_guess",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "studio-web-api",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
