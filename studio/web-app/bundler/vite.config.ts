@@ -13,7 +13,7 @@ export default defineConfig({
     allowedHosts: true,
     strictPort: true,
     proxy: {
-      '/socket.io': {
+      '/websocket': {
         target: 'ws://localhost:8002',
         ws: true,
       },
