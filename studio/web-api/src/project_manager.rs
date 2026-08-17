@@ -2,7 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use ts_rs::TS;
 
-use crate::{component_model::{Member, MemberType, PluginUsage}, register_ts};
+use crate::{
+    component_model::{Member, MemberType, PluginUsage},
+    register_ts,
+    ui_model::{Action, ControlDisplay, DefaultWindow, Resource, Style},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -12,7 +16,7 @@ pub struct UiProject {
     pub styles: HashMap<String, UiStyleData>,
     pub windows: HashMap<String, UiWindowData>,
     pub templates: HashMap<String, UiTemplateData>,
-    pub default_window: crate::model::DefaultWindow,
+    pub default_window: DefaultWindow,
     pub components: HashMap<String, UiComponentData>,
     pub plugins: HashMap<String, UiPluginData>,
 }
@@ -61,8 +65,8 @@ pub struct UiWindowData {
     pub width: i32,
     pub controls: HashMap<String, UiControlData>,
     pub templates: HashMap<String, UiTemplateInstanceData>,
-    pub style: crate::model::Style,
-    pub background_resource: crate::model::Resource,
+    pub style: Style,
+    pub background_resource: Resource,
 }
 
 register_ts!(UiWindowData);
@@ -119,15 +123,15 @@ register_ts!(UiTemplateInstanceBinding);
 #[ts(export_to = "project-manager.ts")]
 pub struct UiControlData {
     pub id: String,
-    pub style: crate::model::Style,
+    pub style: Style,
     pub height: i32,
     pub width: i32,
     pub x: i32,
     pub y: i32,
-    pub display: Option<crate::model::ControlDisplay>,
+    pub display: Option<ControlDisplay>,
     pub text: UiControlTextData,
-    pub primary_action: Option<crate::model::Action>,
-    pub secondary_action: Option<crate::model::Action>,
+    pub primary_action: Option<Action>,
+    pub secondary_action: Option<Action>,
 }
 
 register_ts!(UiControlData);

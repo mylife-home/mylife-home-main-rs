@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{
-    model::{Action, ActionComponent, ActionWindow, Control, ControlDisplay, ControlDisplayMapItem, ControlText, ControlTextContextItem, DefaultWindow, Resource, Style, Window},
-    register_ts,
+pub use ui_web_api::model::{
+    Action, ActionComponent, ActionWindow, Control, ControlDisplay, ControlDisplayMapItem,
+    ControlText, ControlTextContextItem, DefaultWindow, Resource, Style, Window,
 };
+
+use crate::register_ts;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
