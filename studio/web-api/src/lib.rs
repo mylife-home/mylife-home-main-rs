@@ -1,8 +1,14 @@
 use ts_rs::Config;
 
-pub mod model;
-pub mod registry;
-pub mod socket;
+pub mod component_model;
+pub mod core_model;
+pub mod deploy;
+pub mod git;
+pub mod logging;
+pub mod online;
+pub mod project_manager;
+pub mod protocol;
+pub mod ui_model;
 
 // Generation helpers
 
