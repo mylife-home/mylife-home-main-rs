@@ -96,7 +96,10 @@ register_ts!(ComponentsImportType);
 // ===========================================================================
 
 /// A component's configuration: opaque values keyed by config name.
-pub type CoreComponentConfiguration = HashMap<String, serde_json::Value>;
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "project-manager.ts")]
+#[ts(type = "{ [name: string]: any; }")]
+pub struct CoreComponentConfiguration(pub HashMap<String, serde_json::Value>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
@@ -527,7 +530,7 @@ register_ts!(RenameListNotification);
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(tag = "operation", rename_all = "kebab-case")]
-pub enum ProjectUpdateNotification {
+pub enum UpdateProjectNotification {
     SetName(SetNameProjectNotification),
     Reset(ResetProjectNotification),
 
@@ -562,7 +565,7 @@ pub enum ProjectUpdateNotification {
     RenameCoreTemplate(RenameCoreTemplateNotification),
 }
 
-register_ts!(ProjectUpdateNotification);
+register_ts!(UpdateProjectNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
