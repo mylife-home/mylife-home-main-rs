@@ -33,6 +33,6 @@ function parseUpdate(updateData: shared.UpdateInstanceInfoData): Update {
       return { type: 'clear', instanceName: updateData.instanceName } as ClearUpdate;
 
     default:
-      throw new Error(`Unsupported server operation: ${updateData.operation}`);
+      throw new Error(`Unsupported server operation: ${(updateData as any).operation}`);
   }
 }
