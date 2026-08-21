@@ -139,6 +139,7 @@ register_ts!(InstanceHistoryRecord);
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "online.ts")]
 pub struct ComponentSetHistoryRecord {
+    #[ts(type = "number")]
     pub timestamp: i64,
     pub r#type: String,
     pub instance_name: String,
