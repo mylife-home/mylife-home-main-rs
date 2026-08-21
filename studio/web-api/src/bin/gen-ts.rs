@@ -3,6 +3,63 @@ use std::{fs, path::Path};
 use studio_web_api::TsExport;
 use ts_rs::Config;
 
+/// A block of hand-maintained TypeScript to append to a generated file after
+/// ts-rs writes it (re-exports, namespace aliases, const companions, ...).
+struct Appendix {
+    file: &'static str,
+    content: &'static str,
+}
+
+// TODO: remove all these hacks
+const APPENDICES: &[Appendix] = &[
+    Appendix {
+        file: "ui-model.ts",
+        content: "export * from './ui/model';",
+    },
+    Appendix {
+        file: "project-manager.ts",
+        content: "\
+export * as coreImportData from './project-manager-core-import-data';
+export * as coreValidation from './project-manager-core-validation';
+
+import type { ControlDisplayMapItem } from './ui-model';
+export type UiControlDisplayData = ControlDisplay;
+export type UiControlDisplayMapItemData = ControlDisplayMapItem;
+export type UiActionData = Action;
+export type UiElementPath = UiElementPathNode[];",
+    },
+    Appendix {
+        file: "component-model.ts",
+        content: "\
+export const MemberType = { STATE: 'state', ACTION: 'action' } as const;
+export const ConfigType = { STRING: 'string', BOOL: 'bool', INTEGER: 'integer', FLOAT: 'float' } as const;
+export const PluginUsage = { SENSOR: 'sensor', ACTUATOR: 'actuator', LOGIC: 'logic', UI: 'ui' } as const;",
+    },
+    Appendix {
+        file: "git.ts",
+        content: "\
+import parseDiff from 'parse-diff';
+
+export namespace diff {
+  export type File = parseDiff.File;
+  export type Chunk = parseDiff.Chunk;
+  export type NormalChange = parseDiff.NormalChange;
+  export type AddChange = parseDiff.AddChange;
+  export type DeleteChange = parseDiff.DeleteChange;
+  export type ChangeType = parseDiff.ChangeType;
+  export type Change = parseDiff.Change;
+}
+
+export const DEFAULT_STATUS: GitStatus = {
+  appUrl: null,
+  branch: '<unknown>',
+  changedFeatures: [],
+  ahead: null,
+  behind: null,
+};",
+    },
+];
+
 fn main() {
     let config = Config::from_env();
 
@@ -30,7 +87,10 @@ fn main() {
 
     replace_in_files(out_dir, "./model", "./ui/model");
 
-    append_to_file(&out_dir.join("ui-model.ts"), "\n// Added by generator tool\nexport * from './ui/model';");
+    for appendix in APPENDICES {
+        let path = out_dir.join(appendix.file);
+        append_block(&path, appendix.content);
+    }
 
     println!("TypeScript bindings generated.");
 }
@@ -69,4 +129,9 @@ fn append_to_file(file_path: &Path, content: &str) {
         .expect("Failed to open file for appending");
     use std::io::Write;
     writeln!(file, "{}", content).expect("Failed to write to file");
+}
+
+fn append_block(path: &Path, content: &str) {
+    let block = format!("\n// Added by generator tool\n{content}\n");
+    append_to_file(path, &block);
 }

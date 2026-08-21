@@ -11,7 +11,9 @@ pub struct Run {
     pub recipe: String,
     pub logs: Vec<RunLog>,
     pub status: RunStatus,
+    #[ts(type = "number")]
     pub creation: i64,
+    #[ts(type = "number")]
     pub end: i64,
     pub err: RunError,
 }
@@ -44,6 +46,7 @@ register_ts!(RunError);
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "deploy.ts")]
 pub struct RunLog {
+    #[ts(type = "number")]
     pub date: i64,
     pub category: String,
     pub severity: RunLogSeverity,
@@ -125,7 +128,9 @@ register_ts!(RecipeStepConfig);
 #[ts(export_to = "deploy.ts")]
 pub struct FileInfo {
     pub id: String,
-    pub size: i64,
+    #[ts(type = "number")]
+    pub size: usize,
+    #[ts(type = "number")]
     pub modified_date: i64,
 }
 

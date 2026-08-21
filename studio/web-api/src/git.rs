@@ -53,14 +53,15 @@ pub struct GitDiff {
 
 register_ts!(GitDiff);
 
+// FIXME
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
 #[ts(export_to = "git.ts")]
-pub struct GitDiffFile {
-    pub feature: String,
-    pub path: String,
-    #[ts(type = "any[]")]
-    pub chunks: Vec<serde_json::Value>,
-}
+#[ts(type = "diff.File & { feature: string; }")]
+pub struct GitDiffFile(pub GitDiffFileLayout);
 
 register_ts!(GitDiffFile);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitDiffFileLayout {
+    pub feature: String,
+}

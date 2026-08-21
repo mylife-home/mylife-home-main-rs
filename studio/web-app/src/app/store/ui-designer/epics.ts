@@ -82,7 +82,7 @@ export default createProjectManagementEpic({
 
     [ActionTypes.REFRESH_COMPONENTS_FROM_PROJECT]: {
       mapper({ tabId, projectId }: ActionPayloads.RefreshComponentsFromProject) {
-        const callData: RefreshComponentsFromProjectUiProjectCall = { operation: 'refresh-components-from-project', projectId };
+        const callData: UiProjectCall = { operation: 'refresh-components-from-project', projectId };
         return { tabId, callData };
       },
       resultMapper(serviceResult: RefreshComponentsUiProjectCallResult) {
@@ -92,7 +92,7 @@ export default createProjectManagementEpic({
 
     [ActionTypes.APPLY_REFRESH_COMPONENTS]: {
       mapper({ tabId, serverData }: ActionPayloads.ApplyRefreshComponents) {
-        const callData: ApplyRefreshComponentsUiProjectCall = { operation: 'apply-refresh-components', serverData };
+        const callData: UiProjectCall = { operation: 'apply-refresh-components', serverData };
         return { tabId, callData };
       }
     },
@@ -111,7 +111,7 @@ export default createProjectManagementEpic({
       mapper({ tabId, defaultWindow }: ActionPayloads.SetDefaultWindow) {
         const desktop = extractNullableId(defaultWindow.desktop, tabId);
         const mobile = extractNullableId(defaultWindow.mobile, tabId);
-        const callData: SetDefaultWindowUiProjectCall = { operation: 'set-default-window', defaultWindow: { desktop, mobile } };
+        const callData: UiProjectCall = { operation: 'set-default-window', defaultWindow: { desktop, mobile } };
         return { tabId, callData };
       },
     },
@@ -119,7 +119,7 @@ export default createProjectManagementEpic({
     [ActionTypes.SET_RESOURCE]: {
       mapper({ tabId, resource }: ActionPayloads.SetResource) {
         const { id, resourceId, ...resourceData } = resource;
-        const callData: SetResourceUiProjectCall = { operation: 'set-resource', id: resourceId, resource: resourceData };
+        const callData: UiProjectCall = { operation: 'set-resource', id: resourceId, resource: resourceData };
         return { tabId, callData };
       },
     },
@@ -127,7 +127,7 @@ export default createProjectManagementEpic({
     [ActionTypes.CLEAR_RESOURCE]: {
       mapper({ resourceId }: ActionPayloads.ClearResource) {
         const { tabId, id } = extractIds(resourceId);
-        const callData: ClearResourceUiProjectCall = { operation: 'clear-resource', id };
+        const callData: UiProjectCall = { operation: 'clear-resource', id };
         return { tabId, callData };
       },
     },
@@ -135,7 +135,7 @@ export default createProjectManagementEpic({
     [ActionTypes.RENAME_RESOURCE]: {
       mapper({ resourceId, newId }: ActionPayloads.RenameResource) {
         const { tabId, id } = extractIds(resourceId);
-        const callData: RenameResourceUiProjectCall = { operation: 'rename-resource', id, newId };
+        const callData: UiProjectCall = { operation: 'rename-resource', id, newId };
         return { tabId, callData };
       },
     },
@@ -143,7 +143,7 @@ export default createProjectManagementEpic({
     [ActionTypes.SET_STYLE]: {
       mapper({ tabId, style }: ActionPayloads.SetStyle) {
         const { id, styleId, ...styleData } = style;
-        const callData: SetStyleUiProjectCall = { operation: 'set-style', id: styleId, style: styleData };
+        const callData: UiProjectCall = { operation: 'set-style', id: styleId, style: styleData };
         return { tabId, callData };
       },
     },
@@ -151,7 +151,7 @@ export default createProjectManagementEpic({
     [ActionTypes.CLEAR_STYLE]: {
       mapper({ styleId }: ActionPayloads.ClearStyle) {
         const { tabId, id } = extractIds(styleId);
-        const callData: ClearStyleUiProjectCall = { operation: 'clear-style', id };
+        const callData: UiProjectCall = { operation: 'clear-style', id };
         return { tabId, callData };
       },
     },
@@ -159,14 +159,14 @@ export default createProjectManagementEpic({
     [ActionTypes.RENAME_STYLE]: {
       mapper({ styleId, newId }: ActionPayloads.RenameStyle) {
         const { tabId, id } = extractIds(styleId);
-        const callData: RenameStyleUiProjectCall = { operation: 'rename-style', id, newId };
+        const callData: UiProjectCall = { operation: 'rename-style', id, newId };
         return { tabId, callData };
       },
     },
 
     [ActionTypes.NEW_WINDOW]: {
       mapper({ tabId, newId }: ActionPayloads.NewWindow) {
-        const callData: NewWindowUiProjectCall = { operation: 'new-window', id: newId };
+        const callData: UiProjectCall = { operation: 'new-window', id: newId };
         return { tabId, callData };
       },
     },
@@ -174,7 +174,7 @@ export default createProjectManagementEpic({
     [ActionTypes.CLEAR_WINDOW]: {
       mapper({ windowId }: ActionPayloads.ClearWindow) {
         const { tabId, id } = extractIds(windowId);
-        const callData: ClearWindowUiProjectCall = { operation: 'clear-window', id };
+        const callData: UiProjectCall = { operation: 'clear-window', id };
         return { tabId, callData };
       },
     },
@@ -182,7 +182,7 @@ export default createProjectManagementEpic({
     [ActionTypes.RENAME_WINDOW]: {
       mapper({ windowId, newId }: ActionPayloads.RenameWindow) {
         const { tabId, id } = extractIds(windowId);
-        const callData: RenameWindowUiProjectCall = { operation: 'rename-window', id, newId };
+        const callData: UiProjectCall = { operation: 'rename-window', id, newId };
         return { tabId, callData };
       },
     },
@@ -190,7 +190,7 @@ export default createProjectManagementEpic({
     [ActionTypes.CLONE_WINDOW]: {
       mapper({ windowId, newId }: { windowId: string; newId: string }) {
         const { tabId, id } = extractIds(windowId);
-        const callData: CloneWindowUiProjectCall = { operation: 'clone-window', id, newId };
+        const callData: UiProjectCall = { operation: 'clone-window', id, newId };
         return { tabId, callData };
       },
     },
@@ -208,7 +208,7 @@ export default createProjectManagementEpic({
           fixedProps.style = fixedProps.style.map(id => extractNullableId(id, tabId));
         }
 
-        const callData: SetWindowPropertiesUiProjectCall = { operation: 'set-window-properties', id, properties: fixedProps };
+        const callData: UiProjectCall = { operation: 'set-window-properties', id, properties: fixedProps };
         return { tabId, callData };
       },
       debounce: {
@@ -224,7 +224,7 @@ export default createProjectManagementEpic({
 
     [ActionTypes.NEW_TEMPLATE]: {
       mapper({ tabId, newId }: ActionPayloads.NewTemplate) {
-        const callData: NewTemplateUiProjectCall = { operation: 'new-template', id: newId };
+        const callData: UiProjectCall = { operation: 'new-template', id: newId };
         return { tabId, callData };
       },
     },
@@ -232,7 +232,7 @@ export default createProjectManagementEpic({
     [ActionTypes.CLEAR_TEMPLATE]: {
       mapper({ templateId }: ActionPayloads.ClearTemplate) {
         const { tabId, id } = extractIds(templateId);
-        const callData: ClearTemplateUiProjectCall = { operation: 'clear-template', id };
+        const callData: UiProjectCall = { operation: 'clear-template', id };
         return { tabId, callData };
       },
     },
@@ -240,7 +240,7 @@ export default createProjectManagementEpic({
     [ActionTypes.RENAME_TEMPLATE]: {
       mapper({ templateId, newId }: ActionPayloads.RenameTemplate) {
         const { tabId, id } = extractIds(templateId);
-        const callData: RenameTemplateUiProjectCall = { operation: 'rename-template', id, newId };
+        const callData: UiProjectCall = { operation: 'rename-template', id, newId };
         return { tabId, callData };
       },
     },
@@ -248,7 +248,7 @@ export default createProjectManagementEpic({
     [ActionTypes.CLONE_TEMPLATE]: {
       mapper({ templateId, newId }: { templateId: string; newId: string }) {
         const { tabId, id } = extractIds(templateId);
-        const callData: CloneTemplateUiProjectCall = { operation: 'clone-template', id, newId };
+        const callData: UiProjectCall = { operation: 'clone-template', id, newId };
         return { tabId, callData };
       },
     },
@@ -256,7 +256,7 @@ export default createProjectManagementEpic({
     [ActionTypes.SET_TEMPLATE_PROPERTIES]: {
       mapper({ templateId, properties }: ActionPayloads.SetTemplateProperties) {
         const { tabId, id } = extractIds(templateId);
-        const callData: SetTemplatePropertiesUiProjectCall = { operation: 'set-template-properties', id, properties };
+        const callData: UiProjectCall = { operation: 'set-template-properties', id, properties };
         return { tabId, callData };
       },
       debounce: {
@@ -273,7 +273,7 @@ export default createProjectManagementEpic({
     [ActionTypes.SET_TEMPLATE_EXPORT]: {
       mapper({ templateId, exportId, memberType, valueType }: ActionPayloads.SetTemplateExport) {
         const { tabId, id } = extractIds(templateId);
-        const callData: SetTemplateExportUiProjectCall = { operation: 'set-template-export', id, exportId, memberType, valueType };
+        const callData: UiProjectCall = { operation: 'set-template-export', id, exportId, memberType, valueType };
         return { tabId, callData };
       },
     },
@@ -281,7 +281,7 @@ export default createProjectManagementEpic({
     [ActionTypes.CLEAR_TEMPLATE_EXPORT]: {
       mapper({ templateId, exportId }: ActionPayloads.ClearTemplateExport) {
         const { tabId, id } = extractIds(templateId);
-        const callData: ClearTemplateExportUiProjectCall = { operation: 'clear-template-export', id, exportId };
+        const callData: UiProjectCall = { operation: 'clear-template-export', id, exportId };
         return { tabId, callData };
       },
     },
@@ -289,7 +289,7 @@ export default createProjectManagementEpic({
     [ActionTypes.SET_TEMPLATE_BULK_PATTERNS]: {
       mapper({ templateId, patterns }: ActionPayloads.SetTemplateBulkPatterns) {
         const { tabId, id } = extractIds(templateId);
-        const callData: SetTemplateBulkPatternsUiProjectCall = { operation: 'set-template-bulk-patterns', id, patterns };
+        const callData: UiProjectCall = { operation: 'set-template-bulk-patterns', id, patterns };
         return { tabId, callData };
       },
     },
@@ -297,7 +297,7 @@ export default createProjectManagementEpic({
     [ActionTypes.NEW_CONTROL]: {
       mapper({ viewType, viewId, newId, x, y, type }: ActionPayloads.NewControl) {
         const { tabId, id } = extractIds(viewId);
-        const callData: NewControlUiProjectCall = { operation: 'new-control', viewType, viewId: id, id: newId, x, y, type };
+        const callData: UiProjectCall = { operation: 'new-control', viewType, viewId: id, id: newId, x, y, type };
         return { tabId, callData };
       },
     },
@@ -305,7 +305,7 @@ export default createProjectManagementEpic({
     [ActionTypes.CLEAR_CONTROL]: {
       mapper({ controlId }: ActionPayloads.ClearControl) {
         const { tabId, viewType, viewId, id } = extractControlIds(controlId);
-        const callData: ClearControlUiProjectCall = { operation: 'clear-control', viewType, viewId, id };
+        const callData: UiProjectCall = { operation: 'clear-control', viewType, viewId, id };
         return { tabId, callData };
       },
     },
@@ -313,7 +313,7 @@ export default createProjectManagementEpic({
     [ActionTypes.RENAME_CONTROL]: {
       mapper({ controlId, newId }: ActionPayloads.RenameControl) {
         const { tabId, viewType, viewId, id } = extractControlIds(controlId);
-        const callData: RenameControlUiProjectCall = { operation: 'rename-control', viewType, viewId, id, newId };
+        const callData: UiProjectCall = { operation: 'rename-control', viewType, viewId, id, newId };
         return { tabId, callData };
       },
     },
@@ -322,7 +322,7 @@ export default createProjectManagementEpic({
       mapper({ controlId, newId, targetViewType, targetViewId: fullTargetViewId }: ActionPayloads.CloneControl) {
         const { tabId, viewType, viewId, id } = extractControlIds(controlId);
         const targetViewId = extractNullableId(fullTargetViewId, tabId);
-        const callData: CloneControlUiProjectCall = { operation: 'clone-control', viewType, viewId, id, newId, targetViewType, targetViewId };
+        const callData: UiProjectCall = { operation: 'clone-control', viewType, viewId, id, newId, targetViewType, targetViewId };
         return { tabId, callData };
       },
     },
@@ -337,7 +337,7 @@ export default createProjectManagementEpic({
           fixedProps.style = fixedProps.style.map(id => extractNullableId(id, tabId));
         }
 
-        const callData: SetControlPropertiesUiProjectCall = { operation: 'set-control-properties', viewType, viewId, id, properties: fixedProps };
+        const callData: UiProjectCall = { operation: 'set-control-properties', viewType, viewId, id, properties: fixedProps };
         return { tabId, callData };
       },
       debounce: {
@@ -356,7 +356,7 @@ export default createProjectManagementEpic({
       mapper({ viewType, viewId, newId, templateId: fullTemplateId, x, y }: ActionPayloads.NewTemplateInstance) {
         const { tabId, id } = extractIds(viewId);
         const templateId = extractNullableId(fullTemplateId, tabId);
-        const callData: NewTemplateInstanceUiProjectCall = { operation: 'new-template-instance', viewType, viewId: id, id: newId, templateId, x, y };
+        const callData: UiProjectCall = { operation: 'new-template-instance', viewType, viewId: id, id: newId, templateId, x, y };
         return { tabId, callData };
       },
     },
@@ -364,7 +364,7 @@ export default createProjectManagementEpic({
     [ActionTypes.CLEAR_TEMPLATE_INSTANCE]: {
       mapper({ templateInstanceId }: ActionPayloads.ClearTemplateInstance) {
         const { tabId, viewType, viewId, id } = extractTemplateInstanceIds(templateInstanceId);
-        const callData: ClearTemplateInstanceUiProjectCall = { operation: 'clear-template-instance', viewType, viewId, id };
+        const callData: UiProjectCall = { operation: 'clear-template-instance', viewType, viewId, id };
         return { tabId, callData };
       },
     },
@@ -372,7 +372,7 @@ export default createProjectManagementEpic({
     [ActionTypes.RENAME_TEMPLATE_INSTANCE]: {
       mapper({ templateInstanceId, newId }: ActionPayloads.RenameTemplateInstance) {
         const { tabId, viewType, viewId, id } = extractTemplateInstanceIds(templateInstanceId);
-        const callData: RenameTemplateInstanceUiProjectCall = { operation: 'rename-template-instance', viewType, viewId, id, newId };
+        const callData: UiProjectCall = { operation: 'rename-template-instance', viewType, viewId, id, newId };
         return { tabId, callData };
       },
     },
@@ -380,7 +380,7 @@ export default createProjectManagementEpic({
     [ActionTypes.CLONE_TEMPLATE_INSTANCE]: {
       mapper({ templateInstanceId, newId }: ActionPayloads.CloneTemplateInstance) {
         const { tabId, viewType, viewId, id } = extractTemplateInstanceIds(templateInstanceId);
-        const callData: CloneTemplateInstanceUiProjectCall = { operation: 'clone-template-instance', viewType, viewId, id, newId };
+        const callData: UiProjectCall = { operation: 'clone-template-instance', viewType, viewId, id, newId };
         return { tabId, callData };
       },
     },
@@ -388,7 +388,7 @@ export default createProjectManagementEpic({
     [ActionTypes.MOVE_TEMPLATE_INSTANCE]: {
       mapper({ templateInstanceId, x, y }: ActionPayloads.MoveTemplateInstance) {
         const { tabId, viewType, viewId, id } = extractTemplateInstanceIds(templateInstanceId);
-        const callData: MoveTemplateInstanceUiProjectCall = { operation: 'move-template-instance', viewType, viewId, id, x, y };
+        const callData: UiProjectCall = { operation: 'move-template-instance', viewType, viewId, id, x, y };
         return { tabId, callData };
       },
       debounce: {
@@ -407,7 +407,7 @@ export default createProjectManagementEpic({
         const { tabId, viewType, viewId, id } = extractTemplateInstanceIds(templateInstanceId);
         const templateId = extractNullableId(fullTemplateId, tabId);
 
-        const callData: SetTemplateInstanceTemplateUiProjectCall = { operation: 'set-template-instance-template', viewType, viewId, id, templateId };
+        const callData: UiProjectCall = { operation: 'set-template-instance-template', viewType, viewId, id, templateId };
         return { tabId, callData };
       }
     },
@@ -423,7 +423,7 @@ export default createProjectManagementEpic({
           newBindings[key] = { componentId, memberName: bindingData.memberName };
         }
         
-        const callData: SetTemplateInstanceBindingsUiProjectCall = { operation: 'set-template-instance-bindings', viewType, viewId, id, bindings: newBindings };
+        const callData: UiProjectCall = { operation: 'set-template-instance-bindings', viewType, viewId, id, bindings: newBindings };
         return { tabId, callData };
       }
     },
