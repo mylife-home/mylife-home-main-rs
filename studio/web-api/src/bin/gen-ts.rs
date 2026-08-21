@@ -29,7 +29,9 @@ export type UiActionData = Action;
 export type UiElementPath = UiElementPathNode[];
 
 export interface ProjectCall {}
-export interface ProjectCallResult {}",
+export interface ProjectCallResult {}
+
+export interface ProjectInfo {}",
     },
     Appendix {
         file: "component-model.ts",

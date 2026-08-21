@@ -101,6 +101,8 @@ register_ts!(ComponentsImportType);
 #[ts(type = "{ [name: string]: any; }")]
 pub struct CoreComponentConfiguration(pub HashMap<String, serde_json::Value>);
 
+register_ts!(CoreComponentConfiguration);
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
@@ -129,7 +131,6 @@ pub struct CoreComponentData {
     pub id: String,
     pub definition: CoreComponentDefinition,
     pub position: CorePosition,
-    #[ts(type = "{ [key: string]: any }")]
     pub config: CoreComponentConfiguration,
     pub external: bool,
 }
@@ -481,13 +482,13 @@ register_ts!(UiBreakingOperation);
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(tag = "operation", rename_all = "lowercase")]
-pub enum ListNotification {
+pub enum UpdateListNotification {
     Set(SetListNotification),
     Clear(ClearListNotification),
     Rename(RenameListNotification),
 }
 
-register_ts!(ListNotification);
+register_ts!(UpdateListNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
@@ -495,7 +496,7 @@ register_ts!(ListNotification);
 pub struct SetListNotification {
     pub r#type: ProjectType,
     pub name: String,
-    #[ts(type = "any")]
+    #[ts(type = "ProjectInfo")]
     pub info: serde_json::Value,
 }
 
