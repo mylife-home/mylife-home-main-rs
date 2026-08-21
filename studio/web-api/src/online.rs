@@ -10,7 +10,9 @@ pub struct InstanceInfo {
     pub r#type: String,
     pub hardware: std::collections::HashMap<String, String>,
     pub versions: std::collections::HashMap<String, String>,
+    #[ts(type = "number")]
     pub system_uptime: i64,
+    #[ts(type = "number")]
     pub instance_uptime: i64,
     pub hostname: String,
     pub capabilities: Vec<String>,
@@ -114,6 +116,7 @@ register_ts!(SetStateData);
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "online.ts")]
 pub struct HistoryRecord {
+    #[ts(type = "number")]
     pub timestamp: i64,
     pub r#type: String,
 }
@@ -124,6 +127,7 @@ register_ts!(HistoryRecord);
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "online.ts")]
 pub struct InstanceHistoryRecord {
+    #[ts(type = "number")]
     pub timestamp: i64,
     pub r#type: String,
     pub instance_name: String,
@@ -149,6 +153,7 @@ register_ts!(ComponentSetHistoryRecord);
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "online.ts")]
 pub struct ComponentClearHistoryRecord {
+    #[ts(type = "number")]
     pub timestamp: i64,
     pub r#type: String,
     pub instance_name: String,
@@ -161,6 +166,7 @@ register_ts!(ComponentClearHistoryRecord);
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "online.ts")]
 pub struct StateHistoryRecord {
+    #[ts(type = "number")]
     pub timestamp: i64,
     pub r#type: String,
     pub instance_name: String,
