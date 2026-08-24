@@ -14,10 +14,9 @@ use futures::{
     stream::{SplitSink, SplitStream},
 };
 use kameo::{Actor, error::HookError, mailbox::Signal, message, prelude::*};
+use studio_web_api::protocol;
 use std::{
-    collections::HashMap,
-    fmt,
-    sync::{
+    any::type_name, collections::HashMap, fmt, sync::{
         Mutex, MutexGuard,
         atomic::{AtomicUsize, Ordering},
     },
@@ -185,7 +184,7 @@ impl Actor for Session {
 
     async fn on_start(
         (id, socket): Self::Args,
-        actor_ref: ActorRef<Self>,
+        _actor_ref: ActorRef<Self>,
     ) -> Result<Self, Self::Error> {
         let (ws_sink, ws_stream) = socket.split();
 
@@ -195,8 +194,6 @@ impl Actor for Session {
             ws_sink,
             heartbeat: Heartbeat::new(),
         };
-
-        // _self.registry.on_update().subscribe(actor_ref.clone());
 
         _self.init().await?;
 
@@ -259,11 +256,96 @@ impl Session {
         self.heartbeat.mark_alive();
 
         if let Message::Text(text) = &msg {
+            let request = match serde_json::from_str::<protocol::ServiceRequest>(text) {
+                Ok(request) => request,
+                Err(error) => {
+                    tracing::error!(%error, session = %self.id, ?text, "failed to parse request");
+                    return;
+                }
+            };
+
+            tracing::info!(session = %self.id, ?request, "received request");
             // TODO
         }
     }
 
     // TODO: doc recommands to use feed + flush to batch messages
+
+    async fn send_response<R: serde::Serialize, E: std::error::Error + 'static>(&mut self, request_id: &str, result: Result<R, E>) {
+        let mut response = protocol::ServiceResponse {
+            request_id: request_id.to_string(),
+            result: None,
+            error: None,
+        };
+
+        match result {
+            Ok(result) => {
+                match serde_json::to_value(&result) {
+                    Ok(value) => {
+                        response.result = Some(value);
+                    }
+                    Err(error) => {
+                        tracing::error!(%error, session = %self.id, "failed to serialize response result");
+                        response.error = Some(Self::format_error(error));
+                    }
+                }
+            }
+            Err(error) => {
+                response.error = Some(Self::format_error(error));
+            }
+        }
+
+
+        let msg = match serde_json::to_string(&response) {
+            Ok(data) => data,
+            Err(error) => {
+                tracing::error!(%error, session = %self.id, ?response, "failed to serialize response wrapper");
+                return;
+            }
+        };
+
+        self.send_raw(Message::text(msg)).await;
+    }
+
+    fn format_error<E: std::error::Error + 'static>(error: E) -> protocol::ServiceResponseError {
+        // capture the error chain
+        let mut stacktrace = format!("{}", error);
+        let mut source = error.source();
+        while let Some(err) = source {
+            stacktrace.push_str(&format!("\ncaused by: {}", err));
+            source = err.source();
+        }
+
+        protocol::ServiceResponseError {
+            r#type: type_name::<E>().to_string(),
+            message: format!("{}", error),
+            stack: stacktrace,
+        }
+    }
+
+    async fn send_notification<Data: serde::Serialize>(&mut self, notifier_type: &str, notifier_id: &str, data: Data) {
+        let notification = protocol::Notification {
+            notifier_type: notifier_type.to_string(),
+            notifier_id: notifier_id.to_string(),
+            data: match serde_json::to_value(&data) {
+                Ok(value) => value,
+                Err(error) => {
+                    tracing::error!(%error, ?data, "failed to serialize notification data");
+                    return;
+                }
+            },
+        };
+
+        let msg = match serde_json::to_string(&notification) {
+            Ok(data) => data,
+            Err(error) => {
+                tracing::error!(%error, ?notification, "failed to serialize notification wrapper");
+                return;
+            }
+        };
+
+        self.send_raw(Message::text(msg)).await;
+    }
 
     async fn send_raw(&mut self, msg: Message) {
         tracing::trace!(session = %self.id, ?msg, ">>");
