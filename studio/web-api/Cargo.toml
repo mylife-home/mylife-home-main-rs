@@ -8,3 +8,4 @@ inventory = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 ts-rs = { workspace = true }
+ui-web-api = { path = "../../ui/web-api" }

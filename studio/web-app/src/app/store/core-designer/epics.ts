@@ -45,7 +45,7 @@ export default createProjectManagementEpic({
 
     [ActionTypes.PREPARE_IMPORT_FROM_ONLINE]: {
       mapper({ tabId, config }: ActionPayloads.PrepareImportFromOnline) {
-        const callData: PrepareImportFromOnlineCoreProjectCall = { operation: 'prepare-import-from-online', config };
+        const callData: CoreProjectCall = { operation: 'prepare-import-from-online', config };
         return { tabId, callData };
       },
       resultMapper(serviceResult: PrepareBulkUpdatesCoreProjectCallResult): BulkUpdatesData {
@@ -55,7 +55,7 @@ export default createProjectManagementEpic({
 
     [ActionTypes.PREPARE_IMPORT_FROM_PROJECT]: {
       mapper({ tabId, config }: ActionPayloads.PrepareImportFromProject) {
-        const callData: PrepareImportFromProjectCoreProjectCall = { operation: 'prepare-import-from-project', config };
+        const callData: CoreProjectCall = { operation: 'prepare-import-from-project', config };
         return { tabId, callData };
       },
       resultMapper(serviceResult: PrepareBulkUpdatesCoreProjectCallResult): BulkUpdatesData {
@@ -65,7 +65,7 @@ export default createProjectManagementEpic({
 
     [ActionTypes.APPLY_BULK_UPDATES]: {
       mapper({ tabId, serverData, selection }: ActionPayloads.ApplyBulkUpdates) {
-        const callData: ApplyBulkUpdatesCoreProject = { operation: 'apply-bulk-updates', selection, serverData };
+        const callData: CoreProjectCall = { operation: 'apply-bulk-updates', selection, serverData };
         return { tabId, callData };
       },
       resultMapper(serviceResult: ApplyBulkUpdatesCoreProjectCallResult): BulkUpdatesStats {
@@ -96,7 +96,7 @@ export default createProjectManagementEpic({
 
     [ActionTypes.APPLY_DEPLOY_TO_FILES]: {
       mapper({ tabId, bindingsInstanceName, serverData }: ActionPayloads.ApplyDeployToFiles) {
-        const callData: ApplyDeployToFilesCoreProjectCall = { operation: 'apply-deploy-to-files', serverData, bindingsInstanceName };
+        const callData: CoreProjectCall = { operation: 'apply-deploy-to-files', serverData, bindingsInstanceName };
         return { tabId, callData };
       },
       resultMapper(serviceResult: ApplyDeployToFilesCoreProjectCallResult): FilesDeployResult {
@@ -118,7 +118,7 @@ export default createProjectManagementEpic({
 
     [ActionTypes.APPLY_DEPLOY_TO_ONLINE]: {
       mapper({ tabId, serverData }: ActionPayloads.ApplyDeployToOnline) {
-        const callData: ApplyDeployToOnlineCoreProjectCall = { operation: 'apply-deploy-to-online', serverData };
+        const callData: CoreProjectCall = { operation: 'apply-deploy-to-online', serverData };
         return { tabId, callData };
       }
     },
@@ -126,41 +126,41 @@ export default createProjectManagementEpic({
     [ActionTypes.UPDATE_TOOLBOX]: {
       mapper({ itemType, itemId, action }: ActionPayloads.UpdateToolbox) {
         const { tabId, id } = extractIds(itemId);
-        const callData: UpdateToolboxCoreProjectCall = { operation: 'update-toolbox', itemType, itemId: id, action };
+        const callData: CoreProjectCall = { operation: 'update-toolbox', itemType, itemId: id, action };
         return { tabId, callData };
       },
     },
     [ActionTypes.SET_TEMPLATE]: {
       mapper({ tabId, templateId }: ActionPayloads.SetTemplate) {
-        const callData: SetTemplateCoreProjectCall = { operation: 'set-template', templateId };
+        const callData: CoreProjectCall = { operation: 'set-template', templateId };
         return { tabId, callData };
       },
     },
     [ActionTypes.RENAME_TEMPLATE]: {
       mapper({ templateId, newId }: ActionPayloads.RenameTemplate) {
         const { tabId, id } = extractIds(templateId);
-        const callData: RenameTemplateCoreProjectCall = { operation: 'rename-template', templateId: id, newId };
+        const callData: CoreProjectCall = { operation: 'rename-template', templateId: id, newId };
         return { tabId, callData };
       },
     },
     [ActionTypes.CLEAR_TEMPLATE]: {
       mapper({ templateId }: ActionPayloads.ClearTemplate) {
         const { tabId, id } = extractIds(templateId);
-        const callData: ClearTemplateCoreProjectCall = { operation: 'clear-template', templateId: id };
+        const callData: CoreProjectCall = { operation: 'clear-template', templateId: id };
         return { tabId, callData };
       },
     },
     [ActionTypes.SET_TEMPLATE_EXPORT]: {
       mapper({ exportType, exportId, componentId: fullComponentId, propertyName }: ActionPayloads.SetTemplateExport) {
         const { tabId, templateId, id: componentId } = extractIdsWithTemplate(fullComponentId);
-        const callData: SetTemplateExportCoreProjectCall = { operation: 'set-template-export', templateId, exportType, exportId, componentId, propertyName };
+        const callData: CoreProjectCall = { operation: 'set-template-export', templateId, exportType, exportId, componentId, propertyName };
         return { tabId, callData };
       },
     },
     [ActionTypes.CLEAR_TEMPLATE_EXPORT]: {
       mapper({ templateId, exportType, exportId }: ActionPayloads.ClearTemplateExport) {
         const { tabId, id } = extractIds(templateId);
-        const callData: ClearTemplateExportCoreProjectCall = { operation: 'clear-template-export', templateId: id, exportType, exportId };
+        const callData: CoreProjectCall = { operation: 'clear-template-export', templateId: id, exportType, exportId };
         return { tabId, callData };
       },
       resultMapper(serviceResult: PrepareBulkUpdatesCoreProjectCallResult): BulkUpdatesData {
@@ -172,21 +172,21 @@ export default createProjectManagementEpic({
         const { tabId, id } = extractIds(fullDefinition.id);
         const templateId = fullTemplateId && extractIds(fullTemplateId).id;
         const definition: ComponentDefinition = { type: fullDefinition.type, id };
-        const callData: SetComponentCoreProjectCall = { operation: 'set-component', templateId, componentId, definition, x: position.x, y: position.y };
+        const callData: CoreProjectCall = { operation: 'set-component', templateId, componentId, definition, x: position.x, y: position.y };
         return { tabId, callData };
       },
     },
     [ActionTypes.MOVE_COMPONENTS]: {
       mapper({ componentsIds, delta }: ActionPayloads.MoveComponents) {
         const { tabId, templateId, ids } = extractIdsListWithTemplate(componentsIds);
-        const callData: MoveComponentsCoreProjectCall = { operation: 'move-components', templateId, componentsIds: ids, delta };
+        const callData: CoreProjectCall = { operation: 'move-components', templateId, componentsIds: ids, delta };
         return { tabId, callData };
       },
     },
     [ActionTypes.CONFIGURE_COMPONENT]: {
       mapper({ componentId, configId, configValue }: ActionPayloads.ConfigureComponent) {
         const { tabId, templateId, id } = extractIdsWithTemplate(componentId);
-        const callData: ConfigureComponentCoreProjectCall = { operation: 'configure-component', templateId, componentId: id, configId, configValue };
+        const callData: CoreProjectCall = { operation: 'configure-component', templateId, componentId: id, configId, configValue };
         return { tabId, callData };
       },
       debounce: {
@@ -201,7 +201,7 @@ export default createProjectManagementEpic({
     [ActionTypes.RENAME_COMPONENT]: {
       mapper({ componentId, newId }: ActionPayloads.RenameComponent) {
         const { tabId, templateId, id } = extractIdsWithTemplate(componentId);
-        const callData: RenameComponentCoreProjectCall = { operation: 'rename-component', templateId, componentId: id, newId };
+        const callData: CoreProjectCall = { operation: 'rename-component', templateId, componentId: id, newId };
         return { tabId, callData };
       },
     },
@@ -209,7 +209,7 @@ export default createProjectManagementEpic({
       mapper({ componentsIds, templateId: fullTemplateId }: ActionPayloads.CopyComponentsToTemplate) {
         const { tabId, templateId, ids } = extractIdsListWithTemplate(componentsIds);
         const targetTemplateId = extractIds(fullTemplateId).id;
-        const callData: CopyComponentsToTemplateCoreProjectCall = { operation: 'copy-components-to-template', templateId, componentsIds: ids, targetTemplateId };
+        const callData: CoreProjectCall = { operation: 'copy-components-to-template', templateId, componentsIds: ids, targetTemplateId };
         return { tabId, callData };
       },
       resultMapper(serviceResult: CopyComponentsCoreProjectCallResult): CopyComponentsStats {
@@ -219,7 +219,7 @@ export default createProjectManagementEpic({
     [ActionTypes.CLEAR_COMPONENTS]: {
       mapper({ componentsIds }: ActionPayloads.ClearComponents) {
         const { tabId, templateId, ids } = extractIdsListWithTemplate(componentsIds);
-        const callData: ClearComponentsCoreProjectCall = { operation: 'clear-components', templateId, componentsIds: ids };
+        const callData: CoreProjectCall = { operation: 'clear-components', templateId, componentsIds: ids };
         return { tabId, callData };
       },
     },
@@ -234,14 +234,14 @@ export default createProjectManagementEpic({
           targetComponent,
         };
         
-        const callData: SetBindingCoreProjectCall = { operation: 'set-binding', templateId, binding: bindingData };
+        const callData: CoreProjectCall = { operation: 'set-binding', templateId, binding: bindingData };
         return { tabId, callData };
       },
     },
     [ActionTypes.CLEAR_BINDING]: {
       mapper({ bindingId }: ActionPayloads.ClearBinding) {
         const { tabId, templateId, id } = extractIdsWithTemplate(bindingId);
-        const callData: ClearBindingCoreProjectCall = { operation: 'clear-binding', templateId, bindingId: id };
+        const callData: CoreProjectCall = { operation: 'clear-binding', templateId, bindingId: id };
         return { tabId, callData };
       },
     },
