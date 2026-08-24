@@ -115,7 +115,7 @@ export class RxSocket {
   notifications() {
     return this.message$.pipe(
       observeOn(asyncScheduler),
-      filter((msg): msg is Notification => msg.type === 'notification'),
+      filter((msg) => msg.type === 'notification'),
       map(msg => msg as Notification)
     );
   }
