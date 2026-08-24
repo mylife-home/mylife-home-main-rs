@@ -38,7 +38,7 @@ const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
 
 /// Capacity for the command channel used to send work from the public client to
 /// the internal worker task.
-const COMMAND_QUEUE_CAPACITY: usize = 128;
+const COMMAND_QUEUE_CAPACITY: usize = 1024 * 1024;
 
 /// Capacity for the broadcast channel used to publish events to subscribers.
 const EVENT_QUEUE_CAPACITY: usize = 1024 * 1024;
