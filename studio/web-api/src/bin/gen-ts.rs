@@ -101,6 +101,10 @@ fn main() {
 }
 
 fn cleanup(out_dir: &Path) {
+    if !out_dir.exists() {
+        fs::create_dir_all(out_dir).expect("Failed to create output directory");
+    }
+
     for file in fs::read_dir(out_dir).expect("Failed to read current directory") {
         let file = file.expect("Failed to read file");
         let path = file.path();
