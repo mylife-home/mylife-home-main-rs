@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { isMobile, isIOS } from '../utils/detect-browser';
+import { isMobile } from '../utils/detect-browser';
 import { AppState } from '../store/types';
 import { getWindow } from '../store/selectors/model';
 
@@ -88,20 +88,10 @@ function useMobileViewport(size: Size) {
 }
 
 
-function getDisplaySize() {
-  return !isIOS || isPortraitOrientation() ? screen : rotate(screen);
-}
+function getDisplaySize(): Size {
+  const { documentElement } = document;
+  const width = documentElement.clientWidth || window.innerWidth;
+  const height = documentElement.clientHeight || window.innerHeight;
 
-function isPortraitOrientation() {
-  switch (window.orientation) {
-    case -90:
-    case 90:
-      return false;
-  }
-
-  return true;
-}
-
-function rotate(size: Size): Size {
-  return { width: size.height, height: size.width };
+  return { width, height };
 }
