@@ -7,14 +7,21 @@ import { AppThunkDispatch } from '../store/types';
 
 type PopupProps = {
   windowId: string;
+  scale: number;
 };
 
-const Popup: FunctionComponent<PopupProps> = ({ windowId }) => {
+const Popup: FunctionComponent<PopupProps> = ({ windowId, scale }) => {
   const { onWindowClose } = useConnect();
   return (
     <>
       <Overlay onClick={onWindowClose} />
-      <div className='mylife-window-popup'>
+      <div
+        className='mylife-window-popup'
+        style={{
+          WebkitTransform: `translate(-50%, -50%) scale(${scale})`,
+          transform: `translate(-50%, -50%) scale(${scale})`
+        }}
+      >
         <WindowContent windowId={windowId} />
       </div>
     </>

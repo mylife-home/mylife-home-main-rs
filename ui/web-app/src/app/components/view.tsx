@@ -17,7 +17,7 @@ const View: FunctionComponent = () => {
       </div>
 
       {popups.map((popup, index) => (
-        <Popup key={`${index}_overlay`} windowId={popup} />
+        <Popup key={`${index}_overlay`} windowId={popup} scale={scale} />
       ))}
     </>
   );
