@@ -241,6 +241,23 @@ $secondary: #6c757d;
   bottom: 0;
 }
 
+.mylife-main-window {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden;
+
+  > .mylife-window-container {
+    flex: 0 0 auto;
+    margin: 0 auto;
+  }
+}
+
 .mylife-window-popup {
   position: fixed;
   top: 50%;

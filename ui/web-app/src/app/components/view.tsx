@@ -8,12 +8,12 @@ import { useViewport } from '../behaviors/viewport';
 const View: FunctionComponent = () => {
   const { view } = useConnect();
   const [ main, ...popups ] = view;
-  useViewport(main);
+  const scale = useViewport(main);
   
   return (
     <>
-      <div>
-        <WindowContent windowId={main} />
+      <div className="mylife-main-window">
+        <WindowContent windowId={main} scale={scale} />
       </div>
 
       {popups.map((popup, index) => (

@@ -8,12 +8,13 @@ import Control from './control';
 
 type WindowContentProps = {
   windowId: string;
+  scale?: number;
 };
 
-const WindowContent: FunctionComponent<WindowContentProps> = ({ windowId }) => {
+const WindowContent: FunctionComponent<WindowContentProps> = ({ windowId, scale = 1 }) => {
   const { window } = useConnect(windowId);
   return (
-    <div style={getStyleSize(window)} className={clsx('mylife-window-container', ...window.style)}>
+    <div style={getStyle(window, scale)} className={clsx('mylife-window-container', ...window.style)}>
       <img src={getBackground(window)} />
       {window.controls.map((control) => (
         <Control
@@ -34,9 +35,9 @@ function useConnect(windowId: string) {
   };
 }
 
-function getStyleSize(window: Window) {
+function getStyle(window: Window, scale: number) {
   const { height, width } = window;
-  return { height, width };
+  return { height, width, transform: `scale(${scale})`, transformOrigin: 'center top' };
 }
 
 function getBackground(window: Window) {
