@@ -133,6 +133,33 @@ impl DispatcherBuilder {
             session_handlers: self.session_handlers,
         })
     }
+
+    /// Register a service handler for a specific service name.
+    pub fn register_session_handler<A: Actor + Message<SessionEvent> + 'static>(
+        mut self,
+        actor: ActorRef<A>,
+    ) -> Self {
+        let recipient = actor.recipient();
+        self.session_handlers.push(recipient);
+        self
+    }
+
+    /// Register a service handler for a specific service name.
+    pub fn register_service_handler<
+        Req: serde::de::DeserializeOwned + Send + 'static,
+        Res: serde::Serialize + Send + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+        A: Actor + Message<Req, Reply = Result<Res, E>> + 'static,
+    >(
+        mut self,
+        service_name: impl Into<String>,
+        actor: ActorRef<A>,
+    ) -> Self {
+        let recipient = actor.reply_recipient();
+        let handler = ServiceHandlerImpl(recipient);
+        self.service_handlers.insert(service_name.into(), Box::new(handler));
+        self
+    }
 }
 
 #[async_trait]
