@@ -1,19 +1,19 @@
 use std::sync::Arc;
 
-use axum::{
-    Json, Router,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-};
+use axum::Router;
 use common::utils::{actors::HandleLookupError, config};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use thiserror::Error;
 use tokio::{io, net::TcpListener, sync::oneshot};
 
 use crate::web::sessions::SessionManager;
 
+mod dispatcher;
 mod sessions;
 mod webapp;
+
+pub use dispatcher::{Dispatcher, DispatcherBuilder, SessionEvent, SessionEventType};
+pub use sessions::{SessionHandle, SessionId};
 
 #[derive(Debug, Deserialize)]
 struct WebConfig {
@@ -35,10 +35,10 @@ pub enum WebServerError {
 }
 
 impl WebServer {
-    pub async fn new() -> Result<Self, WebServerError> {
+    pub async fn new(dispatcher: Arc<Dispatcher>) -> Result<Self, WebServerError> {
         let config: WebConfig = config::section("web");
         let state = AppState {
-            sessions: Arc::new(SessionManager::new()),
+            sessions: Arc::new(SessionManager::new(dispatcher)),
         };
 
         let app = Router::new()
@@ -83,23 +83,4 @@ impl WebServer {
 #[derive(Debug, Clone)]
 struct AppState {
     sessions: Arc<SessionManager>,
-}
-
-#[derive(Debug, Serialize)]
-struct WebError {
-    error: String,
-}
-
-impl<E: std::error::Error> From<E> for WebError {
-    fn from(value: E) -> Self {
-        WebError {
-            error: format!("{}", value),
-        }
-    }
-}
-
-impl IntoResponse for WebError {
-    fn into_response(self) -> Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(self)).into_response()
-    }
 }

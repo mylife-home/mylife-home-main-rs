@@ -7,25 +7,25 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use common::utils::actors::{CallError, HandleLookupError};
 use futures::{
     SinkExt, StreamExt,
     future::join_all,
     stream::{SplitSink, SplitStream},
 };
-use kameo::{Actor, error::HookError, mailbox::Signal, message, prelude::*};
-use studio_web_api::protocol;
+use kameo::{Actor, error::{HookError, Infallible}, mailbox::Signal, message, prelude::*};
 use std::{
-    any::type_name, collections::HashMap, fmt, sync::{
+    collections::HashMap,
+    fmt,
+    sync::{
         Mutex, MutexGuard,
         atomic::{AtomicUsize, Ordering},
     },
 };
 use std::{sync::Arc, time::Duration};
-use thiserror::Error;
+use studio_web_api::protocol;
 use tokio::time::Instant;
 
-use super::AppState;
+use super::{AppState, Dispatcher, SessionEvent, SessionEventType};
 
 const IDLE_BEFORE_PING: Duration = Duration::from_secs(30);
 const PONG_TIMEOUT: Duration = Duration::from_secs(5);
@@ -43,7 +43,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-struct SessionId(usize);
+pub struct SessionId(usize);
 
 impl fmt::Display for SessionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -53,15 +53,17 @@ impl fmt::Display for SessionId {
 
 #[derive(Debug)]
 pub struct SessionManager {
-    sessions: Mutex<HashMap<SessionId, SessionHandle>>,
+    sessions: Mutex<HashMap<SessionId, SessionController>>,
     id_gen: AtomicUsize,
+    dispatcher: Arc<Dispatcher>,
 }
 
 impl SessionManager {
-    pub fn new() -> Self {
+    pub fn new(dispatcher: Arc<Dispatcher>) -> Self {
         SessionManager {
             sessions: Mutex::new(HashMap::new()),
             id_gen: AtomicUsize::new(1),
+            dispatcher,
         }
     }
 
@@ -71,13 +73,7 @@ impl SessionManager {
 
         tracing::debug!(%id, "websocket session started");
 
-        let handle = match SessionHandle::start(id, socket).await {
-            Ok(handle) => handle,
-            Err(error) => {
-                tracing::error!(%error, %id, "error starting websocket session");
-                return;
-            }
-        };
+        let handle = SessionController::start(id, socket, self.dispatcher.clone()).await;
 
         self.sessions().insert(id, handle.clone());
 
@@ -95,47 +91,31 @@ impl SessionManager {
         join_all(handles.iter().map(|handle| handle.terminate())).await;
     }
 
-    fn sessions(&self) -> MutexGuard<'_, HashMap<SessionId, SessionHandle>> {
+    fn sessions(&self) -> MutexGuard<'_, HashMap<SessionId, SessionController>> {
         self.sessions.lock().expect("could not lock sessions")
     }
 }
 
-#[derive(Debug, Error)]
-#[error("failed to start session '{id}': {error}")]
-struct SessionStartError {
-    id: SessionId,
-    error: Arc<SessionActorError>,
-}
-
-impl SessionStartError {
-    pub fn new(id: SessionId, error: Arc<SessionActorError>) -> Self {
-        Self { id, error }
-    }
-}
-
 #[derive(Debug, Clone, Hash)]
-struct SessionHandle {
+struct SessionController {
     id: SessionId,
     actor: ActorRef<Session>,
 }
 
-impl SessionHandle {
+impl SessionController {
     /// Start session
-    pub async fn start(id: SessionId, socket: WebSocket) -> Result<Self, SessionStartError> {
-        let actor = Session::spawn((id, socket));
+    pub async fn start(id: SessionId, socket: WebSocket, dispatcher: Arc<Dispatcher>) -> Self {
+        let actor = Session::spawn((id, socket, dispatcher));
 
         if let Err(e) = actor.wait_for_startup_result().await {
             match e {
                 HookError::Panicked(p) => {
                     panic!("session {} actor panicked at startup: {}", id, p);
                 }
-                HookError::Error(e) => {
-                    return Err(SessionStartError::new(id, e));
-                }
             }
         }
 
-        Ok(Self { id, actor })
+        Self { id, actor }
     }
 
     /// Terminate session
@@ -163,12 +143,45 @@ impl SessionHandle {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum SessionActorError {
-    #[error("failed to lookup actor handle: {0}")]
-    HandleLookupError(#[source] HandleLookupError),
-    #[error("failed to call model: {0}")]
-    ModelCallError(#[source] CallError),
+/// A handle to a session actor
+#[derive(Debug, Clone)]
+pub struct SessionHandle {
+    actor: ActorRef<Session>,
+    id: SessionId,
+}
+
+impl SessionHandle {
+    fn new(actor: ActorRef<Session>, id: SessionId) -> Self {
+        Self {
+            actor,
+            id,
+        }
+    }
+
+    /// Get the session ID
+    pub fn id(&self) -> SessionId {
+        self.id
+    }
+
+    /// Notify the session with a notification message. The notification is sent to the session actor, which will handle it asynchronously.
+    pub fn notify<Data: serde::Serialize>(&self, notifier_type: &str, notifier_id: &str, data: Data) {
+
+        let notification = protocol::Notification {
+            notifier_type: notifier_type.to_string(),
+            notifier_id: notifier_id.to_string(),
+            data: match serde_json::to_value(&data) {
+                Ok(value) => value,
+                Err(error) => {
+                    tracing::error!(%error, session = %self.id(), notifier_type, notifier_id, "failed to serialize notification data");
+                    return;
+                }
+            },
+        };
+
+        if let Err(error) = self.actor.tell(notification).try_send() {
+            tracing::error!(%error, session = %self.id(), notifier_type, notifier_id, "could not send notification to session actor");
+        }
+    }
 }
 
 struct Session {
@@ -176,15 +189,16 @@ struct Session {
     ws_stream: SplitStream<WebSocket>,
     ws_sink: SplitSink<WebSocket, Message>,
     heartbeat: Heartbeat,
+    dispatcher: Arc<Dispatcher>,
 }
 
 impl Actor for Session {
-    type Args = (SessionId, WebSocket);
-    type Error = Arc<SessionActorError>;
+    type Args = (SessionId, WebSocket, Arc<Dispatcher>);
+    type Error = Infallible;
 
     async fn on_start(
-        (id, socket): Self::Args,
-        _actor_ref: ActorRef<Self>,
+        (id, socket, dispatcher): Self::Args,
+        actor_ref: ActorRef<Self>,
     ) -> Result<Self, Self::Error> {
         let (ws_sink, ws_stream) = socket.split();
 
@@ -193,11 +207,31 @@ impl Actor for Session {
             ws_stream,
             ws_sink,
             heartbeat: Heartbeat::new(),
+            dispatcher,
         };
 
-        _self.init().await?;
+        _self.dispatcher.session_event(SessionEvent::new(
+            SessionHandle::new(actor_ref, id),
+            SessionEventType::Started,
+        ));
 
         Ok(_self)
+    }
+
+    async fn on_stop(
+        &mut self,
+        actor_ref: WeakActorRef<Self>,
+        _reason: ActorStopReason,
+    ) -> Result<(), Self::Error>
+    {
+        let actor_ref = actor_ref.upgrade().expect("actor ref should be valid");
+
+        self.dispatcher.session_event(SessionEvent::new(
+            SessionHandle::new(actor_ref, self.id),
+            SessionEventType::Stopped,
+        ));
+
+        Ok(())
     }
 
     async fn next(
@@ -245,11 +279,28 @@ impl Actor for Session {
     }
 }
 
-impl Session {
-    async fn init(&mut self) -> Result<(), SessionActorError> {
-        Ok(())
-    }
+impl message::Message<protocol::Notification> for Session {
+    type Reply = ();
 
+    async fn handle(
+        &mut self,
+        notification: protocol::Notification,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+
+        let msg = match serde_json::to_string(&notification) {
+            Ok(data) => data,
+            Err(error) => {
+                tracing::error!(%error, session = %self.id, ?notification, "failed to serialize notification wrapper");
+                return;
+            }
+        };
+
+        self.send_raw(Message::text(msg)).await;
+    }
+}
+
+impl Session {
     async fn handle_ws(&mut self, msg: Message) {
         tracing::trace!(session = %self.id, ?msg, "<<");
 
@@ -264,38 +315,13 @@ impl Session {
                 }
             };
 
-            tracing::info!(session = %self.id, ?request, "received request");
-            // TODO
+            // TODO: run in parallel
+            let res = self.dispatcher.service_call(request.clone()).await;
+            self.send_response(&res).await;
         }
     }
 
-    // TODO: doc recommands to use feed + flush to batch messages
-
-    async fn send_response<R: serde::Serialize, E: std::error::Error + 'static>(&mut self, request_id: &str, result: Result<R, E>) {
-        let mut response = protocol::ServiceResponse {
-            request_id: request_id.to_string(),
-            result: None,
-            error: None,
-        };
-
-        match result {
-            Ok(result) => {
-                match serde_json::to_value(&result) {
-                    Ok(value) => {
-                        response.result = Some(value);
-                    }
-                    Err(error) => {
-                        tracing::error!(%error, session = %self.id, "failed to serialize response result");
-                        response.error = Some(Self::format_error(error));
-                    }
-                }
-            }
-            Err(error) => {
-                response.error = Some(Self::format_error(error));
-            }
-        }
-
-
+    async fn send_response(&mut self, response: &protocol::ServiceResponse) {
         let msg = match serde_json::to_string(&response) {
             Ok(data) => data,
             Err(error) => {
@@ -307,45 +333,7 @@ impl Session {
         self.send_raw(Message::text(msg)).await;
     }
 
-    fn format_error<E: std::error::Error + 'static>(error: E) -> protocol::ServiceResponseError {
-        // capture the error chain
-        let mut stacktrace = format!("{}", error);
-        let mut source = error.source();
-        while let Some(err) = source {
-            stacktrace.push_str(&format!("\ncaused by: {}", err));
-            source = err.source();
-        }
-
-        protocol::ServiceResponseError {
-            r#type: type_name::<E>().to_string(),
-            message: format!("{}", error),
-            stack: stacktrace,
-        }
-    }
-
-    async fn send_notification<Data: serde::Serialize>(&mut self, notifier_type: &str, notifier_id: &str, data: Data) {
-        let notification = protocol::Notification {
-            notifier_type: notifier_type.to_string(),
-            notifier_id: notifier_id.to_string(),
-            data: match serde_json::to_value(&data) {
-                Ok(value) => value,
-                Err(error) => {
-                    tracing::error!(%error, ?data, "failed to serialize notification data");
-                    return;
-                }
-            },
-        };
-
-        let msg = match serde_json::to_string(&notification) {
-            Ok(data) => data,
-            Err(error) => {
-                tracing::error!(%error, ?notification, "failed to serialize notification wrapper");
-                return;
-            }
-        };
-
-        self.send_raw(Message::text(msg)).await;
-    }
+    // TODO: doc recommands to use feed + flush to batch messages
 
     async fn send_raw(&mut self, msg: Message) {
         tracing::trace!(session = %self.id, ?msg, ">>");

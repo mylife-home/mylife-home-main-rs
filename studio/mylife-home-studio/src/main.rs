@@ -36,7 +36,9 @@ async fn main() {
     let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
     instance_info_handle.add_component("studio", env!("CARGO_PKG_VERSION"));
 
-    let web = WebServer::new().await.expect("could not start web server");
+    let dispatcher = web::DispatcherBuilder::new();
+    // TODO: Register service handlers with the dispatcher here.
+    let web = WebServer::new(dispatcher.build()).await.expect("could not start web server");
 
     wait_for_shutdown_signal().await;
 
