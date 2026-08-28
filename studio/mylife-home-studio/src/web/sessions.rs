@@ -287,16 +287,7 @@ impl message::Message<protocol::Notification> for Session {
         notification: protocol::Notification,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-
-        let msg = match serde_json::to_string(&notification) {
-            Ok(data) => data,
-            Err(error) => {
-                tracing::error!(%error, session = %self.id, ?notification, "failed to serialize notification wrapper");
-                return;
-            }
-        };
-
-        self.send_raw(Message::text(msg)).await;
+        self.send_message(&protocol::ServerMessage::Notification(notification)).await;
     }
 }
 
@@ -317,15 +308,15 @@ impl Session {
 
             // TODO: run in parallel
             let res = self.dispatcher.service_call(request.clone()).await;
-            self.send_response(&res).await;
+            self.send_message(&protocol::ServerMessage::ServiceResponse(res)).await;
         }
     }
 
-    async fn send_response(&mut self, response: &protocol::ServiceResponse) {
-        let msg = match serde_json::to_string(&response) {
+    async fn send_message(&mut self, message: &protocol::ServerMessage) {
+        let msg = match serde_json::to_string(&message) {
             Ok(data) => data,
             Err(error) => {
-                tracing::error!(%error, session = %self.id, ?response, "failed to serialize response wrapper");
+                tracing::error!(%error, session = %self.id, ?message, "failed to serialize server message wrapper");
                 return;
             }
         };
