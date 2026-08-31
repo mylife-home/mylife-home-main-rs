@@ -11,9 +11,11 @@ use crate::web::sessions::SessionManager;
 mod dispatcher;
 mod sessions;
 mod webapp;
+mod notifier;
 
 pub use dispatcher::{Dispatcher, DispatcherBuilder, SessionEvent, SessionEventType};
 pub use sessions::{SessionHandle, SessionId};
+pub use notifier::Notifier;
 
 #[derive(Debug, Deserialize)]
 struct WebConfig {

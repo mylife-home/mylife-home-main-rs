@@ -14,9 +14,7 @@ use futures::{
 };
 use kameo::{Actor, error::{HookError, Infallible}, mailbox::Signal, message, prelude::*};
 use std::{
-    collections::HashMap,
-    fmt,
-    sync::{
+    collections::HashMap, fmt, hash::Hasher, sync::{
         Mutex, MutexGuard,
         atomic::{AtomicUsize, Ordering},
     },
@@ -150,6 +148,20 @@ pub struct SessionHandle {
     id: SessionId,
 }
 
+impl PartialEq for SessionHandle {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for SessionHandle {}
+
+impl std::hash::Hash for SessionHandle {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
 impl SessionHandle {
     fn new(actor: ActorRef<Session>, id: SessionId) -> Self {
         Self {
@@ -164,7 +176,7 @@ impl SessionHandle {
     }
 
     /// Notify the session with a notification message. The notification is sent to the session actor, which will handle it asynchronously.
-    pub fn notify<Data: serde::Serialize>(&self, notifier_type: &str, notifier_id: &str, data: Data) {
+    pub fn notify<Data: serde::Serialize>(&self, notifier_type: &str, notifier_id: &str, data: &Data) {
 
         let notification = protocol::Notification {
             notifier_type: notifier_type.to_string(),
