@@ -5,6 +5,7 @@ use clap::Parser;
 use crate::web::WebServer;
 
 mod web;
+mod services;
 
 #[derive(Parser, Debug)]
 #[command(name = "mylife-home-studio")]
