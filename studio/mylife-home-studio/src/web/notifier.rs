@@ -1,9 +1,14 @@
-use std::{collections::HashMap, format, marker::PhantomData, sync::atomic::{AtomicUsize, Ordering}};
+use std::{
+    collections::HashMap,
+    format,
+    marker::PhantomData,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
-use super::{SessionId, SessionHandle, SessionEvent, SessionEventType};
+use super::{SessionEvent, SessionEventType, SessionHandle, SessionId};
 
 /// Represents an individual active notification subscription channel linked to a specific Session.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Notifier<Data: serde::Serialize> {
     session: SessionHandle,
     notifier_type: String,
@@ -11,11 +16,11 @@ pub struct Notifier<Data: serde::Serialize> {
     _phantom: PhantomData<Data>,
 }
 
-impl <Data: serde::Serialize> Notifier<Data> {
+impl<Data: serde::Serialize> Notifier<Data> {
     /// Create a new Notifier for a specific session, notifier type, and notifier ID.
     pub fn new(session: SessionHandle, notifier_type: impl Into<String>) -> Self {
         let notifier_id = NOTIFIER_ID_GENERATOR.generate_id();
-        
+
         Self {
             session,
             notifier_type: notifier_type.into(),
@@ -36,7 +41,8 @@ impl <Data: serde::Serialize> Notifier<Data> {
 
     /// Notify the session with a notification message. The notification is sent to the session actor, which will handle it asynchronously.
     pub fn notify(&self, data: &Data) {
-        self.session.notify(&self.notifier_type, &self.notifier_id, data);
+        self.session
+            .notify(&self.notifier_type, &self.notifier_id, data);
     }
 }
 
@@ -47,7 +53,7 @@ pub struct NotifierManager<Data: serde::Serialize> {
     notifiers: HashMap<String, Notifier<Data>>,
 }
 
-impl <Data: serde::Serialize> NotifierManager<Data> {
+impl<Data: serde::Serialize> NotifierManager<Data> {
     /// Create a new NotifierManager.
     pub fn new(notifier_type: impl Into<String>) -> Self {
         Self {
@@ -60,21 +66,23 @@ impl <Data: serde::Serialize> NotifierManager<Data> {
     pub fn session_event(&mut self, event: &SessionEvent) {
         if event.event_type() == SessionEventType::Stopped {
             // Remove all notifiers associated with the stopped session.
-            for (id, _) in self.notifiers.extract_if(|_, notifier| notifier.session == *event.session()) {
+            for (id, _) in self
+                .notifiers
+                .extract_if(|_, notifier| notifier.session == *event.session())
+            {
                 tracing::trace!(notifier = %id, session = %event.session().id(), "removing notifier for stopped session");
             }
         }
     }
 
     /// Create a new Notifier for a specific session and add it to the manager.
-    pub fn create_notifier(
-        &mut self,
-        session: SessionHandle,
-    ) -> &Notifier<Data> {
+    pub fn create_notifier(&mut self, session: SessionHandle) -> &Notifier<Data> {
         let notifier = Notifier::new(session, &self.notifier_type);
         let id = notifier.notifier_id().to_string();
         self.notifiers.insert(id.clone(), notifier);
-        self.notifiers.get(&id).expect("notifier should exist after insertion")
+        self.notifiers
+            .get(&id)
+            .expect("notifier should exist after insertion")
     }
 
     /// Remove a Notifier from the manager by its ID.

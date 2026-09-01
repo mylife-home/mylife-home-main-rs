@@ -1,11 +1,13 @@
-use common::{ActorsConfig, instance_info, utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal}};
 use clap::Parser;
-
+use common::{
+    ActorsConfig, instance_info,
+    utils::{actors::SpawnedActors, config, logger, wait_for_shutdown_signal},
+};
 
 use crate::web::WebServer;
 
-mod web;
 mod services;
+mod web;
 
 #[derive(Parser, Debug)]
 #[command(name = "mylife-home-studio")]
@@ -39,7 +41,9 @@ async fn main() {
 
     let dispatcher = web::DispatcherBuilder::new();
     // TODO: Register service handlers with the dispatcher here.
-    let web = WebServer::new(dispatcher.build()).await.expect("could not start web server");
+    let web = WebServer::new(dispatcher.build())
+        .await
+        .expect("could not start web server");
 
     wait_for_shutdown_signal().await;
 

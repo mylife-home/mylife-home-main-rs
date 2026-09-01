@@ -9,13 +9,15 @@ use tokio::{io, net::TcpListener, sync::oneshot};
 use crate::web::sessions::SessionManager;
 
 mod dispatcher;
+mod notifier;
 mod sessions;
 mod webapp;
-mod notifier;
 
-pub use dispatcher::{Dispatcher, DispatcherBuilder, SessionEvent, SessionEventType};
+pub use dispatcher::{
+    Dispatcher, DispatcherBuilder, ServiceRequest, SessionEvent, SessionEventType,
+};
+pub use notifier::{Notifier, NotifierManager};
 pub use sessions::{SessionHandle, SessionId};
-pub use notifier::Notifier;
 
 #[derive(Debug, Deserialize)]
 struct WebConfig {
