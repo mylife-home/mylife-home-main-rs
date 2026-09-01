@@ -62,3 +62,12 @@ pub struct Notification {
 }
 
 register_ts!(Notification);
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "protocol.ts")]
+#[serde(rename_all = "camelCase")]
+pub struct NotifierId {
+    pub notifier_id: String,
+}
+
+register_ts!(NotifierId);
