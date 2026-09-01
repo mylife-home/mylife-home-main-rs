@@ -6,15 +6,13 @@ use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEven
 
 const PROJECT_MANAGER_NAME: &str = "project-manager";
 
-pub async fn init_actor(actors: &mut SpawnedActors) {
+pub async fn init(actors: &mut SpawnedActors, dispatcher: &mut DispatcherBuilder) {
     let (project_manager, _) = SpawnedActor::start::<ProjectManager>(()).await;
 
     project_manager.register(PROJECT_MANAGER_NAME);
 
     actors.add(project_manager);
-}
 
-pub fn init_dispatcher(dispatcher: &mut DispatcherBuilder) {
     let actor: ActorRef<_> = ActorHandle::<ProjectManager>::from_name(PROJECT_MANAGER_NAME)
         .expect("cannot get project manager actor handle")
         .into();

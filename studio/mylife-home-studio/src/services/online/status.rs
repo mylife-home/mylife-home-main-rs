@@ -9,15 +9,13 @@ use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEven
 
 const ONLINE_STATUS_NAME: &str = "online-status";
 
-pub async fn init_actor(actors: &mut SpawnedActors) {
+pub async fn init(actors: &mut SpawnedActors, dispatcher: &mut DispatcherBuilder) {
     let (online_status, _) = SpawnedActor::start::<OnlineStatus>(()).await;
 
     online_status.register(ONLINE_STATUS_NAME);
 
     actors.add(online_status);
-}
 
-pub fn init_dispatcher(dispatcher: &mut DispatcherBuilder) {
     let actor: ActorRef<_> = ActorHandle::<OnlineStatus>::from_name(ONLINE_STATUS_NAME)
         .expect("Cannot get online status access")
         .into();

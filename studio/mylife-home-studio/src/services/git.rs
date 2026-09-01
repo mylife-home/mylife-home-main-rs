@@ -6,15 +6,13 @@ use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEven
 
 const GIT_NAME: &str = "git";
 
-pub async fn init_actor(actors: &mut SpawnedActors) {
+pub async fn init(actors: &mut SpawnedActors, dispatcher: &mut DispatcherBuilder) {
     let (git, _) = SpawnedActor::start::<Git>(()).await;
 
     git.register(GIT_NAME);
 
     actors.add(git);
-}
 
-pub fn init_dispatcher(dispatcher: &mut DispatcherBuilder) {
     let actor: ActorRef<_> = ActorHandle::<Git>::from_name(GIT_NAME)
         .expect("cannot get git actor handle")
         .into();
