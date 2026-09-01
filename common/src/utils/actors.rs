@@ -127,6 +127,12 @@ impl<Actor: kameo::Actor> ActorHandle<Actor> {
     }
 }
 
+impl<Actor: kameo::Actor> From<ActorHandle<Actor>> for ActorRef<Actor> {
+    fn from(value: ActorHandle<Actor>) -> Self {
+        value.actor_ref
+    }
+}
+
 ///  PubSub specific handle
 #[derive(Debug, Clone)]
 pub struct PublisherHandle<Message: Send + Clone + 'static>(ActorHandle<PubSub<Message>>);
