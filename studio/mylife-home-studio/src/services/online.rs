@@ -17,10 +17,11 @@ pub async fn init_actor(actors: &mut SpawnedActors) {
     actors.add(online_status);
 }
 
-pub async fn init_dispatcher(dispatcher: &mut DispatcherBuilder) {
+pub fn init_dispatcher(dispatcher: &mut DispatcherBuilder) {
     let actor: ActorRef<_> = ActorHandle::<OnlineStatus>::from_name(ONLINE_STATUS_NAME)
         .expect("Cannot get online status access")
         .into();
+
     dispatcher.register_session_handler(actor.clone());
     dispatcher.register_call::<StartNotifyReq, _>("online/start-notify-status", actor.clone());
     dispatcher.register_call::<StopNotifyReq, _>("online/stop-notify-status", actor.clone());
