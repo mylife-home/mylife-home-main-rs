@@ -7,7 +7,9 @@ use crate::register_ts;
 
 // Adjust these paths to your actual module layout.
 use crate::component_model::{ConfigItem, Member, MemberType, PluginUsage};
-use crate::ui_model::{Action, ControlDisplay, ControlDisplayMapItem, DefaultWindow, Resource, Style};
+use crate::ui_model::{
+    Action, ControlDisplay, ControlDisplayMapItem, DefaultWindow, Resource, Style,
+};
 use core_import_data::ObjectChange;
 use core_validation::Item;
 
@@ -77,7 +79,6 @@ pub enum ItemType {
 }
 
 register_ts!(ItemType);
-
 
 /// null | 'standard' | 'external' on the wire; model the null via Option at the
 /// use site, this enum is the non-null part.

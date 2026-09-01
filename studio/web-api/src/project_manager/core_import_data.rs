@@ -3,13 +3,12 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::register_ts;
 use crate::component_model::PluginUsage;
+use crate::register_ts;
 
 // ===========================================================================
 // coreImportData types
 // ===========================================================================
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager-core-import-data.ts")]
@@ -21,7 +20,6 @@ pub enum ChangeType {
 }
 
 register_ts!(ChangeType);
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager-core-import-data.ts")]

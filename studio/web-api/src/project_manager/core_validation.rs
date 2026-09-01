@@ -11,7 +11,6 @@ use super::ItemType;
 // coreValidation types
 // ===========================================================================
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "lowercase")]

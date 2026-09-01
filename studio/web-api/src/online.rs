@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::register_ts;
 use crate::component_model::{Component, Plugin};
+use crate::register_ts;
 
 // ===========================================================================
 // Instance info
