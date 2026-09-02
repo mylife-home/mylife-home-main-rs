@@ -426,7 +426,20 @@ mod rfc3339 {
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<SystemTime, D::Error> {
-        let s = String::deserialize(d)?;
+        let mut s = String::deserialize(d)?;
+
+        // Handle timezone without colon (e.g., +0200 -> +02:00)
+        // ESPHome's JSON lib produces this format
+        if let Some(pos) = s.rfind('+') {
+            if s[pos..].len() == 5 && !s[pos..].contains(':') {
+                s.insert(pos + 3, ':');
+            }
+        } else if let Some(pos) = s.rfind('-') {
+            if pos > 10 && s[pos..].len() == 5 && !s[pos..].contains(':') {
+                s.insert(pos + 3, ':');
+            }
+        }
+
         let dt = DateTime::parse_from_rfc3339(&s).map_err(serde::de::Error::custom)?;
         Ok(dt.into())
     }
