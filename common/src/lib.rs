@@ -13,7 +13,12 @@ pub struct ActorsConfig {
     pub listen_remote_logs: bool,
 }
 
-pub async fn init(actors: &mut SpawnedActors, r#type: &str, config: &ActorsConfig) {
+#[derive(Debug)]
+pub struct InitData {
+    pub instance_name: Arc<String>,
+}
+
+pub async fn init(actors: &mut SpawnedActors, r#type: &str, config: &ActorsConfig) -> InitData {
     let hostname = utils::hostname().expect("could not read hostname");
     let instance_name = Arc::new(format!("{}-{}", hostname, r#type));
 
@@ -21,4 +26,6 @@ pub async fn init(actors: &mut SpawnedActors, r#type: &str, config: &ActorsConfi
 
     bus::init(actors, instance_name.clone(), config).await;
     components::init(actors, instance_name.clone(), r#type).await;
+
+    InitData { instance_name }
 }
