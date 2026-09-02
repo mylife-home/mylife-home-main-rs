@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use common::{
     bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError},
     components::registry::{self, RegistryHandle},
-    instance_info::{self, InstanceInfoPublisherHandle},
+    instance_info,
     utils::actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
 };
 use futures::future::join_all;
@@ -98,7 +98,7 @@ pub async fn init_plugins() {
         modules.insert(meta.module(), meta.version());
     }
 
-    let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
+    let instance_info_handle = instance_info::InstanceInfoProviderHandle::new_safe();
     for (name, version) in modules {
         instance_info_handle.add_component(&format!("core-plugin.{}", name), version);
     }
@@ -131,7 +131,7 @@ impl Actor for LocalComponents {
     type Error = LocalComponentsActorError;
 
     async fn on_start(_args: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
-        let instance_info = InstanceInfoPublisherHandle::new();
+        let instance_info_handle = instance_info::InstanceInfoProviderHandle::new_safe();
 
         let mut _self = Self {
             registry: RegistryHandle::new()?,
@@ -175,8 +175,8 @@ impl Actor for LocalComponents {
             )
             .await?;
 
-        instance_info.add_capability("components-api");
-        instance_info.add_capability("components-manager");
+        instance_info_handle.add_capability("components-api");
+        instance_info_handle.add_capability("components-manager");
 
         Ok(_self)
     }

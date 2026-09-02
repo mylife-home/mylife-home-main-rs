@@ -48,7 +48,7 @@ async fn main() {
     components::init_actor(&mut actors).await;
     bindings::init_actor(&mut actors).await;
 
-    let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
+    let instance_info_handle = instance_info::InstanceInfoProviderHandle::new_safe();
     instance_info_handle.add_component("core", env!("CARGO_PKG_VERSION"));
 
     wait_for_shutdown_signal().await;

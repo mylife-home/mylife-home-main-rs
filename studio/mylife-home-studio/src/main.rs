@@ -36,7 +36,7 @@ async fn main() {
     )
     .await;
 
-    let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
+    let instance_info_handle = instance_info::InstanceInfoProviderHandle::new_safe();
     instance_info_handle.add_component("studio", env!("CARGO_PKG_VERSION"));
 
     let mut dispatcher = web::DispatcherBuilder::new();

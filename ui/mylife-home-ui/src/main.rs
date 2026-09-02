@@ -39,7 +39,7 @@ async fn main() {
     model::init_pubsubs(&mut actors).await;
     model::init_actor(&mut actors).await;
 
-    let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
+    let instance_info_handle = instance_info::InstanceInfoProviderHandle::new_safe();
     instance_info_handle.add_component("ui", env!("CARGO_PKG_VERSION"));
 
     let web = WebServer::new().await.expect("could not start web server");

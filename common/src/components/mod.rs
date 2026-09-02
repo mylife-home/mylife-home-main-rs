@@ -19,9 +19,9 @@ pub async fn init(actors: &mut SpawnedActors, instance_name: Arc<String>, r#type
     )
     .await;
 
-    instance_info::init_actors(actors).await;
+    instance_info::init(actors).await;
 
-    let instance_info_handle = instance_info::InstanceInfoPublisherHandle::new();
+    let instance_info_handle = instance_info::InstanceInfoProviderHandle::new_safe();
     instance_info_handle.set_type(r#type);
     instance_info_handle.add_component("common", env!("CARGO_PKG_VERSION"));
 }

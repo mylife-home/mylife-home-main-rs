@@ -2,7 +2,7 @@ use std::{collections::HashMap, io};
 
 use common::{
     bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError},
-    instance_info::InstanceInfoPublisherHandle,
+    instance_info,
     utils::{actors::CallError, config},
 };
 use kameo::{message, prelude::*};
@@ -113,7 +113,7 @@ impl Actor for Store {
     type Error = StoreActorError;
 
     async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
-        let instance_info = InstanceInfoPublisherHandle::new();
+        let instance_info = instance_info::InstanceInfoProviderHandle::new_safe();
 
         let mut _self = Self {
             path: config.path,

@@ -5,7 +5,7 @@ use common::{
     components::registry::{
         self, ComponentGetError, ComponentGetErrorKind, ComponentInfo, RegistryHandle,
     },
-    instance_info::InstanceInfoPublisherHandle,
+    instance_info,
     utils::actors::{
         ActorHandle,
         CallError::{self, HandlerError},
@@ -118,7 +118,7 @@ impl Actor for Bindings {
     type Error = BindingsActorError;
 
     async fn on_start(_args: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
-        let instance_info = InstanceInfoPublisherHandle::new();
+        let instance_info = instance_info::InstanceInfoProviderHandle::new_safe();
 
         let mut _self = Self {
             registry: RegistryHandle::new()?,

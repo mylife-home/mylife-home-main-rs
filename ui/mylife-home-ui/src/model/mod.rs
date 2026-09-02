@@ -3,7 +3,7 @@ use std::{collections::HashMap, io, sync::Arc};
 use bytes::Bytes;
 use common::{
     bus::rpc::{RpcHandle, RpcServiceAddError, RpcServiceRemoveError},
-    instance_info::InstanceInfoPublisherHandle,
+    instance_info,
     utils::{
         actors::{
             ActorHandle, CallError, HandleLookupError, PublisherHandle, SpawnedActor,
@@ -167,7 +167,7 @@ impl Actor for Model {
     type Error = ModelActorError;
 
     async fn on_start(config: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
-        let instance_info = InstanceInfoPublisherHandle::new();
+        let instance_info = instance_info::InstanceInfoProviderHandle::new_safe();
 
         let mut _self = Self {
             store_path: config.store_path,
