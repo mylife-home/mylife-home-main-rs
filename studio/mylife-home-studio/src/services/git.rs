@@ -46,10 +46,7 @@ impl Actor for Git {
     type Args = ();
     type Error = HandleLookupError;
 
-    async fn on_start(
-        _args: Self::Args,
-        _actor_ref: ActorRef<Self>,
-    ) -> Result<Self, Self::Error> {
+    async fn on_start(_args: Self::Args, _actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         Ok(Self {
             notifiers: NotifierManager::new("git/status"),
             current_status: studio_web_api::git::GitStatus {
@@ -113,4 +110,3 @@ impl message::Message<ServiceRequest<StopNotifyReq>> for Git {
         Ok(StopNotifyRes)
     }
 }
-

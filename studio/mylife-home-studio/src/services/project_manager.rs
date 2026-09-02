@@ -18,10 +18,8 @@ pub async fn init(actors: &mut SpawnedActors, dispatcher: &mut DispatcherBuilder
         .into();
 
     dispatcher.register_session_handler(actor.clone());
-    dispatcher.register_call::<StartNotifyListReq, _>(
-        "project-manager/start-notify-list",
-        actor.clone(),
-    );
+    dispatcher
+        .register_call::<StartNotifyListReq, _>("project-manager/start-notify-list", actor.clone());
     dispatcher.register_call::<StopNotifyListReq, _>("project-manager/stop-notify-list", actor);
 }
 
@@ -48,10 +46,7 @@ impl Actor for ProjectManager {
     type Args = ();
     type Error = HandleLookupError;
 
-    async fn on_start(
-        _args: Self::Args,
-        _actor_ref: ActorRef<Self>,
-    ) -> Result<Self, Self::Error> {
+    async fn on_start(_args: Self::Args, _actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
         Ok(Self {
             list_notifiers: NotifierManager::new("project-manager/list"),
         })
