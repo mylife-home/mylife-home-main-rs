@@ -1,8 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use common::{
+    InitData,
     bus::metadata::{MetadataHandle, RemoteUpdate},
-    instance_info::types::InstanceInfo,
+    instance_info::{
+        InstanceInfoProviderHandle,
+        types::{self, InstanceInfo},
+    },
     utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors},
 };
 use kameo::{error::Infallible, message, prelude::*};
@@ -14,9 +18,13 @@ use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEven
 const ONLINE_INSTANCES_NAME: &str = "online-instances";
 const INSTANCE_INFO_PATH: &str = "instance-info";
 
-pub async fn init(actors: &mut SpawnedActors, dispatcher: &mut DispatcherBuilder) {
+pub async fn init(
+    actors: &mut SpawnedActors,
+    dispatcher: &mut DispatcherBuilder,
+    init_data: &InitData,
+) {
     let (online_instances, _) =
-        SpawnedActor::start::<OnlineInstances>(()).await;
+        SpawnedActor::start::<OnlineInstances>(init_data.instance_name.clone()).await;
 
     online_instances.register(ONLINE_INSTANCES_NAME);
     actors.add(online_instances);
@@ -26,7 +34,8 @@ pub async fn init(actors: &mut SpawnedActors, dispatcher: &mut DispatcherBuilder
         .into();
 
     dispatcher.register_session_handler(actor.clone());
-    dispatcher.register_call::<StartNotifyReq, _>("online/start-notify-instance-info", actor.clone());
+    dispatcher
+        .register_call::<StartNotifyReq, _>("online/start-notify-instance-info", actor.clone());
     dispatcher.register_call::<StopNotifyReq, _>("online/stop-notify-instance-info", actor);
 }
 
@@ -52,23 +61,27 @@ enum OnlineInstancesError {
 
 #[derive(Debug)]
 struct OnlineInstances {
+    local_instance_name: Arc<String>,
     instances: HashMap<String, online::InstanceInfo>,
     notifiers: NotifierManager<online::UpdateInstanceInfoData>,
 }
 
 impl Actor for OnlineInstances {
-    type Args = ();
+    type Args = Arc<String>;
     type Error = OnlineInstancesError;
 
     async fn on_start(
-        _args: Self::Args,
+        instance_name: Self::Args,
         actor_ref: ActorRef<Self>,
     ) -> Result<Self, Self::Error> {
         let metadata = MetadataHandle::new()?;
+        let instance_info = InstanceInfoProviderHandle::new()?;
 
-        metadata.on_remote_update().subscribe(actor_ref);
+        metadata.on_remote_update().subscribe(actor_ref.clone());
+        instance_info.on_event().subscribe(actor_ref.clone());
 
         Ok(Self {
+            local_instance_name: instance_name,
             instances: HashMap::new(),
             notifiers: NotifierManager::new("online/instance-info"),
         })
@@ -103,7 +116,9 @@ impl message::Message<RemoteUpdate> for OnlineInstances {
         if update.has_value() {
             match update.read_value::<InstanceInfo>() {
                 Ok(info) => self.set_instance(instance_name, convert_instance_info(info)),
-                Err(error) => tracing::error!(%error, instance = update.instance(), "could not read remote instance info"),
+                Err(error) => {
+                    tracing::error!(%error, instance = update.instance(), "could not read remote instance info")
+                }
             }
         } else {
             self.clear_instance(&instance_name);
@@ -127,10 +142,12 @@ impl message::Message<ServiceRequest<StartNotifyReq>> for OnlineInstances {
         })));
 
         for (instance_name, data) in &self.instances {
-            notifier.notify(&online::UpdateInstanceInfoData::Set(online::SetInstanceInfoData {
-                instance_name: instance_name.clone(),
-                data: data.clone(),
-            }));
+            notifier.notify(&online::UpdateInstanceInfoData::Set(
+                online::SetInstanceInfoData {
+                    instance_name: instance_name.clone(),
+                    data: data.clone(),
+                },
+            ));
         }
 
         response
@@ -153,15 +170,32 @@ impl message::Message<ServiceRequest<StopNotifyReq>> for OnlineInstances {
     }
 }
 
+impl message::Message<types::InstanceInfo> for OnlineInstances {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: types::InstanceInfo,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.set_instance(
+            self.local_instance_name.as_ref().clone(),
+            convert_instance_info(msg),
+        );
+    }
+}
+
 impl OnlineInstances {
     fn set_instance(&mut self, instance_name: String, data: online::InstanceInfo) {
         self.instances.insert(instance_name.clone(), data.clone());
-        
+
         self.notifiers
-            .notify_all(&online::UpdateInstanceInfoData::Set(online::SetInstanceInfoData {
-                instance_name,
-                data,
-            }));
+            .notify_all(&online::UpdateInstanceInfoData::Set(
+                online::SetInstanceInfoData {
+                    instance_name,
+                    data,
+                },
+            ));
     }
 
     fn clear_instance(&mut self, instance_name: &str) {
@@ -169,11 +203,12 @@ impl OnlineInstances {
             return;
         }
 
-        self.notifiers.notify_all(&online::UpdateInstanceInfoData::Clear(
-            online::ClearInstanceInfoData {
-                instance_name: instance_name.to_owned(),
-            },
-        ));
+        self.notifiers
+            .notify_all(&online::UpdateInstanceInfoData::Clear(
+                online::ClearInstanceInfoData {
+                    instance_name: instance_name.to_owned(),
+                },
+            ));
     }
 }
 

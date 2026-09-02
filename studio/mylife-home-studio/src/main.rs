@@ -26,7 +26,7 @@ async fn main() {
 
     let mut actors = SpawnedActors::new().await;
 
-    common::init(
+    let init_data = common::init(
         &mut actors,
         "studio",
         &ActorsConfig {
@@ -41,7 +41,7 @@ async fn main() {
 
     let mut dispatcher = web::DispatcherBuilder::new();
 
-    services::init(&mut actors, &mut dispatcher).await;
+    services::init(&mut actors, &mut dispatcher, &init_data).await;
 
     let web = WebServer::new(dispatcher.build())
         .await
