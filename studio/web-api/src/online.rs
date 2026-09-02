@@ -30,9 +30,9 @@ pub struct InstanceInfo {
     /// per-component versions (os, node, mylife-home-core, ...)
     pub versions: HashMap<String, String>,
     #[ts(type = "number")]
-    pub system_uptime: i64,
+    pub system_uptime: u64,
     #[ts(type = "number")]
-    pub instance_uptime: i64,
+    pub instance_uptime: u64,
     pub hostname: String,
     pub capabilities: Vec<String>,
     /// present only when the instance has wifi

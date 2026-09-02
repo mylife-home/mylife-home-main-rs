@@ -182,8 +182,8 @@ fn convert_instance_info(info: InstanceInfo) -> online::InstanceInfo {
         r#type: info.r#type,
         hardware: info.hardware,
         versions: info.versions,
-        system_uptime: info.system_uptime.as_secs() as i64,
-        instance_uptime: info.instance_uptime.as_secs() as i64,
+        system_uptime: info.system_uptime.as_secs(),
+        instance_uptime: info.instance_uptime.as_secs(),
         hostname: info.hostname,
         capabilities: info.capabilities,
         wifi: info.wifi.map(|wifi| online::InstanceInfoWifi {
