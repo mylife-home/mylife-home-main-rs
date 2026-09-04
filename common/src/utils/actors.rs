@@ -267,7 +267,7 @@ impl SpawnedActor {
         TActor: Actor,
         <TActor as Actor>::Error: fmt::Display,
     {
-        let actor_ref = TActor::spawn_with_mailbox(args, mailbox::unbounded());
+        let actor_ref = TActor::spawn_unbounded(args);
 
         actor_ref
             .wait_for_startup_with_result(|res| {
@@ -370,3 +370,14 @@ impl SpawnedActors {
         }
     }
 }
+
+
+/// Extension trait for spawning actors with additional convenience methods.
+pub trait SpawnExt: Spawn {
+    /// Spawns a new actor with an unbounded mailbox.
+    fn spawn_unbounded(args: Self::Args,) -> ActorRef<Self> {
+        Self::spawn_with_mailbox(args, mailbox::unbounded())
+    }
+}
+
+impl<T: Spawn> SpawnExt for T {}

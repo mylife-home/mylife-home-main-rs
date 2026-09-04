@@ -12,8 +12,7 @@ use common::{
         metadata::MemberType,
         registry::{ComponentGetErrorKind, RegistryHandle, RegistryUpdated},
         types::Value,
-    },
-    utils::actors::{CallError, HandleLookupError},
+    }, utils::actors::{CallError, HandleLookupError, SpawnExt},
 };
 use futures::{
     SinkExt, StreamExt,
@@ -137,7 +136,7 @@ struct SessionHandle {
 impl SessionHandle {
     /// Start session
     pub async fn start(id: SessionId, socket: WebSocket) -> Result<Self, SessionStartError> {
-        let actor = Session::spawn((id, socket));
+        let actor = Session::spawn_unbounded((id, socket));
 
         if let Err(e) = actor.wait_for_startup_result().await {
             match e {

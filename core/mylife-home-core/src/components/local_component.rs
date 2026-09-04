@@ -44,7 +44,7 @@ impl LocalComponentHandle {
     /// Start local component
     pub async fn start(config: LocalComponentConfig) -> Result<Self, ComponentStartError> {
         let id = config.id.clone();
-        let actor_ref = LocalComponent::spawn(config);
+        let actor_ref = LocalComponent::spawn_unbounded(config);
 
         if let Err(e) = actor_ref.wait_for_startup_result().await {
             match e {

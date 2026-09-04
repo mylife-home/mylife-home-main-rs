@@ -1,16 +1,15 @@
+use std::collections::HashSet;
+
 use common::{
     components::{
-        metadata::{ConfigType, MemberType, PluginMetadata},
-        registry::{RegistryHandle, RegistryUpdated},
-        types::Value,
-    },
-    utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors},
+        metadata::{self, ConfigType, MemberType, PluginMetadata}, registry::{RegistryHandle, RegistryUpdated}, types::Value,
+    }, utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors},
 };
 use kameo::{error::Infallible, message, prelude::*};
 use studio_web_api::{component_model, online, protocol};
 use thiserror::Error;
 
-use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEvent};
+use crate::web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent};
 
 const ONLINE_COMPONENTS_NAME: &str = "online-components";
 
@@ -51,6 +50,7 @@ enum OnlineComponentsError {
 
 #[derive(Debug)]
 struct OnlineComponents {
+    registry: RegistryHandle,
     notifiers: NotifierManager<online::UpdateComponentData>,
 }
 
@@ -63,6 +63,7 @@ impl Actor for OnlineComponents {
         registry.on_update().subscribe(actor_ref);
 
         Ok(Self {
+            registry,
             notifiers: NotifierManager::new("online/component"),
         })
     }
@@ -101,10 +102,12 @@ impl message::Message<ServiceRequest<StartNotifyReq>> for OnlineComponents {
         ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let (session, _) = msg.into();
-        let notifier = self.notifiers.create_notifier(session);
+        let notifier = self.notifiers.create_notifier(session).clone();
         let response = ctx.reply(Ok(StartNotifyRes(protocol::NotifierId {
             notifier_id: notifier.notifier_id().into(),
         })));
+
+        self.initial_sync(&notifier).await;
 
         response
     }
@@ -125,24 +128,145 @@ impl message::Message<ServiceRequest<StopNotifyReq>> for OnlineComponents {
 }
 
 impl OnlineComponents {
+    async fn initial_sync(&self, notifier: &Notifier<online::UpdateComponentData>) {
+        let components = match self.registry.get_components().await {
+            Ok(components) => components,
+            Err(error) => {
+                tracing::error!(%error, "could not query component registry for initial sync");
+                Vec::new()
+            }
+        };
+
+        let mut plugins = HashSet::new();
+        for info in &components {
+            let instance_name = Self::instance_name(info.instance.as_deref());
+            if plugins.insert((instance_name.clone(), info.plugin.id().to_owned())) {
+                notifier.notify(&online::UpdateComponentData::Set(
+                    online::SetData::Plugin(online::SetPluginData {
+                        instance_name,
+                        data: Self::convert_plugin(&info.plugin),
+                    }),
+                ));
+            }
+        }
+
+        for info in &components {
+            notifier.notify(&online::UpdateComponentData::Set(
+                online::SetData::Component(online::SetComponentData {
+                    instance_name: Self::instance_name(info.instance.as_deref()),
+                    data: component_model::Component {
+                        id: info.component_id.clone(),
+                        plugin: info.plugin.id().to_owned(),
+                    },
+                }),
+            ));
+
+            for (name, value) in &info.state {
+                notifier.notify(&online::UpdateComponentData::Set(
+                    online::SetData::State(online::SetStateData {
+                        instance_name: Self::instance_name(info.instance.as_deref()),
+                        data: online::State {
+                            component: info.component_id.clone(),
+                            name: name.clone(),
+                            value: value
+                                .as_ref()
+                                .map(Self::convert_value)
+                                .unwrap_or(serde_json::Value::Null),
+                        },
+                    }),
+                ));
+            }
+        }
+    }
+
+    fn instance_name(instance: Option<&str>) -> String {
+        instance.unwrap_or("local").to_owned()
+    }
+
+    fn convert_plugin(plugin: &PluginMetadata) -> component_model::Plugin {
+        component_model::Plugin {
+            name: plugin.name().to_owned(),
+            module: plugin.module().to_owned(),
+            usage: Self::convert_usage(plugin.usage()),
+            version: plugin.version().to_owned(),
+            description: plugin.description().unwrap_or_default().to_owned(),
+            members: plugin
+                .members()
+                .iter()
+                .map(|(name, member)| (name.clone(), Self::convert_member(member)))
+                .collect(),
+            config: plugin
+                .config()
+                .iter()
+                .map(|(name, item)| (name.clone(), Self::convert_config_item(item)))
+                .collect(),
+        }
+    }
+
+    fn convert_member(member: &metadata::Member) -> component_model::Member {
+        component_model::Member {
+            description: member.description().unwrap_or_default().to_owned(),
+            member_type: match member.member_type() {
+                MemberType::Action => component_model::MemberType::Action,
+                MemberType::State => component_model::MemberType::State,
+            },
+            value_type: member.value_type().to_string(),
+        }
+    }
+
+    fn convert_config_item(item: &metadata::ConfigItem) -> component_model::ConfigItem {
+        component_model::ConfigItem {
+            description: item.description().unwrap_or_default().to_owned(),
+            value_type: match item.value_type() {
+                ConfigType::String => component_model::ConfigType::String,
+                ConfigType::Bool => component_model::ConfigType::Bool,
+                ConfigType::Integer => component_model::ConfigType::Integer,
+                ConfigType::Float => component_model::ConfigType::Float,
+            },
+        }
+    }
+
+    fn convert_usage(usage: metadata::PluginUsage) -> component_model::PluginUsage {
+        match usage {
+            metadata::PluginUsage::Sensor => component_model::PluginUsage::Sensor,
+            metadata::PluginUsage::Actuator => {
+                component_model::PluginUsage::Actuator
+            }
+            metadata::PluginUsage::Logic => component_model::PluginUsage::Logic,
+            metadata::PluginUsage::Ui => component_model::PluginUsage::Ui,
+        }
+    }
+
+    fn convert_value(value: &Value) -> serde_json::Value {
+        match value {
+            Value::Range(value) => (*value).into(),
+            Value::Text(value) | Value::Enum(value) => value.clone().into(),
+            Value::Float(value) => serde_json::Number::from_f64(*value)
+                .map(serde_json::Value::Number)
+                .unwrap_or(serde_json::Value::Null),
+            Value::Bool(value) => (*value).into(),
+            Value::Complex => serde_json::Value::Null,
+        }
+    }
+
     fn handle_update(&mut self, update: RegistryUpdated) {
         let update = match update {
             RegistryUpdated::PluginAdded(data) => {
                 online::UpdateComponentData::Set(online::SetData::Plugin(online::SetPluginData {
-                    instance_name: instance_name(data.instance()),
-                    data: convert_plugin(data.plugin()),
+                    instance_name: Self::instance_name(data.instance()),
+                    data: Self::convert_plugin(data.plugin()),
                 }))
             }
             RegistryUpdated::PluginRemoved(data) => {
                 online::UpdateComponentData::Clear(online::ClearData {
-                    instance_name: instance_name(data.instance()),
+                    instance_name: Self::instance_name(data.instance()),
                     r#type: online::ComponentDataType::Plugin,
                     id: data.plugin().id().to_owned(),
                 })
             }
             RegistryUpdated::ComponentAdded(data) => online::UpdateComponentData::Set(
                 online::SetData::Component(online::SetComponentData {
-                    instance_name: instance_name(data.instance()),
+                    instance_name: Self::instance_name(data.instance()),
                     data: component_model::Component {
                         id: data.component_id().to_owned(),
                         plugin: data.plugin().id().to_owned(),
@@ -151,18 +275,18 @@ impl OnlineComponents {
             ),
             RegistryUpdated::ComponentRemoved(data) => {
                 online::UpdateComponentData::Clear(online::ClearData {
-                    instance_name: instance_name(data.instance()),
+                    instance_name: Self::instance_name(data.instance()),
                     r#type: online::ComponentDataType::Component,
                     id: data.component_id().to_owned(),
                 })
             }
             RegistryUpdated::ComponentStateChanged(data) => {
                 online::UpdateComponentData::Set(online::SetData::State(online::SetStateData {
-                    instance_name: instance_name(data.instance()),
+                    instance_name: Self::instance_name(data.instance()),
                     data: online::State {
                         component: data.component_id().to_owned(),
                         name: data.state().to_owned(),
-                        value: convert_value(data.value()),
+                        value: Self::convert_value(data.value()),
                     },
                 }))
             }
@@ -172,74 +296,3 @@ impl OnlineComponents {
     }
 }
 
-fn instance_name(instance: Option<&str>) -> String {
-    instance.unwrap_or("local").to_owned()
-}
-
-fn convert_plugin(plugin: &PluginMetadata) -> component_model::Plugin {
-    component_model::Plugin {
-        name: plugin.name().to_owned(),
-        module: plugin.module().to_owned(),
-        usage: convert_usage(plugin.usage()),
-        version: plugin.version().to_owned(),
-        description: plugin.description().unwrap_or_default().to_owned(),
-        members: plugin
-            .members()
-            .iter()
-            .map(|(name, member)| {
-                (
-                    name.clone(),
-                    component_model::Member {
-                        description: member.description().unwrap_or_default().to_owned(),
-                        member_type: match member.member_type() {
-                            MemberType::Action => component_model::MemberType::Action,
-                            MemberType::State => component_model::MemberType::State,
-                        },
-                        value_type: member.value_type().to_string(),
-                    },
-                )
-            })
-            .collect(),
-        config: plugin
-            .config()
-            .iter()
-            .map(|(name, item)| {
-                (
-                    name.clone(),
-                    component_model::ConfigItem {
-                        description: item.description().unwrap_or_default().to_owned(),
-                        value_type: match item.value_type() {
-                            ConfigType::String => component_model::ConfigType::String,
-                            ConfigType::Bool => component_model::ConfigType::Bool,
-                            ConfigType::Integer => component_model::ConfigType::Integer,
-                            ConfigType::Float => component_model::ConfigType::Float,
-                        },
-                    },
-                )
-            })
-            .collect(),
-    }
-}
-
-fn convert_usage(usage: common::components::metadata::PluginUsage) -> component_model::PluginUsage {
-    match usage {
-        common::components::metadata::PluginUsage::Sensor => component_model::PluginUsage::Sensor,
-        common::components::metadata::PluginUsage::Actuator => {
-            component_model::PluginUsage::Actuator
-        }
-        common::components::metadata::PluginUsage::Logic => component_model::PluginUsage::Logic,
-        common::components::metadata::PluginUsage::Ui => component_model::PluginUsage::Ui,
-    }
-}
-
-fn convert_value(value: &Value) -> serde_json::Value {
-    match value {
-        Value::Range(value) => (*value).into(),
-        Value::Text(value) | Value::Enum(value) => value.clone().into(),
-        Value::Float(value) => serde_json::Number::from_f64(*value)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
-        Value::Bool(value) => (*value).into(),
-        Value::Complex => serde_json::Value::Null,
-    }
-}

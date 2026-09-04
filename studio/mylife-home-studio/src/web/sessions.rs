@@ -7,6 +7,7 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
+use common::utils::actors::SpawnExt;
 use futures::{
     SinkExt, StreamExt,
     future::join_all,
@@ -112,7 +113,7 @@ struct SessionController {
 impl SessionController {
     /// Start session
     pub async fn start(id: SessionId, socket: WebSocket, dispatcher: Arc<Dispatcher>) -> Self {
-        let actor = Session::spawn((id, socket, dispatcher));
+        let actor = Session::spawn_unbounded((id, socket, dispatcher));
 
         if let Err(e) = actor.wait_for_startup_result().await {
             match e {
