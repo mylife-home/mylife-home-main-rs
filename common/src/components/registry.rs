@@ -136,9 +136,7 @@ pub struct ComponentInfo {
 }
 
 impl ComponentInfo {
-    fn from_data(
-        component_data: &ComponentData,
-    ) -> Self {
+    fn from_data(component_data: &ComponentData) -> Self {
         Self {
             instance: component_data.instance_name().into(),
             plugin: component_data.plugin().clone(),

@@ -371,11 +371,10 @@ impl SpawnedActors {
     }
 }
 
-
 /// Extension trait for spawning actors with additional convenience methods.
 pub trait SpawnExt: Spawn {
     /// Spawns a new actor with an unbounded mailbox.
-    fn spawn_unbounded(args: Self::Args,) -> ActorRef<Self> {
+    fn spawn_unbounded(args: Self::Args) -> ActorRef<Self> {
         Self::spawn_with_mailbox(args, mailbox::unbounded())
     }
 }

@@ -12,7 +12,8 @@ use common::{
         metadata::MemberType,
         registry::{ComponentGetErrorKind, RegistryHandle, RegistryUpdated},
         types::Value,
-    }, utils::actors::{CallError, HandleLookupError, SpawnExt},
+    },
+    utils::actors::{CallError, HandleLookupError, SpawnExt},
 };
 use futures::{
     SinkExt, StreamExt,
