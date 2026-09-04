@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use common::{
     InitData,
     bus::metadata::{MetadataHandle, RemoteUpdate},
+    bus::rpc::{RpcClientError, RpcHandle},
     instance_info::{
         InstanceInfoProviderHandle,
         types::{self, InstanceInfo},
@@ -36,7 +37,11 @@ pub async fn init(
     dispatcher.register_session_handler(actor.clone());
     dispatcher
         .register_call::<StartNotifyReq, _>("online/start-notify-instance-info", actor.clone());
-    dispatcher.register_call::<StopNotifyReq, _>("online/stop-notify-instance-info", actor);
+    dispatcher.register_call::<StopNotifyReq, _>("online/stop-notify-instance-info", actor.clone());
+    dispatcher.register_call::<ExecuteSystemRestartReq, _>(
+        "online/execute-system-restart",
+        actor.clone(),
+    );
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -53,15 +58,40 @@ struct StopNotifyReq(protocol::NotifierId);
 #[derive(Debug, serde::Serialize)]
 struct StopNotifyRes;
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(transparent)]
+struct ExecuteSystemRestartReq(online::SystemRestart);
+
+#[derive(Debug, serde::Serialize)]
+struct ExecuteSystemRestartRes;
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SystemRestartRpcReq {
+    fail_safe: bool,
+}
+
+/// The response is an empty object, not a null value
+#[derive(Debug, serde::Deserialize)]
+struct SystemRestartRpcRes {}
+
 #[derive(Debug, Error)]
 enum OnlineInstancesError {
     #[error("failed to lookup actor handle: {0}")]
     HandleLookup(#[from] HandleLookupError),
+    #[error("rpc call failed: {0}")]
+    Rpc(#[from] RpcClientError),
+    #[error("instance '{instance_name}' does not have capability '{capability}'")]
+    MissingCapability {
+        instance_name: String,
+        capability: &'static str,
+    },
 }
 
 #[derive(Debug)]
 struct OnlineInstances {
     local_instance_name: Arc<String>,
+    rpc: RpcHandle,
     instances: HashMap<String, online::InstanceInfo>,
     notifiers: NotifierManager<online::UpdateInstanceInfoData>,
 }
@@ -76,12 +106,14 @@ impl Actor for OnlineInstances {
     ) -> Result<Self, Self::Error> {
         let metadata = MetadataHandle::new()?;
         let instance_info = InstanceInfoProviderHandle::new()?;
+        let rpc = RpcHandle::new()?;
 
         metadata.on_remote_update().subscribe(actor_ref.clone());
         instance_info.on_event().subscribe(actor_ref.clone());
 
         Ok(Self {
             local_instance_name: instance_name,
+            rpc,
             instances: HashMap::new(),
             notifiers: NotifierManager::new("online/instance-info"),
         })
@@ -167,6 +199,48 @@ impl message::Message<ServiceRequest<StopNotifyReq>> for OnlineInstances {
             .remove_notifier(notifier_id.0.notifier_id.as_str());
 
         Ok(StopNotifyRes)
+    }
+}
+
+impl message::Message<ServiceRequest<ExecuteSystemRestartReq>> for OnlineInstances {
+    type Reply = Result<ExecuteSystemRestartRes, OnlineInstancesError>;
+
+    async fn handle(
+        &mut self,
+        msg: ServiceRequest<ExecuteSystemRestartReq>,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        let (_, ExecuteSystemRestartReq(request)) = msg.into();
+        let Some(instance) = self.instances.get(&request.instance_name) else {
+            return Err(OnlineInstancesError::MissingCapability {
+                instance_name: request.instance_name,
+                capability: "restart-api",
+            });
+        };
+
+        if !instance
+            .capabilities
+            .iter()
+            .any(|capability| capability == "restart-api")
+        {
+            return Err(OnlineInstancesError::MissingCapability {
+                instance_name: request.instance_name,
+                capability: "restart-api",
+            });
+        }
+
+        self.rpc
+            .call::<_, SystemRestartRpcRes>(
+                request.instance_name,
+                "system.restart",
+                &SystemRestartRpcReq {
+                    fail_safe: request.fail_safe,
+                },
+                None,
+            )
+            .await?;
+
+        Ok(ExecuteSystemRestartRes)
     }
 }
 

@@ -2,8 +2,11 @@ use std::collections::HashSet;
 
 use common::{
     components::{
-        metadata::{self, ConfigType, MemberType, PluginMetadata}, registry::{RegistryHandle, RegistryUpdated}, types::Value,
-    }, utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors},
+        metadata::{self, ConfigType, MemberType, PluginMetadata, Type},
+        registry::{ComponentGetError, RegistryHandle, RegistryUpdated},
+        types::Value,
+    },
+    utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors},
 };
 use kameo::{error::Infallible, message, prelude::*};
 use studio_web_api::{component_model, online, protocol};
@@ -25,7 +28,8 @@ pub async fn init(actors: &mut SpawnedActors, dispatcher: &mut DispatcherBuilder
 
     dispatcher.register_session_handler(actor.clone());
     dispatcher.register_call::<StartNotifyReq, _>("online/start-notify-component", actor.clone());
-    dispatcher.register_call::<StopNotifyReq, _>("online/stop-notify-component", actor);
+    dispatcher.register_call::<StopNotifyReq, _>("online/stop-notify-component", actor.clone());
+    dispatcher.register_call::<ExecuteActionReq, _>("online/execute-component-action", actor);
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -42,10 +46,29 @@ struct StopNotifyReq(protocol::NotifierId);
 #[derive(Debug, serde::Serialize)]
 struct StopNotifyRes;
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(transparent)]
+struct ExecuteActionReq(online::ComponentAction);
+
+#[derive(Debug, serde::Serialize)]
+struct ExecuteActionRes;
+
 #[derive(Debug, Error)]
 enum OnlineComponentsError {
     #[error("failed to lookup actor handle: {0}")]
     HandleLookup(#[from] HandleLookupError),
+    #[error("failed to get component: {0}")]
+    ComponentGet(#[from] common::utils::actors::CallError<ComponentGetError>),
+    #[error("action '{action}' does not exist on component '{component_id}'")]
+    ActionNotFound {
+        component_id: String,
+        action: String,
+    },
+    #[error("invalid value for action '{action}' on component '{component_id}'")]
+    InvalidActionValue {
+        component_id: String,
+        action: String,
+    },
 }
 
 #[derive(Debug)]
@@ -127,6 +150,47 @@ impl message::Message<ServiceRequest<StopNotifyReq>> for OnlineComponents {
     }
 }
 
+impl message::Message<ServiceRequest<ExecuteActionReq>> for OnlineComponents {
+    type Reply = Result<ExecuteActionRes, OnlineComponentsError>;
+
+    async fn handle(
+        &mut self,
+        msg: ServiceRequest<ExecuteActionReq>,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        let (_, ExecuteActionReq(request)) = msg.into();
+        let info = self
+            .registry
+            .get_component(request.component_id.clone())
+            .await?;
+        let Some(member) = info.plugin.members().get(&request.action) else {
+            return Err(OnlineComponentsError::ActionNotFound {
+                component_id: request.component_id,
+                action: request.action,
+            });
+        };
+
+        if member.member_type() != MemberType::Action {
+            return Err(OnlineComponentsError::ActionNotFound {
+                component_id: request.component_id,
+                action: request.action,
+            });
+        }
+
+        let value =
+            Self::convert_action_value(request.value, member.value_type()).ok_or_else(|| {
+                OnlineComponentsError::InvalidActionValue {
+                    component_id: request.component_id.clone(),
+                    action: request.action.clone(),
+                }
+            })?;
+
+        self.registry
+            .component_execute_action(request.component_id, request.action, value);
+        Ok(ExecuteActionRes)
+    }
+}
+
 impl OnlineComponents {
     async fn initial_sync(&self, notifier: &Notifier<online::UpdateComponentData>) {
         let components = match self.registry.get_components().await {
@@ -141,12 +205,12 @@ impl OnlineComponents {
         for info in &components {
             let instance_name = Self::instance_name(info.instance.as_deref());
             if plugins.insert((instance_name.clone(), info.plugin.id().to_owned())) {
-                notifier.notify(&online::UpdateComponentData::Set(
-                    online::SetData::Plugin(online::SetPluginData {
+                notifier.notify(&online::UpdateComponentData::Set(online::SetData::Plugin(
+                    online::SetPluginData {
                         instance_name,
                         data: Self::convert_plugin(&info.plugin),
-                    }),
-                ));
+                    },
+                )));
             }
         }
 
@@ -162,8 +226,8 @@ impl OnlineComponents {
             ));
 
             for (name, value) in &info.state {
-                notifier.notify(&online::UpdateComponentData::Set(
-                    online::SetData::State(online::SetStateData {
+                notifier.notify(&online::UpdateComponentData::Set(online::SetData::State(
+                    online::SetStateData {
                         instance_name: Self::instance_name(info.instance.as_deref()),
                         data: online::State {
                             component: info.component_id.clone(),
@@ -173,8 +237,8 @@ impl OnlineComponents {
                                 .map(Self::convert_value)
                                 .unwrap_or(serde_json::Value::Null),
                         },
-                    }),
-                ));
+                    },
+                )));
             }
         }
     }
@@ -229,9 +293,7 @@ impl OnlineComponents {
     fn convert_usage(usage: metadata::PluginUsage) -> component_model::PluginUsage {
         match usage {
             metadata::PluginUsage::Sensor => component_model::PluginUsage::Sensor,
-            metadata::PluginUsage::Actuator => {
-                component_model::PluginUsage::Actuator
-            }
+            metadata::PluginUsage::Actuator => component_model::PluginUsage::Actuator,
             metadata::PluginUsage::Logic => component_model::PluginUsage::Logic,
             metadata::PluginUsage::Ui => component_model::PluginUsage::Ui,
         }
@@ -246,6 +308,22 @@ impl OnlineComponents {
                 .unwrap_or(serde_json::Value::Null),
             Value::Bool(value) => (*value).into(),
             Value::Complex => serde_json::Value::Null,
+        }
+    }
+
+    fn convert_action_value(value: serde_json::Value, ty: &Type) -> Option<Value> {
+        match (value, ty) {
+            (serde_json::Value::Number(value), Type::Range(range)) => value
+                .as_i64()
+                .filter(|value| range.contains(value))
+                .map(Value::Range),
+            (serde_json::Value::Number(value), Type::Float) => value.as_f64().map(Value::Float),
+            (serde_json::Value::String(value), Type::Text) => Some(Value::Text(value)),
+            (serde_json::Value::String(value), Type::Enum(values)) => {
+                values.contains(&value).then_some(Value::Enum(value))
+            }
+            (serde_json::Value::Bool(value), Type::Bool) => Some(Value::Bool(value)),
+            _ => None,
         }
     }
 
@@ -295,4 +373,3 @@ impl OnlineComponents {
         self.notifiers.notify_all(&update);
     }
 }
-
