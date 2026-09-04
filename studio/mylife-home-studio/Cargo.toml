@@ -8,6 +8,7 @@ common = { path = "../../common" }
 studio-web-api = { path = "../web-api" }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["ws"] }
+chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
 kameo = { workspace = true, features = ["console"] }
