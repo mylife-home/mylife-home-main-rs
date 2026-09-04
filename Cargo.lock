@@ -291,7 +291,7 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
 name = "common"
-version = "3.0.1"
+version = "3.0.2"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1063,7 +1063,7 @@ dependencies = [
 
 [[package]]
 name = "mylife-home-ui"
-version = "3.0.7"
+version = "3.0.8"
 dependencies = [
  "axum",
  "base64",
