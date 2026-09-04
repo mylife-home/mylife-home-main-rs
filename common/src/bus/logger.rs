@@ -26,6 +26,7 @@ const REMOTE_RECORDS_PUBSUB_NAME: &str = "bus.logger.remote-records";
 #[derive(Debug)]
 pub struct LoggerConfig {
     pub instance_name: Arc<String>,
+    pub hostname: Arc<String>,
     pub listen_remote: bool,
 }
 
@@ -95,7 +96,7 @@ impl Actor for Logger {
 
         let _self = Self {
             client: ClientHandle::new()?,
-            publisher: LogPublisher::new(config.instance_name)?,
+            publisher: LogPublisher::new(config.instance_name, config.hostname)?,
             remote,
             logger: Some(logger),
             online: false,
@@ -178,14 +179,19 @@ impl message::Message<SysLogRecord> for Logger {
 struct LogPublisher {
     client: ClientHandle,
     instance_name: Arc<String>,
+    hostname: Arc<String>,
     pid: u32,
 }
 
 impl LogPublisher {
-    pub fn new(instance_name: Arc<String>) -> Result<Self, HandleLookupError> {
+    pub fn new(
+        instance_name: Arc<String>,
+        hostname: Arc<String>,
+    ) -> Result<Self, HandleLookupError> {
         Ok(Self {
             client: ClientHandle::new()?,
             instance_name,
+            hostname,
             pid: process::id(),
         })
     }
@@ -236,6 +242,7 @@ impl LogPublisher {
         let record = LogRecord {
             name: record.event.target,
             instance_name: (*self.instance_name).clone(),
+            hostname: self.hostname.as_ref().clone(),
             pid: self.pid,
             level: record.event.level.into(),
             msg: message,
@@ -343,6 +350,7 @@ struct SysLogRecord {
 pub struct LogRecord {
     pub name: String,
     pub instance_name: String,
+    pub hostname: String,
     pub pid: u32,
     pub level: LogLevel,
     pub msg: String,

@@ -14,7 +14,12 @@ pub mod metadata;
 pub mod mqtt;
 pub mod rpc;
 
-pub async fn init(actors: &mut SpawnedActors, instance_name: Arc<String>, config: &ActorsConfig) {
+pub async fn init(
+    actors: &mut SpawnedActors,
+    instance_name: Arc<String>,
+    hostname: Arc<String>,
+    config: &ActorsConfig,
+) {
     let file_config = config::section::<BusConfig>("bus");
 
     client::init_pubsubs(actors).await;
@@ -43,6 +48,7 @@ pub async fn init(actors: &mut SpawnedActors, instance_name: Arc<String>, config
         actors,
         logger::LoggerConfig {
             instance_name: instance_name.clone(),
+            hostname: hostname.clone(),
             listen_remote: config.listen_remote_logs,
         },
     )

@@ -19,13 +19,13 @@ pub struct InitData {
 }
 
 pub async fn init(actors: &mut SpawnedActors, r#type: &str, config: &ActorsConfig) -> InitData {
-    let hostname = utils::hostname().expect("could not read hostname");
-    let instance_name = Arc::new(format!("{}-{}", hostname, r#type));
+    let hostname = Arc::new(utils::hostname().expect("could not read hostname"));
+    let instance_name = Arc::new(format!("{}-{}", hostname.as_str(), r#type));
 
     actors.add(spawn_scheduler().await);
 
     instance_info::init_provider(actors).await;
-    bus::init(actors, instance_name.clone(), config).await;
+    bus::init(actors, instance_name.clone(), hostname.clone(), config).await;
     components::init(actors, instance_name.clone(), r#type).await;
     instance_info::init_publisher(actors).await;
 
