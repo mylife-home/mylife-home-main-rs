@@ -14,7 +14,7 @@ use kameo::{error::Infallible, message, prelude::*};
 use studio_web_api::{online, protocol};
 use thiserror::Error;
 
-use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEvent};
+use crate::web::{DispatcherBuilder, NotifierManager, ServiceCall, SessionEvent};
 
 const ONLINE_INSTANCES_NAME: &str = "online-instances";
 const INSTANCE_INFO_PATH: &str = "instance-info";
@@ -158,20 +158,19 @@ impl message::Message<RemoteUpdate> for OnlineInstances {
     }
 }
 
-impl message::Message<ServiceRequest<StartNotifyReq>> for OnlineInstances {
-    type Reply = DelegatedReply<Result<StartNotifyRes, Infallible>>;
+impl message::Message<ServiceCall<StartNotifyReq>> for OnlineInstances {
+    type Reply = ();
 
     async fn handle(
         &mut self,
-        msg: ServiceRequest<StartNotifyReq>,
-        ctx: &mut Context<Self, Self::Reply>,
+        call: ServiceCall<StartNotifyReq>,
+        _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let (session, _) = msg.into();
-        let notifier = self.notifiers.create_notifier(session);
+        let notifier = self.notifiers.create_notifier(call.session().clone());
 
-        let response = ctx.reply(Ok(StartNotifyRes(protocol::NotifierId {
+        call.reply_ok(StartNotifyRes(protocol::NotifierId {
             notifier_id: notifier.notifier_id().into(),
-        })));
+        }));
 
         for (instance_name, data) in &self.instances {
             notifier.notify(&online::UpdateInstanceInfoData::Set(
@@ -181,36 +180,44 @@ impl message::Message<ServiceRequest<StartNotifyReq>> for OnlineInstances {
                 },
             ));
         }
-
-        response
     }
 }
 
-impl message::Message<ServiceRequest<StopNotifyReq>> for OnlineInstances {
-    type Reply = Result<StopNotifyRes, Infallible>;
+impl message::Message<ServiceCall<StopNotifyReq>> for OnlineInstances {
+    type Reply = ();
 
     async fn handle(
         &mut self,
-        msg: ServiceRequest<StopNotifyReq>,
+        call: ServiceCall<StopNotifyReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let (_, notifier_id) = msg.into();
+        let notifier_id = &call.request().0;
         self.notifiers
-            .remove_notifier(notifier_id.0.notifier_id.as_str());
+            .remove_notifier(notifier_id.notifier_id.as_str());
 
-        Ok(StopNotifyRes)
+        call.reply_ok(StopNotifyRes);
     }
 }
 
-impl message::Message<ServiceRequest<ExecuteSystemRestartReq>> for OnlineInstances {
-    type Reply = Result<ExecuteSystemRestartRes, OnlineInstancesError>;
+impl message::Message<ServiceCall<ExecuteSystemRestartReq>> for OnlineInstances {
+    type Reply = ();
 
     async fn handle(
         &mut self,
-        msg: ServiceRequest<ExecuteSystemRestartReq>,
+        call: ServiceCall<ExecuteSystemRestartReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let (_, ExecuteSystemRestartReq(request)) = msg.into();
+        let request = call.request().0.clone();
+        let result = self.execute_system_restart(request).await;
+        call.reply_result(result);
+    }
+}
+
+impl OnlineInstances {
+    async fn execute_system_restart(
+        &mut self,
+        request: online::SystemRestart,
+    ) -> Result<ExecuteSystemRestartRes, OnlineInstancesError> {
         let Some(instance) = self.instances.get(&request.instance_name) else {
             return Err(OnlineInstancesError::MissingCapability {
                 instance_name: request.instance_name,

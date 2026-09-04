@@ -12,7 +12,7 @@ use kameo::{error::Infallible, message, prelude::*};
 use studio_web_api::{component_model, online, protocol};
 use thiserror::Error;
 
-use crate::web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent};
+use crate::web::{DispatcherBuilder, Notifier, NotifierManager, ServiceCall, SessionEvent};
 
 const ONLINE_COMPONENTS_NAME: &str = "online-components";
 
@@ -116,49 +116,59 @@ impl message::Message<RegistryUpdated> for OnlineComponents {
     }
 }
 
-impl message::Message<ServiceRequest<StartNotifyReq>> for OnlineComponents {
-    type Reply = DelegatedReply<Result<StartNotifyRes, Infallible>>;
+impl message::Message<ServiceCall<StartNotifyReq>> for OnlineComponents {
+    type Reply = ();
 
     async fn handle(
         &mut self,
-        msg: ServiceRequest<StartNotifyReq>,
-        ctx: &mut Context<Self, Self::Reply>,
+        call: ServiceCall<StartNotifyReq>,
+        _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let (session, _) = msg.into();
-        let notifier = self.notifiers.create_notifier(session).clone();
-        let response = ctx.reply(Ok(StartNotifyRes(protocol::NotifierId {
+        let notifier = self
+            .notifiers
+            .create_notifier(call.session().clone())
+            .clone();
+        call.reply_ok(StartNotifyRes(protocol::NotifierId {
             notifier_id: notifier.notifier_id().into(),
-        })));
+        }));
 
         self.initial_sync(&notifier).await;
-
-        response
     }
 }
 
-impl message::Message<ServiceRequest<StopNotifyReq>> for OnlineComponents {
-    type Reply = Result<StopNotifyRes, Infallible>;
+impl message::Message<ServiceCall<StopNotifyReq>> for OnlineComponents {
+    type Reply = ();
 
     async fn handle(
         &mut self,
-        msg: ServiceRequest<StopNotifyReq>,
+        call: ServiceCall<StopNotifyReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let (_, notifier_id) = msg.into();
-        self.notifiers.remove_notifier(&notifier_id.0.notifier_id);
-        Ok(StopNotifyRes)
+        let notifier_id = &call.request().0;
+        self.notifiers.remove_notifier(&notifier_id.notifier_id);
+        call.reply_ok(StopNotifyRes);
     }
 }
 
-impl message::Message<ServiceRequest<ExecuteActionReq>> for OnlineComponents {
-    type Reply = Result<ExecuteActionRes, OnlineComponentsError>;
+impl message::Message<ServiceCall<ExecuteActionReq>> for OnlineComponents {
+    type Reply = ();
 
     async fn handle(
         &mut self,
-        msg: ServiceRequest<ExecuteActionReq>,
+        call: ServiceCall<ExecuteActionReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let (_, ExecuteActionReq(request)) = msg.into();
+        let request = call.request().0.clone();
+        let result = self.execute_action(request).await;
+        call.reply_result(result);
+    }
+}
+
+impl OnlineComponents {
+    async fn execute_action(
+        &mut self,
+        request: online::ComponentAction,
+    ) -> Result<ExecuteActionRes, OnlineComponentsError> {
         let info = self
             .registry
             .get_component(request.component_id.clone())
@@ -189,9 +199,7 @@ impl message::Message<ServiceRequest<ExecuteActionReq>> for OnlineComponents {
             .component_execute_action(request.component_id, request.action, value);
         Ok(ExecuteActionRes)
     }
-}
 
-impl OnlineComponents {
     async fn initial_sync(&self, notifier: &Notifier<online::UpdateComponentData>) {
         let components = match self.registry.get_components().await {
             Ok(components) => components,

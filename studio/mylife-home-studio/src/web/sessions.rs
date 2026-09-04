@@ -31,7 +31,7 @@ use std::{
 };
 use std::{sync::Arc, time::Duration};
 use studio_web_api::protocol;
-use tokio::{task::AbortHandle, time::Instant};
+use tokio::time::Instant;
 
 use super::{AppState, Dispatcher, SessionEvent, SessionEventType};
 
@@ -205,6 +205,31 @@ impl SessionHandle {
             tracing::error!(%error, session = ?self.id(), notifier_type, notifier_id, "could not send notification to session actor");
         }
     }
+
+    /// Respond to a service request with a successful result.
+    pub fn respond_ok<Data: serde::Serialize>(&self, request_id: &str, result: Data) {
+        self.respond(protocol::ServiceResponse {
+            request_id: request_id.to_owned(),
+            result: serde_json::to_value(result).ok(),
+            error: None,
+        });
+    }
+
+    /// Respond to a service request with an error.
+    pub fn respond_error<E: std::error::Error>(&self, request_id: &str, error: &E) {
+        self.respond(protocol::ServiceResponse {
+            request_id: request_id.to_owned(),
+            result: None,
+            error: Some(Dispatcher::format_error(error)),
+        });
+    }
+
+    fn respond(&self, response: protocol::ServiceResponse) {
+        let request_id = response.request_id.clone();
+        if let Err(error) = self.actor.tell(response).try_send() {
+            tracing::error!(%error, session = ?self.id(), request_id, "could not send service response to session actor");
+        }
+    }
 }
 
 struct Session {
@@ -213,7 +238,6 @@ struct Session {
     ws_sink: SplitSink<WebSocket, Message>,
     heartbeat: Heartbeat,
     dispatcher: Arc<Dispatcher>,
-    pending_calls: PendingCalls,
 }
 
 impl Actor for Session {
@@ -232,7 +256,6 @@ impl Actor for Session {
             ws_sink,
             heartbeat: Heartbeat::new(),
             dispatcher,
-            pending_calls: PendingCalls::new(),
         };
 
         _self
@@ -247,8 +270,6 @@ impl Actor for Session {
         actor_ref: WeakActorRef<Self>,
         _reason: ActorStopReason,
     ) -> Result<(), Self::Error> {
-        self.pending_calls.abort_all();
-
         let actor_ref = actor_ref.upgrade().expect("actor ref should be valid");
 
         self.dispatcher.session_event(
@@ -319,21 +340,14 @@ impl message::Message<protocol::Notification> for Session {
     }
 }
 
-#[derive(Debug)]
-struct ServiceCallCompletion {
-    call_id: CallId,
-    response: protocol::ServiceResponse,
-}
-
-impl message::Message<ServiceCallCompletion> for Session {
+impl message::Message<protocol::ServiceResponse> for Session {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        ServiceCallCompletion { call_id, response }: ServiceCallCompletion,
+        response: protocol::ServiceResponse,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.pending_calls.complete(call_id);
         self.send_message(&protocol::ServerMessage::ServiceResponse(response))
             .await;
     }
@@ -355,22 +369,8 @@ impl Session {
             };
 
             let actor = actor_ref.upgrade().expect("actor ref should be valid");
-            let session = SessionHandle::new(actor.clone(), self.id);
-            let dispatcher = self.dispatcher.clone();
-            let call_id = self.pending_calls.next_id();
-
-            let call = tokio::spawn(async move {
-                let response = dispatcher.service_call(session, request).await;
-
-                if let Err(error) = actor
-                    .tell(ServiceCallCompletion { call_id, response })
-                    .try_send()
-                {
-                    tracing::debug!(%error, "session ended before service call completed");
-                }
-            });
-
-            self.pending_calls.insert(call_id, call.abort_handle());
+            self.dispatcher
+                .service_call(SessionHandle::new(actor, self.id), request);
         }
     }
 
@@ -458,46 +458,5 @@ impl Heartbeat {
         let now = Instant::now();
         self.idle_deadline = now + IDLE_BEFORE_PING;
         self.pong_deadline = None;
-    }
-}
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-struct CallId(usize);
-
-#[derive(Debug, Default)]
-struct PendingCalls {
-    next_id: usize,
-    calls: HashMap<CallId, AbortHandle>,
-}
-
-impl PendingCalls {
-    pub fn new() -> Self {
-        Self {
-            next_id: 1,
-            calls: HashMap::new(),
-        }
-    }
-
-    pub fn next_id(&mut self) -> CallId {
-        let call_id = CallId(self.next_id);
-        self.next_id = self
-            .next_id
-            .checked_add(1)
-            .expect("exhausted session call identifiers");
-        call_id
-    }
-
-    pub fn insert(&mut self, call_id: CallId, call: AbortHandle) {
-        self.calls.insert(call_id, call);
-    }
-
-    pub fn complete(&mut self, call_id: CallId) {
-        self.calls.remove(&call_id);
-    }
-
-    pub fn abort_all(&mut self) {
-        for (_, call) in self.calls.drain() {
-            call.abort();
-        }
     }
 }

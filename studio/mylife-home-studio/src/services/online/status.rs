@@ -5,7 +5,7 @@ use common::{
 use kameo::{error::Infallible, message, prelude::*};
 use studio_web_api::protocol;
 
-use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEvent};
+use crate::web::{DispatcherBuilder, NotifierManager, ServiceCall, SessionEvent};
 
 const ONLINE_STATUS_NAME: &str = "online-status";
 
@@ -77,42 +77,39 @@ impl message::Message<SessionEvent> for OnlineStatus {
 }
 
 // start notify
-impl message::Message<ServiceRequest<StartNotifyReq>> for OnlineStatus {
-    type Reply = DelegatedReply<Result<StartNotifyRes, Infallible>>;
+impl message::Message<ServiceCall<StartNotifyReq>> for OnlineStatus {
+    type Reply = ();
 
     async fn handle(
         &mut self,
-        msg: ServiceRequest<StartNotifyReq>,
-        ctx: &mut Context<Self, Self::Reply>,
+        call: ServiceCall<StartNotifyReq>,
+        _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let (session, _) = msg.into();
-        let notifier = self.notifiers.create_notifier(session);
+        let notifier = self.notifiers.create_notifier(call.session().clone());
 
-        let res = ctx.reply(Ok(StartNotifyRes(protocol::NotifierId {
+        call.reply_ok(StartNotifyRes(protocol::NotifierId {
             notifier_id: notifier.notifier_id().into(),
-        })));
+        }));
 
         // Send the current status right after the notifier is created to ensure the client receives the latest status immediately.
         notifier.notify(&self.current_status);
-
-        res
     }
 }
 
 // stop notify
-impl message::Message<ServiceRequest<StopNotifyReq>> for OnlineStatus {
-    type Reply = Result<StopNotifyRes, Infallible>;
+impl message::Message<ServiceCall<StopNotifyReq>> for OnlineStatus {
+    type Reply = ();
 
     async fn handle(
         &mut self,
-        msg: ServiceRequest<StopNotifyReq>,
+        call: ServiceCall<StopNotifyReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let (_, notifier_id) = msg.into();
+        let notifier_id = &call.request().0;
         self.notifiers
-            .remove_notifier(notifier_id.0.notifier_id.as_str());
+            .remove_notifier(notifier_id.notifier_id.as_str());
 
-        Ok(StopNotifyRes)
+        call.reply_ok(StopNotifyRes);
     }
 }
 

@@ -2,7 +2,7 @@ use common::utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, Spawne
 use kameo::{error::Infallible, message, prelude::*};
 use studio_web_api::{project_manager::UpdateListNotification, protocol};
 
-use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEvent};
+use crate::web::{DispatcherBuilder, NotifierManager, ServiceCall, SessionEvent};
 
 const PROJECT_MANAGER_NAME: &str = "project-manager";
 
@@ -65,35 +65,34 @@ impl message::Message<SessionEvent> for ProjectManager {
     }
 }
 
-impl message::Message<ServiceRequest<StartNotifyListReq>> for ProjectManager {
-    type Reply = DelegatedReply<Result<StartNotifyListRes, Infallible>>;
+impl message::Message<ServiceCall<StartNotifyListReq>> for ProjectManager {
+    type Reply = ();
 
     async fn handle(
         &mut self,
-        msg: ServiceRequest<StartNotifyListReq>,
-        ctx: &mut Context<Self, Self::Reply>,
+        call: ServiceCall<StartNotifyListReq>,
+        _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let (session, _) = msg.into();
-        let notifier = self.list_notifiers.create_notifier(session);
+        let notifier = self.list_notifiers.create_notifier(call.session().clone());
 
-        ctx.reply(Ok(StartNotifyListRes(protocol::NotifierId {
+        call.reply_ok(StartNotifyListRes(protocol::NotifierId {
             notifier_id: notifier.notifier_id().into(),
-        })))
+        }));
     }
 }
 
-impl message::Message<ServiceRequest<StopNotifyListReq>> for ProjectManager {
-    type Reply = Result<StopNotifyListRes, Infallible>;
+impl message::Message<ServiceCall<StopNotifyListReq>> for ProjectManager {
+    type Reply = ();
 
     async fn handle(
         &mut self,
-        msg: ServiceRequest<StopNotifyListReq>,
+        call: ServiceCall<StopNotifyListReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let (_, notifier_id) = msg.into();
+        let notifier_id = &call.request().0;
         self.list_notifiers
-            .remove_notifier(notifier_id.0.notifier_id.as_str());
+            .remove_notifier(notifier_id.notifier_id.as_str());
 
-        Ok(StopNotifyListRes)
+        call.reply_ok(StopNotifyListRes);
     }
 }

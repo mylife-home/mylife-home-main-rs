@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use kameo::{message, prelude::*};
 use std::{any::type_name, collections::HashMap, fmt, sync::Arc};
 use studio_web_api::protocol;
@@ -10,7 +9,13 @@ use super::SessionHandle;
 pub enum DispatcherError {
     #[error("service not found: {0}")]
     ServiceNotFound(String),
+    #[error("service actor unavailable: {0}")]
+    ServiceUnavailable(String),
 }
+
+#[derive(Debug, Error)]
+#[error("service call was dropped without a reply")]
+pub struct UnansweredServiceCallError;
 
 /// A session event, which can be sent to other actors to notify them of session lifecycle events.
 #[derive(Debug, Clone)]
@@ -46,33 +51,55 @@ pub enum SessionEventType {
 }
 
 #[derive(Debug)]
-pub struct ServiceRequest<Req: serde::de::DeserializeOwned + Send + 'static> {
+pub struct ServiceCall<Req: Send + 'static> {
     session: SessionHandle,
+    request_id: String,
     request: Req,
+    replied: bool,
 }
 
-impl<Req: serde::de::DeserializeOwned + Send + 'static> ServiceRequest<Req> {
-    /// Create a new service request.
-    pub fn new(session: SessionHandle, request: Req) -> Self {
-        Self { session, request }
+impl<Req: Send + 'static> ServiceCall<Req> {
+    fn new(session: SessionHandle, request_id: String, request: Req) -> Self {
+        Self {
+            session,
+            request_id,
+            request,
+            replied: false,
+        }
     }
 
-    /// Get the session handle associated with this request.
     pub fn session(&self) -> &SessionHandle {
         &self.session
     }
 
-    /// Get the request payload.
     pub fn request(&self) -> &Req {
         &self.request
     }
+
+    pub fn reply_ok<Res: serde::Serialize>(mut self, result: Res) {
+        self.replied = true;
+        self.session.respond_ok(&self.request_id, result);
+    }
+
+    pub fn reply_error<E: std::error::Error>(mut self, error: E) {
+        self.replied = true;
+        self.session.respond_error(&self.request_id, &error);
+    }
+
+    pub fn reply_result<Res: serde::Serialize, E: std::error::Error>(self, result: Result<Res, E>) {
+        match result {
+            Ok(result) => self.reply_ok(result),
+            Err(error) => self.reply_error(error),
+        }
+    }
 }
 
-impl<Req: serde::de::DeserializeOwned + Send + 'static> From<ServiceRequest<Req>>
-    for (SessionHandle, Req)
-{
-    fn from(req: ServiceRequest<Req>) -> Self {
-        (req.session, req.request)
+impl<Req: Send + 'static> Drop for ServiceCall<Req> {
+    fn drop(&mut self) {
+        if !self.replied {
+            self.session
+                .respond_error(&self.request_id, &UnansweredServiceCallError);
+        }
     }
 }
 
@@ -85,38 +112,17 @@ pub struct Dispatcher {
 
 impl Dispatcher {
     /// Handle a service request by routing it to the appropriate service handler.
-    pub async fn service_call(
-        &self,
-        session: SessionHandle,
-        request: protocol::ServiceRequest,
-    ) -> protocol::ServiceResponse {
-        let res = if let Some(handler) = self.service_handlers.get(&request.service) {
-            handler.handle(session, request.payload).await
+    pub fn service_call(&self, session: SessionHandle, request: protocol::ServiceRequest) {
+        if let Some(handler) = self.service_handlers.get(&request.service) {
+            handler.handle(session, request.request_id, request.payload);
         } else {
             tracing::error!(service = %request.service, "no service handler found");
             let err = DispatcherError::ServiceNotFound(request.service);
-            Err(Self::format_error(&err))
-        };
-
-        let mut response = protocol::ServiceResponse {
-            request_id: request.request_id,
-            result: None,
-            error: None,
-        };
-
-        match res {
-            Ok(result) => {
-                response.result = Some(result);
-            }
-            Err(error) => {
-                response.error = Some(error);
-            }
+            session.respond_error(&request.request_id, &err);
         }
-
-        response
     }
 
-    fn format_error<E: std::error::Error>(error: &E) -> protocol::ServiceResponseError {
+    pub fn format_error<E: std::error::Error>(error: &E) -> protocol::ServiceResponseError {
         // capture the error chain
         let mut stacktrace = format!("{}", error);
         let mut source = error.source();
@@ -180,82 +186,50 @@ impl DispatcherBuilder {
     /// Register a service call handler for a specific service name.
     pub fn register_call<
         Req: serde::de::DeserializeOwned + Send + 'static,
-        A: Actor + message::Message<ServiceRequest<Req>> + Send + 'static,
+        A: Actor + message::Message<ServiceCall<Req>, Reply = ()> + Send + 'static,
     >(
         &mut self,
         service_name: impl Into<String>,
         actor: ActorRef<A>,
-    ) where
-        <<A as message::Message<ServiceRequest<Req>>>::Reply as Reply>::Ok: serde::Serialize,
-        <<A as message::Message<ServiceRequest<Req>>>::Reply as Reply>::Error:
-            std::error::Error + Send + Sync,
-    {
-        let recipient = actor.reply_recipient::<ServiceRequest<Req>>();
+    ) {
+        let recipient = actor.recipient::<ServiceCall<Req>>();
         let handler = ServiceHandlerImpl(recipient);
         self.service_handlers
             .insert(service_name.into(), Box::new(handler));
     }
 }
 
-#[async_trait]
 trait ServiceHandler: Send + Sync + fmt::Debug + 'static {
-    async fn handle(
-        &self,
-        session: SessionHandle,
-        request: serde_json::Value,
-    ) -> Result<serde_json::Value, protocol::ServiceResponseError>;
+    fn handle(&self, session: SessionHandle, request_id: String, request: serde_json::Value);
 }
 
-struct ServiceHandlerImpl<
-    Req: serde::de::DeserializeOwned + Send + 'static,
-    Res: serde::Serialize + Send + 'static,
-    E: std::error::Error + Send + Sync + 'static,
->(ReplyRecipient<ServiceRequest<Req>, Res, E>);
+struct ServiceHandlerImpl<Req: serde::de::DeserializeOwned + Send + 'static>(
+    Recipient<ServiceCall<Req>>,
+);
 
-impl<
-    Req: serde::de::DeserializeOwned + Send + 'static,
-    Res: serde::Serialize + Send + 'static,
-    E: std::error::Error + Send + Sync + 'static,
-> fmt::Debug for ServiceHandlerImpl<Req, Res, E>
-{
+impl<Req: serde::de::DeserializeOwned + Send + 'static> fmt::Debug for ServiceHandlerImpl<Req> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServiceHandlerImpl").finish()
     }
 }
 
-#[async_trait]
-impl<
-    Req: serde::de::DeserializeOwned + Send + 'static,
-    Res: serde::Serialize + Send + 'static,
-    E: std::error::Error + Send + Sync + 'static,
-> ServiceHandler for ServiceHandlerImpl<Req, Res, E>
-{
-    async fn handle(
-        &self,
-        session: SessionHandle,
-        request: serde_json::Value,
-    ) -> Result<serde_json::Value, protocol::ServiceResponseError> {
+impl<Req: serde::de::DeserializeOwned + Send + 'static> ServiceHandler for ServiceHandlerImpl<Req> {
+    fn handle(&self, session: SessionHandle, request_id: String, request: serde_json::Value) {
         let req = match serde_json::from_value::<Req>(request) {
             Ok(req) => req,
             Err(error) => {
-                return Err(Dispatcher::format_error(&error));
+                session.respond_error(&request_id, &error);
+                return;
             }
         };
 
-        let value = match self.0.ask(ServiceRequest::new(session, req)).await {
-            Ok(result) => result,
-            Err(error) => {
-                return Err(Dispatcher::format_error(&error));
-            }
-        };
-
-        let value = match serde_json::to_value(value) {
-            Ok(value) => value,
-            Err(error) => {
-                return Err(Dispatcher::format_error(&error));
-            }
-        };
-
-        Ok(value)
+        let call = ServiceCall::new(session.clone(), request_id.clone(), req);
+        if let Err(error) = self.0.tell(call).try_send() {
+            tracing::error!(%error, "could not dispatch service call");
+            session.respond_error(
+                &request_id,
+                &DispatcherError::ServiceUnavailable(error.to_string()),
+            );
+        }
     }
 }
