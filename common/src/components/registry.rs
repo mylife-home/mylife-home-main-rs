@@ -94,8 +94,14 @@ impl RegistryHandle {
         Ok(())
     }
 
+    /// Get the IDs of all components in the registry
     pub async fn get_component_ids(&self) -> Result<Vec<Arc<String>>, CallError> {
         self.actor.call(GetComponentIds).await
+    }
+
+    /// Get information on all components
+    pub async fn get_components(&self) -> Result<Vec<ComponentInfo>, CallError> {
+        self.actor.call(GetComponents).await
     }
 
     /// Get info on a component
@@ -127,6 +133,19 @@ pub struct ComponentInfo {
     pub plugin: Arc<PluginMetadata>,
     pub component_id: String,
     pub state: HashMap<String, Option<Value>>,
+}
+
+impl ComponentInfo {
+    fn from_data(
+        component_data: &ComponentData,
+    ) -> Self {
+        Self {
+            instance: component_data.instance_name().into(),
+            plugin: component_data.plugin().clone(),
+            component_id: component_data.component_id.to_string(),
+            state: component_data.state().clone(),
+        }
+    }
 }
 
 /// Specific registry access part for a component
@@ -330,12 +349,14 @@ impl Registry {
             return Err(ComponentGetError::not_found(component_id.to_string()));
         };
 
-        Ok(ComponentInfo {
-            instance: component_data.instance_name().into(),
-            plugin: component_data.plugin().clone(),
-            component_id: component_id.to_string(),
-            state: component_data.state().clone(),
-        })
+        Ok(ComponentInfo::from_data(component_data))
+    }
+
+    fn get_components(&self) -> Vec<ComponentInfo> {
+        self.components
+            .values()
+            .map(ComponentInfo::from_data)
+            .collect()
     }
 
     fn execute_action(&mut self, component_id: String, action: &str, value: Value) {
@@ -609,6 +630,18 @@ impl message::Message<GetComponentIds> for Registry {
     }
 }
 
+impl message::Message<GetComponents> for Registry {
+    type Reply = Result<Vec<ComponentInfo>, Infallible>;
+
+    async fn handle(
+        &mut self,
+        _msg: GetComponents,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        Ok(self.get_components())
+    }
+}
+
 impl message::Message<ComponentAction> for Registry {
     type Reply = ();
 
@@ -665,6 +698,10 @@ struct ComponentRemove {
 /// Registry command: get component ids
 #[derive(Debug, Clone)]
 struct GetComponentIds;
+
+/// Registry command: get all components
+#[derive(Debug, Clone)]
+struct GetComponents;
 
 /// Registry command: get a component
 #[derive(Debug, Clone)]
