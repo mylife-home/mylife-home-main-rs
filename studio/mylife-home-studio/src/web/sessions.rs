@@ -33,7 +33,7 @@ use std::{sync::Arc, time::Duration};
 use studio_web_api::protocol;
 use tokio::time::Instant;
 
-use super::{AppState, Dispatcher, SessionEvent, SessionEventType};
+use super::{AppState, Dispatcher, SessionEventType};
 
 const IDLE_BEFORE_PING: Duration = Duration::from_secs(30);
 const PONG_TIMEOUT: Duration = Duration::from_secs(5);
