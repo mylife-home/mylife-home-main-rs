@@ -114,13 +114,23 @@ pub async fn init_actor(actors: &mut SpawnedActors, config: ClientConfig) {
     actors.add(client);
 }
 
+pub async fn start() {
+    let actor =
+        ActorHandle::<Client>::from_name(CLIENT_NAME).expect("failed to access client actor");
+    actor
+        .call(Start)
+        .await
+        .expect("failed to start client actor");
+}
+
 /// Client manages the MQTT connection, providing an interface for the bus to interact with the MQTT layer.
 #[derive(Debug)]
 struct Client {
     instance_name: Arc<String>,
+    server_address: String,
 
     mqtt_client: Option<MqttClient>,
-    events: broadcast::Receiver<MqttEvent>,
+    events: Option<broadcast::Receiver<MqttEvent>>,
 
     subscriptions: HashSet<String>,
     online_instances: HashSet<String>,
@@ -137,6 +147,8 @@ pub enum ClientActorError {
     HandleLookupError(#[from] HandleLookupError),
     #[error("MQTT error: {0}")]
     MqttError(#[from] mqtt::MqttError),
+    #[error("mqtt client is already started")]
+    AlreadyStarted,
 }
 
 impl Actor for Client {
@@ -147,24 +159,11 @@ impl Actor for Client {
         config: ClientConfig,
         _actor_ref: ActorRef<Self>,
     ) -> Result<Self, ClientActorError> {
-        let last_will = mqtt::LastWill {
-            topic: format!("{}/online", config.instance_name),
-            payload: Bytes::new(),
-            retain: true,
-        };
-
-        let mqtt_client = MqttClient::create(
-            (*config.instance_name).clone(),
-            config.server_address,
-            Some(last_will),
-        )?;
-
-        let events = mqtt_client.events();
-
         Ok(Self {
             instance_name: config.instance_name,
-            mqtt_client: Some(mqtt_client),
-            events,
+            server_address: config.server_address,
+            mqtt_client: None,
+            events: None,
             subscriptions: HashSet::new(),
             online_instances: HashSet::new(),
             on_message: PublisherHandle::from_name(MESSAGE_PUBSUB_NAME)?,
@@ -180,8 +179,9 @@ impl Actor for Client {
     ) -> Result<(), ClientActorError> {
         self.mark_offline();
 
-        let mqtt_client = self.mqtt_client.take().expect("incorrect state");
-        mqtt_client.shutdown().await;
+        if let Some(mqtt_client) = self.mqtt_client.take() {
+            mqtt_client.shutdown().await;
+        }
 
         Ok(())
     }
@@ -192,15 +192,46 @@ impl Actor for Client {
         mailbox_rx: &mut MailboxReceiver<Self>,
     ) -> Result<Option<mailbox::Signal<Self>>, ClientActorError> {
         loop {
+            let Some(events) = self.events.as_mut() else {
+                return Ok(mailbox_rx.recv().await);
+            };
+
             select! {
-                event = self.get_next_event() => {
+                event = Self::get_next_event(events) => {
                     self.process_event(event).await;
                 },
                 res = mailbox_rx.recv() => {
-                    return Ok(res)
+                    return Ok(res);
                 }
             }
         }
+    }
+}
+
+impl message::Message<Start> for Client {
+    type Reply = Result<(), ClientActorError>;
+
+    async fn handle(&mut self, _msg: Start, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
+        if self.mqtt_client.is_some() {
+            return Err(ClientActorError::AlreadyStarted);
+        }
+
+        let last_will = mqtt::LastWill {
+            topic: format!("{}/online", self.instance_name),
+            payload: Bytes::new(),
+            retain: true,
+        };
+
+        let mqtt_client = MqttClient::create(
+            (*self.instance_name).clone(),
+            self.server_address.clone(),
+            Some(last_will),
+        )?;
+
+        self.events = Some(mqtt_client.events());
+        self.mqtt_client = Some(mqtt_client);
+
+        Ok(())
     }
 }
 
@@ -214,18 +245,11 @@ impl message::Message<Subscribe> for Client {
     ) -> Self::Reply {
         let topic = msg.0.as_str();
 
-        let Some(mqtt_client) = &self.mqtt_client else {
-            tracing::error!(
-                error = "mqtt client not set",
-                topic,
-                "failed to subscribe to topic"
-            );
-            return;
-        };
-
         if self.subscriptions.insert(topic.to_owned()) {
-            if let Err(error) = mqtt_client.subscribe(vec![topic.to_owned()]) {
-                tracing::error!(%error, topic, "failed to subscribe to topic");
+            if let Some(mqtt_client) = &self.mqtt_client {
+                if let Err(error) = mqtt_client.subscribe(vec![topic.to_owned()]) {
+                    tracing::error!(%error, topic, "failed to subscribe to topic");
+                }
             }
 
             tracing::trace!(topic, "subscribed to topic");
@@ -271,9 +295,9 @@ impl message::Message<Publish> for Client {
 }
 
 impl Client {
-    async fn get_next_event(&mut self) -> mqtt::MqttEvent {
+    async fn get_next_event(events: &mut broadcast::Receiver<MqttEvent>) -> mqtt::MqttEvent {
         loop {
-            match self.events.recv().await {
+            match events.recv().await {
                 Ok(event) => {
                     return event;
                 }
@@ -342,7 +366,12 @@ impl Client {
         let _temp_sub = TempSubscription::new(mqtt_client, format!("{}/#", self.instance_name));
 
         loop {
-            match timeout(Duration::from_secs(1), self.events.recv()).await {
+            let events = self
+                .events
+                .as_mut()
+                .expect("MQTT event receiver not set while connecting");
+
+            match timeout(Duration::from_secs(1), events.recv()).await {
                 Ok(Ok(event)) => {
                     if let mqtt::MqttEvent::Message { topic, retain, .. } = event {
                         if retain && topic.starts_with(&format!("{}/", self.instance_name)) {
@@ -379,17 +408,10 @@ impl Client {
 
     /// Publish a message to a topic, sending a publish request to the MQTT client.
     fn publish(&self, topic: Topic, payload: Bytes, retain: bool) {
-        let Some(mqtt_client) = &self.mqtt_client else {
-            tracing::error!(
-                error = "mqtt client not set",
-                %topic,
-                "failed to publish message to topic"
-            );
-            return;
-        };
-
-        if let Err(error) = mqtt_client.publish(topic.to_string(), payload, retain) {
-            tracing::error!(%error, %topic, "failed to publish message to topic");
+        if let Some(mqtt_client) = &self.mqtt_client {
+            if let Err(error) = mqtt_client.publish(topic.to_string(), payload, retain) {
+                tracing::error!(%error, %topic, "failed to publish message to topic");
+            }
         }
     }
 
@@ -498,6 +520,9 @@ impl Drop for TempSubscription<'_> {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+struct Start;
 
 /// MQTT message, with additional helper methods dedicated to bus protocol.
 #[derive(Debug, Clone)]

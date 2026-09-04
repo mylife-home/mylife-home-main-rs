@@ -84,6 +84,15 @@ pub async fn init_actors(actors: &mut SpawnedActors) {
     actors.add(provider);
 }
 
+pub async fn start() {
+    let actor = ActorHandle::<InstanceInfoProvider>::from_name(INSTANCE_INFO_PROVIDER_NAME)
+        .expect("failed to access instance-info provider actor");
+    actor
+        .call(Start)
+        .await
+        .expect("failed to start instance-info provider actor");
+}
+
 #[derive(Debug)]
 struct InstanceInfoProvider {
     on_event: PublisherHandle<types::InstanceInfo>,
@@ -243,6 +252,19 @@ impl InstanceInfoProvider {
     }
 }
 
+impl message::Message<Start> for InstanceInfoProvider {
+    type Reply = Result<(), InstanceInfoProviderActorError>;
+
+    async fn handle(
+        &mut self,
+        _msg: Start,
+        _ctx: &mut message::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.refresh().await;
+        Ok(())
+    }
+}
+
 impl message::Message<SetType> for InstanceInfoProvider {
     type Reply = ();
 
@@ -293,6 +315,9 @@ impl message::Message<Refresh> for InstanceInfoProvider {
         self.refresh().await;
     }
 }
+
+#[derive(Debug, Clone)]
+struct Start;
 
 #[derive(Debug, Clone)]
 struct Refresh;

@@ -24,8 +24,15 @@ pub async fn init(actors: &mut SpawnedActors, r#type: &str, config: &ActorsConfi
 
     actors.add(spawn_scheduler().await);
 
+    instance_info::init_provider(actors).await;
     bus::init(actors, instance_name.clone(), config).await;
     components::init(actors, instance_name.clone(), r#type).await;
+    instance_info::init_publisher(actors).await;
 
     InitData { instance_name }
+}
+
+pub async fn start() {
+    instance_info::start().await;
+    bus::start().await;
 }

@@ -42,6 +42,8 @@ async fn main() {
     let instance_info_handle = instance_info::InstanceInfoProviderHandle::new_safe();
     instance_info_handle.add_component("ui", env!("CARGO_PKG_VERSION"));
 
+    common::start().await;
+
     let web = WebServer::new().await.expect("could not start web server");
 
     wait_for_shutdown_signal().await;

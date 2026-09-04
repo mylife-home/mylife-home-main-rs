@@ -43,6 +43,8 @@ async fn main() {
 
     services::init(&mut actors, &mut dispatcher, &init_data).await;
 
+    common::start().await;
+
     let web = WebServer::new(dispatcher.build())
         .await
         .expect("could not start web server");

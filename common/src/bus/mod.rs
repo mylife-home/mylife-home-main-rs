@@ -57,6 +57,10 @@ pub async fn init(actors: &mut SpawnedActors, instance_name: Arc<String>, config
     .await;
 }
 
+pub async fn start() {
+    client::start().await;
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct BusConfig {
     server_address: String,

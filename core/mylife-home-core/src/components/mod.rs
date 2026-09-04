@@ -83,6 +83,15 @@ pub async fn init_actor(actors: &mut SpawnedActors) {
     actors.add(local_components);
 }
 
+pub async fn start() {
+    let actor = ActorHandle::<LocalComponents>::from_name(LOCAL_COMPONENTS_NAME)
+        .expect("failed to access local components actor");
+    actor
+        .call(Start)
+        .await
+        .expect("failed to start local components actor");
+}
+
 pub async fn init_plugins() {
     // plugin are here forever, we can just register them
     let registry = registry::RegistryHandle::new().expect("Cannot get registry access");
@@ -140,15 +149,6 @@ impl Actor for LocalComponents {
             components: HashMap::new(),
         };
 
-        for config in _self
-            .store
-            .component_list()
-            .await
-            .map_err(|e| LocalComponentsActorError::StoreError(e))?
-        {
-            _self.add_component(config).await?;
-        }
-
         let self_handle = LocalComponentsHandle::from_actor_ref(actor_ref);
 
         _self
@@ -193,6 +193,26 @@ impl Actor for LocalComponents {
         self.rpc.unregister_service("components.add").await?;
         self.rpc.unregister_service("components.remove").await?;
         self.rpc.unregister_service("components.list").await?;
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Start;
+
+impl message::Message<Start> for LocalComponents {
+    type Reply = Result<(), LocalComponentsActorError>;
+
+    async fn handle(&mut self, _msg: Start, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
+        for config in self
+            .store
+            .component_list()
+            .await
+            .map_err(|e| LocalComponentsActorError::StoreError(e))?
+        {
+            self.add_component(config).await?;
+        }
 
         Ok(())
     }
