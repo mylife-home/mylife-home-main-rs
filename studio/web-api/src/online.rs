@@ -71,6 +71,16 @@ pub struct ClearInstanceInfoData {
 
 register_ts!(ClearInstanceInfoData);
 
+#[derive(Debug, Clone, Deserialize, TS)]
+#[ts(export, export_to = "online.ts")]
+#[serde(rename_all = "camelCase")]
+pub struct SystemRestart {
+    pub instance_name: String,
+    pub fail_safe: bool,
+}
+
+register_ts!(SystemRestart);
+
 // ===========================================================================
 // Component / plugin / state updates (tagged on `operation` then `type`)
 // ===========================================================================
@@ -163,6 +173,18 @@ pub enum ComponentDataType {
 }
 
 register_ts!(ComponentDataType);
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[ts(export, export_to = "online.ts")]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentAction {
+    pub component_id: String,
+    pub action: String,
+    #[ts(type = "any")]
+    pub value: serde_json::Value,
+}
+
+register_ts!(ComponentAction);
 
 // ===========================================================================
 // History records (tagged on `type`)
