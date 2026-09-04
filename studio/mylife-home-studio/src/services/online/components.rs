@@ -8,11 +8,11 @@ use common::{
     },
     utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors},
 };
-use kameo::{error::Infallible, message, prelude::*};
+use kameo::{message, prelude::*};
 use studio_web_api::{component_model, online, protocol};
 use thiserror::Error;
 
-use crate::web::{DispatcherBuilder, Notifier, NotifierManager, ServiceCall, SessionEvent};
+use crate::web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent};
 
 const ONLINE_COMPONENTS_NAME: &str = "online-components";
 
@@ -116,14 +116,15 @@ impl message::Message<RegistryUpdated> for OnlineComponents {
     }
 }
 
-impl message::Message<ServiceCall<StartNotifyReq>> for OnlineComponents {
+impl message::Message<ServiceRequest<StartNotifyReq>> for OnlineComponents {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<StartNotifyReq>,
+        request: ServiceRequest<StartNotifyReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let notifier = self
             .notifiers
             .create_notifier(call.session().clone())
@@ -136,28 +137,30 @@ impl message::Message<ServiceCall<StartNotifyReq>> for OnlineComponents {
     }
 }
 
-impl message::Message<ServiceCall<StopNotifyReq>> for OnlineComponents {
+impl message::Message<ServiceRequest<StopNotifyReq>> for OnlineComponents {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<StopNotifyReq>,
+        request: ServiceRequest<StopNotifyReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let notifier_id = &call.request().0;
         self.notifiers.remove_notifier(&notifier_id.notifier_id);
         call.reply_ok(StopNotifyRes);
     }
 }
 
-impl message::Message<ServiceCall<ExecuteActionReq>> for OnlineComponents {
+impl message::Message<ServiceRequest<ExecuteActionReq>> for OnlineComponents {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<ExecuteActionReq>,
+        request: ServiceRequest<ExecuteActionReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let request = call.request().0.clone();
         let result = self.execute_action(request).await;
         call.reply_result(result);

@@ -1,8 +1,8 @@
 use common::utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors};
-use kameo::{error::Infallible, message, prelude::*};
+use kameo::{message, prelude::*};
 use studio_web_api::{project_manager::UpdateListNotification, protocol};
 
-use crate::web::{DispatcherBuilder, NotifierManager, ServiceCall, SessionEvent};
+use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEvent};
 
 const PROJECT_MANAGER_NAME: &str = "project-manager";
 
@@ -65,14 +65,15 @@ impl message::Message<SessionEvent> for ProjectManager {
     }
 }
 
-impl message::Message<ServiceCall<StartNotifyListReq>> for ProjectManager {
+impl message::Message<ServiceRequest<StartNotifyListReq>> for ProjectManager {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<StartNotifyListReq>,
+        request: ServiceRequest<StartNotifyListReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let notifier = self.list_notifiers.create_notifier(call.session().clone());
 
         call.reply_ok(StartNotifyListRes(protocol::NotifierId {
@@ -81,14 +82,15 @@ impl message::Message<ServiceCall<StartNotifyListReq>> for ProjectManager {
     }
 }
 
-impl message::Message<ServiceCall<StopNotifyListReq>> for ProjectManager {
+impl message::Message<ServiceRequest<StopNotifyListReq>> for ProjectManager {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<StopNotifyListReq>,
+        request: ServiceRequest<StopNotifyListReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let notifier_id = &call.request().0;
         self.list_notifiers
             .remove_notifier(notifier_id.notifier_id.as_str());

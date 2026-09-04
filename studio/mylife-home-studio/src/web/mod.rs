@@ -13,7 +13,9 @@ mod notifier;
 mod sessions;
 mod webapp;
 
-pub use dispatcher::{Dispatcher, DispatcherBuilder, ServiceCall, SessionEvent, SessionEventType};
+pub use dispatcher::{
+    Dispatcher, DispatcherBuilder, ServiceCall, ServiceRequest, SessionEvent, SessionEventType,
+};
 pub use notifier::{Notifier, NotifierManager};
 pub use sessions::{SessionHandle, SessionId};
 

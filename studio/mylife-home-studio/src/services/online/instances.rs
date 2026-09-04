@@ -10,11 +10,11 @@ use common::{
     },
     utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors},
 };
-use kameo::{error::Infallible, message, prelude::*};
+use kameo::{message, prelude::*};
 use studio_web_api::{online, protocol};
 use thiserror::Error;
 
-use crate::web::{DispatcherBuilder, NotifierManager, ServiceCall, SessionEvent};
+use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEvent};
 
 const ONLINE_INSTANCES_NAME: &str = "online-instances";
 const INSTANCE_INFO_PATH: &str = "instance-info";
@@ -158,14 +158,15 @@ impl message::Message<RemoteUpdate> for OnlineInstances {
     }
 }
 
-impl message::Message<ServiceCall<StartNotifyReq>> for OnlineInstances {
+impl message::Message<ServiceRequest<StartNotifyReq>> for OnlineInstances {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<StartNotifyReq>,
+        request: ServiceRequest<StartNotifyReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let notifier = self.notifiers.create_notifier(call.session().clone());
 
         call.reply_ok(StartNotifyRes(protocol::NotifierId {
@@ -183,14 +184,15 @@ impl message::Message<ServiceCall<StartNotifyReq>> for OnlineInstances {
     }
 }
 
-impl message::Message<ServiceCall<StopNotifyReq>> for OnlineInstances {
+impl message::Message<ServiceRequest<StopNotifyReq>> for OnlineInstances {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<StopNotifyReq>,
+        request: ServiceRequest<StopNotifyReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let notifier_id = &call.request().0;
         self.notifiers
             .remove_notifier(notifier_id.notifier_id.as_str());
@@ -199,14 +201,15 @@ impl message::Message<ServiceCall<StopNotifyReq>> for OnlineInstances {
     }
 }
 
-impl message::Message<ServiceCall<ExecuteSystemRestartReq>> for OnlineInstances {
+impl message::Message<ServiceRequest<ExecuteSystemRestartReq>> for OnlineInstances {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<ExecuteSystemRestartReq>,
+        request: ServiceRequest<ExecuteSystemRestartReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let request = call.request().0.clone();
         let result = self.execute_system_restart(request).await;
         call.reply_result(result);

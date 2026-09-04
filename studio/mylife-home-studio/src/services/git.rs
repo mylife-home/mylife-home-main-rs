@@ -1,8 +1,8 @@
 use common::utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors};
-use kameo::{error::Infallible, message, prelude::*};
+use kameo::{message, prelude::*};
 use studio_web_api::protocol;
 
-use crate::web::{DispatcherBuilder, NotifierManager, ServiceCall, SessionEvent};
+use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEvent};
 
 const GIT_NAME: &str = "git";
 
@@ -72,14 +72,15 @@ impl message::Message<SessionEvent> for Git {
     }
 }
 
-impl message::Message<ServiceCall<StartNotifyReq>> for Git {
+impl message::Message<ServiceRequest<StartNotifyReq>> for Git {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<StartNotifyReq>,
+        request: ServiceRequest<StartNotifyReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let notifier = self.notifiers.create_notifier(call.session().clone());
 
         call.reply_ok(StartNotifyRes(protocol::NotifierId {
@@ -92,14 +93,15 @@ impl message::Message<ServiceCall<StartNotifyReq>> for Git {
     }
 }
 
-impl message::Message<ServiceCall<StopNotifyReq>> for Git {
+impl message::Message<ServiceRequest<StopNotifyReq>> for Git {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<StopNotifyReq>,
+        request: ServiceRequest<StopNotifyReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let notifier_id = &call.request().0;
         self.notifiers
             .remove_notifier(notifier_id.notifier_id.as_str());

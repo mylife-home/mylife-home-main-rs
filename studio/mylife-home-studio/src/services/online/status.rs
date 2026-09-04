@@ -2,10 +2,10 @@ use common::{
     bus::client,
     utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors},
 };
-use kameo::{error::Infallible, message, prelude::*};
+use kameo::{message, prelude::*};
 use studio_web_api::protocol;
 
-use crate::web::{DispatcherBuilder, NotifierManager, ServiceCall, SessionEvent};
+use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEvent};
 
 const ONLINE_STATUS_NAME: &str = "online-status";
 
@@ -77,14 +77,15 @@ impl message::Message<SessionEvent> for OnlineStatus {
 }
 
 // start notify
-impl message::Message<ServiceCall<StartNotifyReq>> for OnlineStatus {
+impl message::Message<ServiceRequest<StartNotifyReq>> for OnlineStatus {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<StartNotifyReq>,
+        request: ServiceRequest<StartNotifyReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let notifier = self.notifiers.create_notifier(call.session().clone());
 
         call.reply_ok(StartNotifyRes(protocol::NotifierId {
@@ -97,14 +98,15 @@ impl message::Message<ServiceCall<StartNotifyReq>> for OnlineStatus {
 }
 
 // stop notify
-impl message::Message<ServiceCall<StopNotifyReq>> for OnlineStatus {
+impl message::Message<ServiceRequest<StopNotifyReq>> for OnlineStatus {
     type Reply = ();
 
     async fn handle(
         &mut self,
-        call: ServiceCall<StopNotifyReq>,
+        request: ServiceRequest<StopNotifyReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        let call = request.into_call();
         let notifier_id = &call.request().0;
         self.notifiers
             .remove_notifier(notifier_id.notifier_id.as_str());

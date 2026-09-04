@@ -44,12 +44,37 @@ impl SessionEvent {
     }
 }
 
+/// The type of session event, indicating whether a session has started or stopped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionEventType {
     Started,
     Stopped,
 }
 
+/// A service request, representing a request sent from a client session to a service.
+#[derive(Debug)]
+pub struct ServiceRequest<Req: Send + 'static> {
+    session: SessionHandle,
+    request_id: String,
+    request: Req,
+}
+
+impl<Req: Send + 'static> ServiceRequest<Req> {
+    fn new(session: SessionHandle, request_id: String, request: Req) -> Self {
+        Self {
+            session,
+            request_id,
+            request,
+        }
+    }
+
+    /// Convert this service request into a service call, which can be used to reply to the request.
+    pub fn into_call(self) -> ServiceCall<Req> {
+        ServiceCall::new(self.session, self.request_id, self.request)
+    }
+}
+
+/// A service call, representing a request sent from a client session to a service, which can be replied to.
 #[derive(Debug)]
 pub struct ServiceCall<Req: Send + 'static> {
     session: SessionHandle,
@@ -68,24 +93,29 @@ impl<Req: Send + 'static> ServiceCall<Req> {
         }
     }
 
+    /// Get the session handle associated with this service call.
     pub fn session(&self) -> &SessionHandle {
         &self.session
     }
 
+    /// Get the request payload associated with this service call.
     pub fn request(&self) -> &Req {
         &self.request
     }
 
+    /// Reply to this service call with a successful result.
     pub fn reply_ok<Res: serde::Serialize>(mut self, result: Res) {
         self.replied = true;
         self.session.respond_ok(&self.request_id, result);
     }
 
+    /// Reply to this service call with an error.
     pub fn reply_error<E: std::error::Error>(mut self, error: E) {
         self.replied = true;
         self.session.respond_error(&self.request_id, &error);
     }
 
+    /// Reply to this service call with a result, which can be either a success or an error.
     pub fn reply_result<Res: serde::Serialize, E: std::error::Error>(self, result: Result<Res, E>) {
         match result {
             Ok(result) => self.reply_ok(result),
@@ -186,13 +216,13 @@ impl DispatcherBuilder {
     /// Register a service call handler for a specific service name.
     pub fn register_call<
         Req: serde::de::DeserializeOwned + Send + 'static,
-        A: Actor + message::Message<ServiceCall<Req>, Reply = ()> + Send + 'static,
+        A: Actor + message::Message<ServiceRequest<Req>, Reply = ()> + Send + 'static,
     >(
         &mut self,
         service_name: impl Into<String>,
         actor: ActorRef<A>,
     ) {
-        let recipient = actor.recipient::<ServiceCall<Req>>();
+        let recipient = actor.recipient::<ServiceRequest<Req>>();
         let handler = ServiceHandlerImpl(recipient);
         self.service_handlers
             .insert(service_name.into(), Box::new(handler));
@@ -204,7 +234,7 @@ trait ServiceHandler: Send + Sync + fmt::Debug + 'static {
 }
 
 struct ServiceHandlerImpl<Req: serde::de::DeserializeOwned + Send + 'static>(
-    Recipient<ServiceCall<Req>>,
+    Recipient<ServiceRequest<Req>>,
 );
 
 impl<Req: serde::de::DeserializeOwned + Send + 'static> fmt::Debug for ServiceHandlerImpl<Req> {
@@ -223,8 +253,8 @@ impl<Req: serde::de::DeserializeOwned + Send + 'static> ServiceHandler for Servi
             }
         };
 
-        let call = ServiceCall::new(session.clone(), request_id.clone(), req);
-        if let Err(error) = self.0.tell(call).try_send() {
+        let request = ServiceRequest::new(session.clone(), request_id.clone(), req);
+        if let Err(error) = self.0.tell(request).try_send() {
             tracing::error!(%error, "could not dispatch service call");
             session.respond_error(
                 &request_id,
