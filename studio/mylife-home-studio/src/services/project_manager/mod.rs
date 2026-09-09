@@ -4,6 +4,8 @@ use studio_web_api::{project_manager::UpdateListNotification, protocol};
 
 use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEvent};
 
+mod fs_collection;
+
 const PROJECT_MANAGER_NAME: &str = "project-manager";
 
 pub async fn init(actors: &mut SpawnedActors, dispatcher: &mut DispatcherBuilder) {
