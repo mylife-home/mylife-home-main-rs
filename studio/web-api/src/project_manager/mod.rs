@@ -497,11 +497,20 @@ register_ts!(UpdateListNotification);
 pub struct SetListNotification {
     pub r#type: ProjectType,
     pub name: String,
-    #[ts(type = "ProjectInfo")]
-    pub info: serde_json::Value,
+    pub info: ProjectInfo,
 }
 
 register_ts!(SetListNotification);
+
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "project-manager.ts")]
+#[serde(transparent)]
+#[ts(type = "{}")]
+pub struct ProjectInfo(serde_json::Value);
+
+register_ts!(ProjectInfo);
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
@@ -847,6 +856,26 @@ pub struct RenameCoreTemplateNotification {
 }
 
 register_ts!(RenameCoreTemplateNotification);
+
+// ===========================================================================
+// Project calls (depends on context for real types)
+// ===========================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "project-manager.ts")]
+#[serde(transparent)]
+#[ts(type = "{}")]
+pub struct ProjectCall(serde_json::Value);
+
+register_ts!(ProjectCall);
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "project-manager.ts")]
+#[serde(transparent)]
+#[ts(type = "{}")]
+pub struct ProjectCallResult(serde_json::Value);
+
+register_ts!(ProjectCallResult);
 
 // ===========================================================================
 // UI project calls (tagged on `operation`)

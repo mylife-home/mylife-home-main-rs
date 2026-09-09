@@ -26,12 +26,7 @@ import type { ControlDisplayMapItem } from './ui-model';
 export type UiControlDisplayData = ControlDisplay;
 export type UiControlDisplayMapItemData = ControlDisplayMapItem;
 export type UiActionData = Action;
-export type UiElementPath = UiElementPathNode[];
-
-export interface ProjectCall {}
-export interface ProjectCallResult {}
-
-export interface ProjectInfo {}",
+export type UiElementPath = UiElementPathNode[];",
     },
     Appendix {
         file: "component-model.ts",
