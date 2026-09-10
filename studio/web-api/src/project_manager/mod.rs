@@ -502,14 +502,12 @@ pub struct SetListNotification {
 
 register_ts!(SetListNotification);
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[ts(type = "{}")]
 pub struct ProjectInfo(serde_json::Value);
 
 register_ts!(ProjectInfo);
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
