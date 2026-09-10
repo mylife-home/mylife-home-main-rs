@@ -39,7 +39,7 @@ async fn main() {
     let instance_info_handle = instance_info::InstanceInfoProviderHandle::new_safe();
     instance_info_handle.add_component("studio", env!("CARGO_PKG_VERSION"));
 
-    let mut dispatcher = web::DispatcherBuilder::new();
+    let dispatcher = web::DispatcherBuilder::new();
 
     services::init(&mut actors, &mut dispatcher, &init_data).await;
 
