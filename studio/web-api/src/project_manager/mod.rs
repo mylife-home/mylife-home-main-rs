@@ -505,7 +505,6 @@ register_ts!(SetListNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
-#[serde(transparent)]
 #[ts(type = "{}")]
 pub struct ProjectInfo(serde_json::Value);
 
@@ -863,7 +862,6 @@ register_ts!(RenameCoreTemplateNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
-#[serde(transparent)]
 #[ts(type = "{}")]
 pub struct ProjectCall(serde_json::Value);
 
@@ -871,7 +869,6 @@ register_ts!(ProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
-#[serde(transparent)]
 #[ts(type = "{}")]
 pub struct ProjectCallResult(serde_json::Value);
 
