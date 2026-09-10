@@ -7,3 +7,18 @@ server_address = "%{BUS_SERVER|rpi-dev-home-main:1883}"
 
 [web]
 listen_address = "0.0.0.0:%{WEB_PORT|8002}"
+
+[git]
+app_url = "https://www.google.com"
+
+[paths]
+root = "../../../mylife-home-studio-data-dev"
+
+[paths.project_manager]
+ui = "ui-projects"
+core = "core-projects"
+
+[paths.deploy]
+files = "files"
+recipes = "recipes"
+pinned_recipes_file = "pinned-recipes.json"
