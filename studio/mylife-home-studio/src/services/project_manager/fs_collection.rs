@@ -1,7 +1,12 @@
-use std::{collections::{HashMap, HashSet}, io, path::{Path, PathBuf}, time::SystemTime};
+use std::{
+    collections::{HashMap, HashSet},
+    io,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 use bytes::Bytes;
-use serde::{ser::Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, ser::Serialize};
 use thiserror::Error;
 use tokio::fs;
 
@@ -51,10 +56,7 @@ pub struct WithEvents<T> {
 impl<T> WithEvents<T> {
     /// Creates a new `WithEvents` instance with the given value and a list of events.
     pub fn multi(value: T, events: Vec<Event>) -> Self {
-        Self {
-            value,
-            events,
-        }
+        Self { value, events }
     }
 
     /// Creates a new `WithEvents` instance with the given value and a single event.
@@ -87,6 +89,14 @@ pub struct FsCollection<T: DeserializeOwned + Serialize> {
 }
 
 impl<T: DeserializeOwned + Serialize> FsCollection<T> {
+    /// Creates a new `FsCollection` instance with the given path.
+    pub fn new(path: PathBuf) -> Self {
+        Self {
+            items: HashMap::new(),
+            path,
+        }
+    }
+
     /// Refreshes the collection with regard to the current state of the filesystem.
     pub async fn refresh(&mut self) -> WithEvents<()> {
         let mut id_set = self.items.keys().cloned().collect::<HashSet<_>>();
@@ -113,14 +123,17 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
             // get id from the file name (remove .json)
             let file_name = entry.file_name();
 
-            let Some(file_name_str) = file_name.to_str() else { 
+            let Some(file_name_str) = file_name.to_str() else {
                 tracing::warn!("Failed to convert file name to string: {:?}", file_name);
                 continue;
             };
 
-            let Some(id) = file_name_str.strip_suffix(".json") else { 
-                tracing::debug!("Failed to strip .json suffix from file name: {}", file_name_str);
-                continue; 
+            let Some(id) = file_name_str.strip_suffix(".json") else {
+                tracing::debug!(
+                    "Failed to strip .json suffix from file name: {}",
+                    file_name_str
+                );
+                continue;
             };
 
             let maybe_existing_item = self.items.get_mut(id);
@@ -134,7 +147,11 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
                 };
 
                 if updated {
-                    events.push(Event { id: id.to_owned(), kind: Kind::Updated, origin: Origin::External });
+                    events.push(Event {
+                        id: id.to_owned(),
+                        kind: Kind::Updated,
+                        origin: Origin::External,
+                    });
                 }
 
                 id_set.remove(id);
@@ -149,14 +166,22 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
 
                 self.items.insert(id.to_owned(), item);
 
-                events.push(Event { id: id.to_owned(), kind: Kind::Created, origin: Origin::External });
+                events.push(Event {
+                    id: id.to_owned(),
+                    kind: Kind::Created,
+                    origin: Origin::External,
+                });
             }
         }
 
         // Remove items that are no longer present in the filesystem.
         for id in id_set {
             self.items.remove(&id);
-            events.push(Event { id, kind: Kind::Deleted, origin: Origin::External });
+            events.push(Event {
+                id,
+                kind: Kind::Deleted,
+                origin: Origin::External,
+            });
         }
 
         WithEvents::multi((), events)
@@ -172,7 +197,11 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
     }
 
     /// Creates a new item in the collection with the given ID and value. Fails if the item already exists.
-    pub async fn create(&mut self, id: &str, value: T) -> Result<WithEvents<()>, FsCollectionError> {
+    pub async fn create(
+        &mut self,
+        id: &str,
+        value: T,
+    ) -> Result<WithEvents<()>, FsCollectionError> {
         if self.items.contains_key(id) {
             return Err(FsCollectionError::AlreadyExists(id.to_owned()));
         }
@@ -182,48 +211,98 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
 
         self.items.insert(id.to_owned(), item);
 
-        Ok(WithEvents::single((), Event { id: id.to_owned(), kind: Kind::Created, origin: Origin::Internal }))
+        Ok(WithEvents::single(
+            (),
+            Event {
+                id: id.to_owned(),
+                kind: Kind::Created,
+                origin: Origin::Internal,
+            },
+        ))
     }
 
     /// Updates the value of an existing item in the collection. Fails if the item does not exist.
-    pub async fn update(&mut self, id: &str, value: T) -> Result<WithEvents<()>, FsCollectionError> {
-        let item = self.items.get_mut(id).ok_or_else(|| FsCollectionError::NotFound(id.to_owned()))?;
+    pub async fn update(
+        &mut self,
+        id: &str,
+        value: T,
+    ) -> Result<WithEvents<()>, FsCollectionError> {
+        let item = self
+            .items
+            .get_mut(id)
+            .ok_or_else(|| FsCollectionError::NotFound(id.to_owned()))?;
         item.update(value).await?;
 
-        Ok(WithEvents::single((), Event { id: id.to_owned(), kind: Kind::Updated, origin: Origin::Internal }))
+        Ok(WithEvents::single(
+            (),
+            Event {
+                id: id.to_owned(),
+                kind: Kind::Updated,
+                origin: Origin::Internal,
+            },
+        ))
     }
 
     /// Renames an existing item in the collection. Fails if the item does not exist.
-    pub async fn rename(&mut self, id: &str, new_id: &str) -> Result<WithEvents<()>, FsCollectionError> {
+    pub async fn rename(
+        &mut self,
+        id: &str,
+        new_id: &str,
+    ) -> Result<WithEvents<()>, FsCollectionError> {
         if self.items.contains_key(new_id) {
             return Err(FsCollectionError::AlreadyExists(new_id.to_owned()));
         }
         let new_path = self.make_path(new_id);
 
         // do not remove it before real rename
-        let item = self.items.get_mut(id).ok_or_else(|| FsCollectionError::NotFound(id.to_owned()))?;
+        let item = self
+            .items
+            .get_mut(id)
+            .ok_or_else(|| FsCollectionError::NotFound(id.to_owned()))?;
         item.rename(new_path).await?;
 
         let item = self.items.remove(id).expect("item not found");
         self.items.insert(new_id.to_owned(), item);
 
-        Ok(WithEvents::single((), Event { id: id.to_owned(), kind: Kind::Renamed { new_id: new_id.to_owned() }, origin: Origin::Internal }))
+        Ok(WithEvents::single(
+            (),
+            Event {
+                id: id.to_owned(),
+                kind: Kind::Renamed {
+                    new_id: new_id.to_owned(),
+                },
+                origin: Origin::Internal,
+            },
+        ))
     }
 
     /// Deletes an existing item from the collection. Fails if the item does not exist.
     pub async fn delete(&mut self, id: &str) -> Result<WithEvents<()>, FsCollectionError> {
         // do not remove it before real rename
-        let item = self.items.get_mut(id).ok_or_else(|| FsCollectionError::NotFound(id.to_owned()))?;
+        let item = self
+            .items
+            .get_mut(id)
+            .ok_or_else(|| FsCollectionError::NotFound(id.to_owned()))?;
 
         item.delete().await?;
         self.items.remove(id);
 
-        Ok(WithEvents::single((), Event { id: id.to_owned(), kind: Kind::Deleted, origin: Origin::Internal }))
+        Ok(WithEvents::single(
+            (),
+            Event {
+                id: id.to_owned(),
+                kind: Kind::Deleted,
+                origin: Origin::Internal,
+            },
+        ))
     }
 
     /// Retrieves the value of an existing item in the collection. Fails if the item does not exist.
     pub async fn get(&self, id: &str) -> Result<&T, FsCollectionError> {
-        let item = self.items.get(id).ok_or_else(|| FsCollectionError::NotFound(id.to_owned()))?;
+        let item = self
+            .items
+            .get(id)
+            .ok_or_else(|| FsCollectionError::NotFound(id.to_owned()))?;
         Ok(&item.value)
     }
 
@@ -247,7 +326,7 @@ impl<T: DeserializeOwned + Serialize> Item<T> {
         let raw = Bytes::from_owner(serde_json::to_vec(&value)?);
 
         fs::write(&path, &raw).await?;
-        
+
         let metadata = fs::metadata(&path).await?;
         let size = metadata.len();
         let modified = metadata.modified()?;
