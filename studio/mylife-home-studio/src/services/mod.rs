@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use common::utils::config;
 use common::{InitData, utils::actors::SpawnedActors};
 
+use crate::services::project_manager::ProjectManagerConfig;
 use crate::web::DispatcherBuilder;
 
 mod git;
@@ -79,5 +80,14 @@ pub async fn init(
     online::init(actors, dispatcher, init_data).await;
     git::init(actors, dispatcher).await;
     logging::init(actors, dispatcher).await;
-    project_manager::init(actors, dispatcher).await;
+
+    project_manager::init(
+        actors,
+        dispatcher,
+        ProjectManagerConfig {
+            core_projects_store_path: paths.project_manager.core,
+            ui_projects_store_path: paths.project_manager.ui,
+        },
+    )
+    .await;
 }
