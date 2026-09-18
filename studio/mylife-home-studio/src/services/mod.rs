@@ -15,13 +15,11 @@ mod project_manager;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct GitConfig {
     pub app_url: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct PathsConfig {
     pub root: PathBuf,
     pub project_manager: ProjectManagerPaths,
@@ -54,14 +52,12 @@ impl PathsConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct ProjectManagerPaths {
     pub ui: PathBuf,
     pub core: PathBuf,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct DeployPaths {
     pub files: PathBuf,
     pub recipes: PathBuf,
