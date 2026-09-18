@@ -17,7 +17,7 @@ register_ts!(Component);
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "component-model.ts")]
 pub struct Member {
-    pub description: String,
+    pub description: Option<String>,
     pub member_type: MemberType,
     pub value_type: String,
 }
@@ -32,7 +32,7 @@ pub struct Plugin {
     pub module: String,
     pub usage: PluginUsage,
     pub version: String,
-    pub description: String,
+    pub description: Option<String>,
     pub members: std::collections::HashMap<String, Member>,
     pub config: std::collections::HashMap<String, ConfigItem>,
 }
@@ -49,7 +49,7 @@ pub enum MemberType {
 
 register_ts!(MemberType);
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "component-model.ts")]
 pub enum PluginUsage {
@@ -65,7 +65,7 @@ register_ts!(PluginUsage);
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "component-model.ts")]
 pub struct ConfigItem {
-    pub description: String,
+    pub description: Option<String>,
     pub value_type: ConfigType,
 }
 

@@ -32,7 +32,7 @@ pub enum ChangeType {
 
 register_ts!(ChangeType);
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectType {
@@ -42,7 +42,7 @@ pub enum ProjectType {
 
 register_ts!(ProjectType);
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum CoreComponentDefinitionType {
@@ -52,7 +52,7 @@ pub enum CoreComponentDefinitionType {
 
 register_ts!(CoreComponentDefinitionType);
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum CoreToolboxDisplay {
@@ -129,7 +129,6 @@ register_ts!(CoreComponentDefinition);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreComponentData {
-    pub id: String,
     pub definition: CoreComponentDefinition,
     pub position: CorePosition,
     pub config: CoreComponentConfiguration,
@@ -158,7 +157,7 @@ pub struct CorePluginData {
     pub module: String,
     pub usage: PluginUsage,
     pub version: String,
-    pub description: String,
+    pub description: Option<String>,
     pub members: HashMap<String, Member>,
     pub config: HashMap<String, ConfigItem>,
     pub instance_name: String,
@@ -234,11 +233,11 @@ register_ts!(CoreProject);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreProjectInfo {
-    pub instances_count: i32,
-    pub plugins_count: i32,
-    pub templates_count: i32,
-    pub components_counts: HashMap<String, i32>,
-    pub bindings_count: i32,
+    pub instances_count: usize,
+    pub plugins_count: usize,
+    pub templates_count: usize,
+    pub components_counts: HashMap<PluginUsage, usize>,
+    pub bindings_count: usize,
 }
 
 register_ts!(CoreProjectInfo);
@@ -283,7 +282,7 @@ pub struct UiPluginData {
     pub name: String,
     pub module: String,
     pub version: String,
-    pub description: String,
+    pub description: Option<String>,
     pub members: HashMap<String, Member>,
     pub config: HashMap<String, ConfigItem>,
     pub instance_name: String,
@@ -394,7 +393,7 @@ register_ts!(UiWindowData);
 #[serde(rename_all = "camelCase")]
 pub struct UiTemplateExport {
     pub bulk_pattern: String,
-    pub description: String,
+    pub description: Option<String>,
     pub member_type: MemberType,
     pub value_type: String,
 }
@@ -433,11 +432,11 @@ register_ts!(UiProject);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiProjectInfo {
-    pub windows_count: i32,
-    pub resources_count: i32,
-    pub resources_size: i32,
-    pub styles_count: i32,
-    pub components_count: i32,
+    pub windows_count: usize,
+    pub resources_count: usize,
+    pub resources_size: usize,
+    pub styles_count: usize,
+    pub components_count: usize,
 }
 
 register_ts!(UiProjectInfo);
@@ -505,7 +504,7 @@ register_ts!(SetListNotification);
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[ts(type = "{}")]
-pub struct ProjectInfo(serde_json::Value);
+pub struct ProjectInfo(pub serde_json::Value);
 
 register_ts!(ProjectInfo);
 
