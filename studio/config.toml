@@ -12,7 +12,7 @@ listen_address = "0.0.0.0:%{WEB_PORT|8002}"
 app_url = "https://www.google.com"
 
 [paths]
-root = "../../../mylife-home-studio-data-dev"
+root = "../../mylife-home-studio-data-dev"
 
 [paths.project_manager]
 ui = "ui-projects"

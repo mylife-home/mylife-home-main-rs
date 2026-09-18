@@ -141,7 +141,7 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
                 let updated = match item.handle_refresh().await {
                     Ok(updated) => updated,
                     Err(e) => {
-                        tracing::error!(error = ?e, "refresh: error handling item refresh");
+                        tracing::error!(error = ?e, id, "refresh: error handling item refresh");
                         continue;
                     }
                 };
@@ -159,7 +159,7 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
                 let item = match Item::handle_new(self.make_path(id)).await {
                     Ok(item) => item,
                     Err(e) => {
-                        tracing::error!(error = ?e, "refresh: error handling new item");
+                        tracing::error!(error = ?e, id, "refresh: error handling new item");
                         continue;
                     }
                 };
@@ -298,12 +298,17 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
     }
 
     /// Retrieves the value of an existing item in the collection. Fails if the item does not exist.
-    pub async fn get(&self, id: &str) -> Result<&T, FsCollectionError> {
+    pub fn get(&self, id: &str) -> Result<&T, FsCollectionError> {
         let item = self
             .items
             .get(id)
             .ok_or_else(|| FsCollectionError::NotFound(id.to_owned()))?;
         Ok(&item.value)
+    }
+
+    /// Retrieves a list of all item IDs in the collection.
+    pub fn ids(&self) -> Vec<&str> {
+        self.items.keys().map(|key| key.as_str()).collect()
     }
 
     fn make_path(&self, id: &str) -> PathBuf {

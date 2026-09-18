@@ -264,7 +264,7 @@ impl OnlineComponents {
             module: plugin.module().to_owned(),
             usage: Self::convert_usage(plugin.usage()),
             version: plugin.version().to_owned(),
-            description: plugin.description().unwrap_or_default().to_owned(),
+            description: plugin.description().map(|s| s.to_owned()),
             members: plugin
                 .members()
                 .iter()
@@ -280,7 +280,7 @@ impl OnlineComponents {
 
     fn convert_member(member: &metadata::Member) -> component_model::Member {
         component_model::Member {
-            description: member.description().unwrap_or_default().to_owned(),
+            description: member.description().map(|s| s.to_owned()),
             member_type: match member.member_type() {
                 MemberType::Action => component_model::MemberType::Action,
                 MemberType::State => component_model::MemberType::State,
@@ -291,7 +291,7 @@ impl OnlineComponents {
 
     fn convert_config_item(item: &metadata::ConfigItem) -> component_model::ConfigItem {
         component_model::ConfigItem {
-            description: item.description().unwrap_or_default().to_owned(),
+            description: item.description().map(|s| s.to_owned()),
             value_type: match item.value_type() {
                 ConfigType::String => component_model::ConfigType::String,
                 ConfigType::Bool => component_model::ConfigType::Bool,
