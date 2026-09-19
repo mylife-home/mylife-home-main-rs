@@ -1,8 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
-    io,
-    path::{Path, PathBuf},
-    time::SystemTime,
+    collections::{HashMap, HashSet}, io, mem, path::{Path, PathBuf}, time::SystemTime,
 };
 
 use bytes::Bytes;
@@ -86,6 +83,7 @@ impl<T> From<WithEvents<T>> for (T, Vec<Event>) {
 pub struct FsCollection<T: DeserializeOwned + Serialize> {
     items: HashMap<String, Item<T>>,
     path: PathBuf,
+    refresh_failures: HashSet<String>,
 }
 
 impl<T: DeserializeOwned + Serialize> FsCollection<T> {
@@ -94,6 +92,7 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
         Self {
             items: HashMap::new(),
             path,
+            refresh_failures: HashSet::new(),
         }
     }
 
@@ -109,6 +108,9 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
                 return WithEvents::empty(());
             }
         };
+
+        let mut last_refresh_failures = HashSet::new();
+        mem::swap(&mut self.refresh_failures, &mut last_refresh_failures);
 
         loop {
             let entry = match readdir.next_entry().await {
@@ -141,7 +143,12 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
                 let updated = match item.handle_refresh().await {
                     Ok(updated) => updated,
                     Err(e) => {
-                        tracing::error!(error = ?e, id, "refresh: error handling item refresh");
+                        // Avoid flooding the logs with repeated errors for the same ID.
+                        if !last_refresh_failures.contains(id) {
+                            tracing::error!(error = ?e, id, "refresh: error handling item refresh");
+                        }
+
+                        self.refresh_failures.insert(id.to_owned());
                         continue;
                     }
                 };
@@ -159,7 +166,12 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
                 let item = match Item::handle_new(self.make_path(id)).await {
                     Ok(item) => item,
                     Err(e) => {
-                        tracing::error!(error = ?e, id, "refresh: error handling new item");
+                        // Avoid flooding the logs with repeated errors for the same ID.
+                        if !last_refresh_failures.contains(id) {
+                            tracing::error!(error = ?e, id, "refresh: error handling new item");
+                        }
+
+                        self.refresh_failures.insert(id.to_owned());
                         continue;
                     }
                 };
