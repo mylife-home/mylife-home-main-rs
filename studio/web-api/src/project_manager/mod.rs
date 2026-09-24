@@ -430,6 +430,12 @@ pub struct UiTemplateData {
 
 register_ts!(UiTemplateData);
 
+/// DefaultWindow maps a context key to a window id.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "model.ts")]
+#[ts(type = "{ [key: string]: string }")]
+pub struct UiDefaultWindowData(pub HashMap<String, Option<String>>);
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
@@ -438,7 +444,7 @@ pub struct UiProject {
     pub styles: HashMap<String, UiStyleData>,
     pub windows: HashMap<String, UiWindowData>,
     pub templates: HashMap<String, UiTemplateData>,
-    pub default_window: DefaultWindow,
+    pub default_window: UiDefaultWindowData,
     pub components: HashMap<String, UiComponentData>,
     pub plugins: HashMap<String, UiPluginData>,
 }

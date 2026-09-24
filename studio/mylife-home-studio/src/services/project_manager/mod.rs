@@ -13,8 +13,7 @@ use studio_web_api::{component_model, project_manager, protocol};
 use thiserror::Error;
 
 use crate::{
-    services::project_manager::fs_collection::{Event, FsCollection, FsCollectionError, Kind},
-    web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
+    services::project_manager::fs_collection::{Event, FsCollection, FsCollectionError, Kind, WithEvents}, web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
 };
 
 mod fs_collection;
@@ -361,6 +360,38 @@ impl ProjectManager {
 
         notifier.notify(&notification);
     }
+
+    async fn create_new_project(&mut self, ty: project_manager::ProjectType, id: &str) -> Result<WithEvents<()>, ProjectManagerActorError> {
+        match ty {
+            project_manager::ProjectType::Core => {
+                // Implementation for creating a new core project goes here
+                let project = project_manager::CoreProject {
+                    components: HashMap::new(),
+                    plugins: HashMap::new(),
+                    bindings: HashMap::new(),
+                    templates: HashMap::new(),
+                };
+
+                Ok(self.core_project_collection.create(id, project).await?)
+            }
+            project_manager::ProjectType::Ui => {
+                let project = project_manager::UiProject {
+                    resources: HashMap::new(),
+                    styles: HashMap::new(),
+                    windows: HashMap::new(),
+                    templates: HashMap::new(),
+                    default_window: project_manager::UiDefaultWindowData(HashMap::from_iter([
+                        ("desktop".to_string(), None),
+                        ("mobile".to_string(), None),
+                    ])),
+                    components: HashMap::new(),
+                    plugins: HashMap::new(),
+                };
+
+                Ok(self.ui_project_collection.create(id, project).await?)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -453,6 +484,23 @@ impl message::Message<ServiceRequest<CreateNewReq>> for ProjectManager {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let call = request.into_call();
+        let request = call.request();
+        let ty = request.r#type;
+        let res = self.create_new_project(ty, &request.id).await;
+
+        let (res, events) = match res {
+            Ok(with_events) => {
+                let (val, events) = with_events.into(); 
+                (Ok(val), events)
+            },
+            Err(err) => (Err(err), Vec::new()),
+        };
+
+        call.reply_result(res);
+
+        for event in events {
+            self.emit_event(ty, &event);
+        }
     }
 }
 
