@@ -8,7 +8,7 @@ use crate::register_ts;
 // Adjust these paths to your actual module layout.
 use crate::component_model::{ConfigItem, Member, MemberType, PluginUsage};
 use crate::ui_model::{
-    Action, ControlDisplay, ControlDisplayMapItem, DefaultWindow, Resource, Style,
+    ActionWindow, ControlDisplay, ControlDisplayMapItem, DefaultWindow, Resource, Style,
 };
 use core_import_data::ObjectChange;
 use core_validation::Item;
@@ -284,7 +284,6 @@ pub struct UiPluginData {
     pub version: String,
     pub description: Option<String>,
     pub members: HashMap<String, Member>,
-    pub config: HashMap<String, ConfigItem>,
     pub instance_name: String,
 }
 
@@ -317,7 +316,7 @@ register_ts!(UiTemplateInstanceData);
 #[serde(rename_all = "camelCase")]
 pub struct UiControlTextContextItemData {
     pub id: String,
-    pub component_id: String,
+    pub component_id: Option<String>, // Can be null for templates
     pub component_state: String,
     /// used only for designer render, not deployed
     #[ts(type = "any")]
@@ -340,7 +339,6 @@ register_ts!(UiControlTextData);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiControlData {
-    pub id: String,
     pub style: Style,
     pub height: i32,
     pub width: i32,
@@ -348,17 +346,36 @@ pub struct UiControlData {
     pub y: i32,
     /// null when the control has no display
     pub display: Option<ControlDisplay>,
-    pub text: UiControlTextData,
+    pub text: Option<UiControlTextData>,
     /// null when there is no primary action
-    pub primary_action: Option<Action>,
+    pub primary_action: Option<UiActionData>,
     /// null when there is no secondary action
-    pub secondary_action: Option<Action>,
+    pub secondary_action: Option<UiActionData>,
 }
 
 register_ts!(UiControlData);
 
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "project-manager.ts")]
+#[serde(rename_all = "camelCase")]
+pub struct UiActionData {
+    pub component: Option<UiActionComponentData>,
+    pub window: Option<ActionWindow>,
+}
+
+register_ts!(UiActionData);
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "model.ts")]
+#[serde(rename_all = "camelCase")]
+pub struct UiActionComponentData {
+    pub id: Option<String>, // Can be null for templates
+    pub action: String,
+}
+
+register_ts!(UiActionComponentData);
+
 /// Aliases of the shared ui/model types, re-exported under UI-project names.
-pub type UiActionData = Action;
 pub type UiControlDisplayData = ControlDisplay;
 pub type UiControlDisplayMapItemData = ControlDisplayMapItem;
 
@@ -383,7 +400,7 @@ pub struct UiWindowData {
     pub controls: HashMap<String, UiControlData>,
     pub templates: HashMap<String, UiTemplateInstanceData>,
     pub style: Style,
-    pub background_resource: Resource,
+    pub background_resource: Option<Resource>,
 }
 
 register_ts!(UiWindowData);

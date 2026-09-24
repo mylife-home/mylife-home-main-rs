@@ -25,7 +25,6 @@ export * as coreValidation from './project-manager-core-validation';
 import type { ControlDisplayMapItem } from './ui-model';
 export type UiControlDisplayData = ControlDisplay;
 export type UiControlDisplayMapItemData = ControlDisplayMapItem;
-export type UiActionData = Action;
 export type UiElementPath = UiElementPathNode[];",
     },
     Appendix {
