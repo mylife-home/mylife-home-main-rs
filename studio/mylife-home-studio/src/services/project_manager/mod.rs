@@ -265,14 +265,19 @@ impl ProjectManager {
         &self,
         id: &str,
     ) -> Result<project_manager::ProjectInfo, ProjectManagerActorError> {
-        let ui_project = self.ui_project_collection.get(id)?;
+        let project = self.ui_project_collection.get(id)?;
 
-        let mut info = project_manager::UiProjectInfo {
-            windows_count: 0,
-            resources_count: 0,
-            resources_size: 0,
-            styles_count: 0,
-            components_count: 0,
+        let resource_binary_length = |resource: &project_manager::UiResourceData| -> usize {
+            // base64 length = 4 chars represents 3 binary bytes
+            (resource.data.len() * 3) / 4
+        };
+
+        let info = project_manager::UiProjectInfo {
+            windows_count: project.windows.len(),
+            resources_count: project.resources.len(),
+            resources_size: project.resources.iter().map(|(_, res)| resource_binary_length(res)).sum(),
+            styles_count: project.styles.len(),
+            components_count: project.components.len(),
         };
 
         Ok(project_manager::ProjectInfo(serde_json::to_value(&info)?))
