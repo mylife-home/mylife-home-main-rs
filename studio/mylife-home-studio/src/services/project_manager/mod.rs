@@ -1,16 +1,20 @@
-use std::{collections::HashMap, path::PathBuf, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    format,
+    path::PathBuf,
+    time::Duration,
+};
 
 use common::utils::actors::{
     ActorHandle, CallError, HandleLookupError, SchedulerHandle, SpawnedActor, SpawnedActors,
 };
 use kameo::{message, prelude::*};
-use studio_web_api::{
-    component_model, project_manager::{self, UpdateListNotification}, protocol,
-};
+use studio_web_api::{component_model, project_manager, protocol};
 use thiserror::Error;
 
 use crate::{
-    services::project_manager::fs_collection::{Event, FsCollection, FsCollectionError, Kind}, web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
+    services::project_manager::fs_collection::{Event, FsCollection, FsCollectionError, Kind},
+    web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
 };
 
 mod fs_collection;
@@ -152,7 +156,7 @@ pub struct ProjectManagerConfig {
 
 #[derive(Debug)]
 struct ProjectManager {
-    list_notifiers: NotifierManager<UpdateListNotification>,
+    list_notifiers: NotifierManager<project_manager::UpdateListNotification>,
     core_project_collection: FsCollection<project_manager::CoreProject>,
     ui_project_collection: FsCollection<project_manager::UiProject>,
 }
@@ -164,6 +168,12 @@ pub enum ProjectManagerActorError {
     HandleLookupError(#[from] HandleLookupError),
     #[error("Failed to set interval: {0}")]
     SchedulerError(#[from] CallError),
+    #[error("Failed to access data: {0}")]
+    DataAccessError(#[from] FsCollectionError),
+    #[error("Failed to process data: {0}")]
+    DataProcessingError(String),
+    #[error("Serialization error: {0}")]
+    SerializationError(#[from] serde_json::Error),
 }
 
 impl Actor for ProjectManager {
@@ -189,13 +199,19 @@ impl ProjectManager {
     fn compute_core_project_info(
         &self,
         id: &str,
-    ) -> Result<project_manager::ProjectInfo, FsCollectionError> {
-        let core_project = self.core_project_collection.get(id)?;
+    ) -> Result<project_manager::ProjectInfo, ProjectManagerActorError> {
+        let project = self.core_project_collection.get(id)?;
+
+        let mut instances = HashSet::new();
+
+        for plugin in project.plugins.values() {
+            instances.insert(plugin.instance_name.as_str());
+        }
 
         let mut info = project_manager::CoreProjectInfo {
-            instances_count: 0,
-            plugins_count: 0,
-            templates_count: 0,
+            instances_count: instances.len(),
+            plugins_count: project.plugins.len(),
+            templates_count: project.templates.len(),
             components_counts: HashMap::from([
                 (component_model::PluginUsage::Sensor, 0),
                 (component_model::PluginUsage::Actuator, 0),
@@ -205,13 +221,50 @@ impl ProjectManager {
             bindings_count: 0,
         };
 
+        let mut process_components_bindings =
+            |components: &HashMap<String, project_manager::CoreComponentData>,
+             bindings: &HashMap<String, project_manager::CoreBindingData>|
+             -> Result<(), ProjectManagerActorError> {
+                info.bindings_count += bindings.len();
+
+                for component in components.values() {
+                    let usage = match &component.definition.r#type {
+                        project_manager::CoreComponentDefinitionType::Plugin => {
+                            let Some(plugin) = project.plugins.get(&component.definition.id) else {
+                                return Err(ProjectManagerActorError::DataProcessingError(
+                                    format!(
+                                        "Plugin '{}' not found in project",
+                                        &component.definition.id
+                                    ),
+                                ));
+                            };
+
+                            plugin.usage
+                        }
+                        project_manager::CoreComponentDefinitionType::Template => {
+                            component_model::PluginUsage::Logic
+                        }
+                    };
+
+                    *info.components_counts.entry(usage).or_insert(0) += 1;
+                }
+
+                Ok(())
+            };
+
+        process_components_bindings(&project.components, &project.bindings)?;
+
+        for template in project.templates.values() {
+            process_components_bindings(&template.components, &template.bindings)?;
+        }
+
         Ok(project_manager::ProjectInfo(serde_json::to_value(&info)?))
     }
 
     fn compute_ui_project_info(
         &self,
         id: &str,
-    ) -> Result<project_manager::ProjectInfo, FsCollectionError> {
+    ) -> Result<project_manager::ProjectInfo, ProjectManagerActorError> {
         let ui_project = self.ui_project_collection.get(id)?;
 
         let mut info = project_manager::UiProjectInfo {
@@ -229,7 +282,7 @@ impl ProjectManager {
         &self,
         ty: project_manager::ProjectType,
         id: &str,
-    ) -> Result<project_manager::ProjectInfo, FsCollectionError> {
+    ) -> Result<project_manager::ProjectInfo, ProjectManagerActorError> {
         match ty {
             project_manager::ProjectType::Core => self.compute_core_project_info(id),
             project_manager::ProjectType::Ui => self.compute_ui_project_info(id),
@@ -240,30 +293,30 @@ impl ProjectManager {
         &self,
         ty: project_manager::ProjectType,
         event: &Event,
-    ) -> Result<UpdateListNotification, FsCollectionError> {
+    ) -> Result<project_manager::UpdateListNotification, ProjectManagerActorError> {
         let notification = match &event.kind {
             Kind::Created | Kind::Updated => {
                 let info = self.compute_project_info(ty, &event.id)?;
 
-                UpdateListNotification::Set(project_manager::SetListNotification {
+                project_manager::UpdateListNotification::Set(project_manager::SetListNotification {
                     r#type: ty,
                     name: event.id.clone(),
                     info,
                 })
             }
-            Kind::Deleted => {
-                UpdateListNotification::Clear(project_manager::ClearListNotification {
+            Kind::Deleted => project_manager::UpdateListNotification::Clear(
+                project_manager::ClearListNotification {
                     r#type: ty,
                     name: event.id.clone(),
-                })
-            }
-            Kind::Renamed { new_id } => {
-                UpdateListNotification::Rename(project_manager::RenameListNotification {
+                },
+            ),
+            Kind::Renamed { new_id } => project_manager::UpdateListNotification::Rename(
+                project_manager::RenameListNotification {
                     r#type: ty,
                     name: event.id.clone(),
                     new_name: new_id.clone(),
-                })
-            }
+                },
+            ),
         };
 
         Ok(notification)
@@ -281,7 +334,12 @@ impl ProjectManager {
         self.list_notifiers.notify_all(&notification);
     }
 
-    fn emit_initial(&self, notifier: &Notifier<UpdateListNotification>, ty: project_manager::ProjectType, id: &str) {
+    fn emit_initial(
+        &self,
+        notifier: &Notifier<project_manager::UpdateListNotification>,
+        ty: project_manager::ProjectType,
+        id: &str,
+    ) {
         let info = match self.compute_project_info(ty, id) {
             Ok(info) => info,
             Err(e) => {
@@ -290,7 +348,7 @@ impl ProjectManager {
             }
         };
 
-        let notification = UpdateListNotification::Set(project_manager::SetListNotification {
+        let notification = project_manager::UpdateListNotification::Set(project_manager::SetListNotification {
             r#type: ty,
             name: id.to_owned(),
             info,
@@ -345,7 +403,10 @@ impl message::Message<ServiceRequest<StartNotifyListReq>> for ProjectManager {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let call = request.into_call();
-        let notifier = self.list_notifiers.create_notifier(call.session().clone()).clone();
+        let notifier = self
+            .list_notifiers
+            .create_notifier(call.session().clone())
+            .clone();
 
         call.reply_ok(StartNotifyListRes(protocol::NotifierId {
             notifier_id: notifier.notifier_id().into(),
