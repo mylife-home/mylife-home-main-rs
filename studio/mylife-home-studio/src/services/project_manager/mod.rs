@@ -13,7 +13,8 @@ use studio_web_api::{component_model, project_manager, protocol};
 use thiserror::Error;
 
 use crate::{
-    services::project_manager::fs_collection::{Event, FsCollection, FsCollectionError, Kind, WithEvents}, web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
+    services::project_manager::fs_collection::{Event, FsCollection, FsCollectionError, Kind},
+    web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
 };
 
 mod fs_collection;
@@ -274,7 +275,11 @@ impl ProjectManager {
         let info = project_manager::UiProjectInfo {
             windows_count: project.windows.len(),
             resources_count: project.resources.len(),
-            resources_size: project.resources.iter().map(|(_, res)| resource_binary_length(res)).sum(),
+            resources_size: project
+                .resources
+                .iter()
+                .map(|(_, res)| resource_binary_length(res))
+                .sum(),
             styles_count: project.styles.len(),
             components_count: project.components.len(),
         };
@@ -326,6 +331,12 @@ impl ProjectManager {
         Ok(notification)
     }
 
+    fn emit_events(&self, event_collector: Vec<Event>, ty: project_manager::ProjectType) {
+        for event in event_collector {
+            self.emit_event(ty, &event);
+        }
+    }
+
     fn emit_event(&self, ty: project_manager::ProjectType, event: &Event) {
         let notification = match self.translate_event(ty, &event) {
             Ok(notification) => notification,
@@ -352,16 +363,22 @@ impl ProjectManager {
             }
         };
 
-        let notification = project_manager::UpdateListNotification::Set(project_manager::SetListNotification {
-            r#type: ty,
-            name: id.to_owned(),
-            info,
-        });
+        let notification =
+            project_manager::UpdateListNotification::Set(project_manager::SetListNotification {
+                r#type: ty,
+                name: id.to_owned(),
+                info,
+            });
 
         notifier.notify(&notification);
     }
 
-    async fn create_new_project(&mut self, ty: project_manager::ProjectType, id: &str) -> Result<WithEvents<()>, ProjectManagerActorError> {
+    async fn create_new_project(
+        &mut self,
+        event_collector: &mut Vec<Event>,
+        ty: project_manager::ProjectType,
+        id: &str,
+    ) -> Result<(), ProjectManagerActorError> {
         match ty {
             project_manager::ProjectType::Core => {
                 // Implementation for creating a new core project goes here
@@ -372,7 +389,10 @@ impl ProjectManager {
                     templates: HashMap::new(),
                 };
 
-                Ok(self.core_project_collection.create(id, project).await?)
+                Ok(self
+                    .core_project_collection
+                    .create(event_collector, id, project)
+                    .await?)
             }
             project_manager::ProjectType::Ui => {
                 let project = project_manager::UiProject {
@@ -388,7 +408,10 @@ impl ProjectManager {
                     plugins: HashMap::new(),
                 };
 
-                Ok(self.ui_project_collection.create(id, project).await?)
+                Ok(self
+                    .ui_project_collection
+                    .create(event_collector, id, project)
+                    .await?)
             }
         }
     }
@@ -405,15 +428,18 @@ impl message::Message<Refresh> for ProjectManager {
         _msg: Refresh,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let (_, events) = self.core_project_collection.refresh().await.into();
-        for event in events {
-            self.emit_event(project_manager::ProjectType::Core, &event);
-        }
+        let mut core_event_collector = Vec::new();
+        let mut ui_event_collector = Vec::new();
 
-        let (_, events) = self.ui_project_collection.refresh().await.into();
-        for event in events {
-            self.emit_event(project_manager::ProjectType::Ui, &event);
-        }
+        self.core_project_collection
+            .refresh(&mut core_event_collector)
+            .await;
+        self.ui_project_collection
+            .refresh(&mut ui_event_collector)
+            .await;
+
+        self.emit_events(core_event_collector, project_manager::ProjectType::Core);
+        self.emit_events(ui_event_collector, project_manager::ProjectType::Ui);
     }
 }
 
@@ -486,21 +512,14 @@ impl message::Message<ServiceRequest<CreateNewReq>> for ProjectManager {
         let call = request.into_call();
         let request = call.request();
         let ty = request.r#type;
-        let res = self.create_new_project(ty, &request.id).await;
 
-        let (res, events) = match res {
-            Ok(with_events) => {
-                let (val, events) = with_events.into(); 
-                (Ok(val), events)
-            },
-            Err(err) => (Err(err), Vec::new()),
-        };
-
+        let mut event_collector = Vec::new();
+        let res = self
+            .create_new_project(&mut event_collector, ty, &request.id)
+            .await;
         call.reply_result(res);
 
-        for event in events {
-            self.emit_event(ty, &event);
-        }
+        self.emit_events(event_collector, ty);
     }
 }
 

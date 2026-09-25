@@ -47,41 +47,6 @@ pub enum FsCollectionError {
     AlreadyExists(String),
 }
 
-/// A wrapper struct that holds a value along with a list of events associated with it.
-pub struct WithEvents<T> {
-    value: T,
-    events: Vec<Event>,
-}
-
-impl<T> WithEvents<T> {
-    /// Creates a new `WithEvents` instance with the given value and a list of events.
-    pub fn multi(value: T, events: Vec<Event>) -> Self {
-        Self { value, events }
-    }
-
-    /// Creates a new `WithEvents` instance with the given value and a single event.
-    pub fn single(value: T, event: Event) -> Self {
-        Self {
-            value,
-            events: vec![event],
-        }
-    }
-
-    /// Creates a new `WithEvents` instance with the given value and no events.
-    pub fn empty(value: T) -> Self {
-        Self {
-            value,
-            events: Vec::new(),
-        }
-    }
-}
-
-impl<T> From<WithEvents<T>> for (T, Vec<Event>) {
-    fn from(with_events: WithEvents<T>) -> Self {
-        (with_events.value, with_events.events)
-    }
-}
-
 #[derive(Debug)]
 pub struct FsCollection<T: DeserializeOwned + Serialize> {
     items: HashMap<String, Item<T>>,
@@ -100,15 +65,14 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
     }
 
     /// Refreshes the collection with regard to the current state of the filesystem.
-    pub async fn refresh(&mut self) -> WithEvents<()> {
+    pub async fn refresh(&mut self, event_collector: &mut Vec<Event>) {
         let mut id_set = self.items.keys().cloned().collect::<HashSet<_>>();
-        let mut events = Vec::new();
 
         let mut readdir = match fs::read_dir(&self.path).await {
             Ok(rd) => rd,
             Err(e) => {
                 tracing::error!(error = ?e, "refresh: failed to read directory");
-                return WithEvents::empty(());
+                return;
             }
         };
 
@@ -157,7 +121,7 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
                 };
 
                 if updated {
-                    events.push(Event {
+                    event_collector.push(Event {
                         id: id.to_owned(),
                         kind: Kind::Updated,
                         origin: Origin::External,
@@ -181,7 +145,7 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
 
                 self.items.insert(id.to_owned(), item);
 
-                events.push(Event {
+                event_collector.push(Event {
                     id: id.to_owned(),
                     kind: Kind::Created,
                     origin: Origin::External,
@@ -192,31 +156,35 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
         // Remove items that are no longer present in the filesystem.
         for id in id_set {
             self.items.remove(&id);
-            events.push(Event {
+            event_collector.push(Event {
                 id,
                 kind: Kind::Deleted,
                 origin: Origin::External,
             });
         }
-
-        WithEvents::multi((), events)
     }
 
     /// Sets the value of an item in the collection, creating it if it does not exist.
-    pub async fn set(&mut self, id: &str, value: T) -> Result<WithEvents<()>, FsCollectionError> {
+    pub async fn set(
+        &mut self,
+        event_collector: &mut Vec<Event>,
+        id: &str,
+        value: T,
+    ) -> Result<(), FsCollectionError> {
         if self.items.contains_key(id) {
-            self.update(id, value).await
+            self.update(event_collector, id, value).await
         } else {
-            self.create(id, value).await
+            self.create(event_collector, id, value).await
         }
     }
 
     /// Creates a new item in the collection with the given ID and value. Fails if the item already exists.
     pub async fn create(
         &mut self,
+        event_collector: &mut Vec<Event>,
         id: &str,
         value: T,
-    ) -> Result<WithEvents<()>, FsCollectionError> {
+    ) -> Result<(), FsCollectionError> {
         if self.items.contains_key(id) {
             return Err(FsCollectionError::AlreadyExists(id.to_owned()));
         }
@@ -226,44 +194,44 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
 
         self.items.insert(id.to_owned(), item);
 
-        Ok(WithEvents::single(
-            (),
-            Event {
-                id: id.to_owned(),
-                kind: Kind::Created,
-                origin: Origin::Internal,
-            },
-        ))
+        event_collector.push(Event {
+            id: id.to_owned(),
+            kind: Kind::Created,
+            origin: Origin::Internal,
+        });
+
+        Ok(())
     }
 
     /// Updates the value of an existing item in the collection. Fails if the item does not exist.
     pub async fn update(
         &mut self,
+        event_collector: &mut Vec<Event>,
         id: &str,
         value: T,
-    ) -> Result<WithEvents<()>, FsCollectionError> {
+    ) -> Result<(), FsCollectionError> {
         let item = self
             .items
             .get_mut(id)
             .ok_or_else(|| FsCollectionError::NotFound(id.to_owned()))?;
         item.update(value).await?;
 
-        Ok(WithEvents::single(
-            (),
-            Event {
-                id: id.to_owned(),
-                kind: Kind::Updated,
-                origin: Origin::Internal,
-            },
-        ))
+        event_collector.push(Event {
+            id: id.to_owned(),
+            kind: Kind::Updated,
+            origin: Origin::Internal,
+        });
+
+        Ok(())
     }
 
     /// Renames an existing item in the collection. Fails if the item does not exist.
     pub async fn rename(
         &mut self,
+        event_collector: &mut Vec<Event>,
         id: &str,
         new_id: &str,
-    ) -> Result<WithEvents<()>, FsCollectionError> {
+    ) -> Result<(), FsCollectionError> {
         if self.items.contains_key(new_id) {
             return Err(FsCollectionError::AlreadyExists(new_id.to_owned()));
         }
@@ -279,20 +247,23 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
         let item = self.items.remove(id).expect("item not found");
         self.items.insert(new_id.to_owned(), item);
 
-        Ok(WithEvents::single(
-            (),
-            Event {
-                id: id.to_owned(),
-                kind: Kind::Renamed {
-                    new_id: new_id.to_owned(),
-                },
-                origin: Origin::Internal,
+        event_collector.push(Event {
+            id: id.to_owned(),
+            kind: Kind::Renamed {
+                new_id: new_id.to_owned(),
             },
-        ))
+            origin: Origin::Internal,
+        });
+
+        Ok(())
     }
 
     /// Deletes an existing item from the collection. Fails if the item does not exist.
-    pub async fn delete(&mut self, id: &str) -> Result<WithEvents<()>, FsCollectionError> {
+    pub async fn delete(
+        &mut self,
+        event_collector: &mut Vec<Event>,
+        id: &str,
+    ) -> Result<(), FsCollectionError> {
         // do not remove it before real rename
         let item = self
             .items
@@ -302,14 +273,13 @@ impl<T: DeserializeOwned + Serialize> FsCollection<T> {
         item.delete().await?;
         self.items.remove(id);
 
-        Ok(WithEvents::single(
-            (),
-            Event {
-                id: id.to_owned(),
-                kind: Kind::Deleted,
-                origin: Origin::Internal,
-            },
-        ))
+        event_collector.push(Event {
+            id: id.to_owned(),
+            kind: Kind::Deleted,
+            origin: Origin::Internal,
+        });
+
+        Ok(())
     }
 
     /// Retrieves the value of an existing item in the collection. Fails if the item does not exist.
