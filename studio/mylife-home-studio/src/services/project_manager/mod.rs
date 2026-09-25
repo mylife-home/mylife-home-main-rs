@@ -335,6 +335,8 @@ impl ProjectManager {
         for event in event_collector {
             self.emit_event(ty, &event);
         }
+
+        // Services.instance.git.notifyFileUpdate();
     }
 
     fn emit_event(&self, ty: project_manager::ProjectType, event: &Event) {
