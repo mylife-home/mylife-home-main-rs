@@ -415,6 +415,37 @@ impl ProjectManager {
             }
         }
     }
+
+    async fn duplicate_project(
+        &mut self,
+        event_collector: &mut Vec<Event>,
+        ty: project_manager::ProjectType,
+        id: &str,
+        new_id: &str,
+    ) -> Result<(), ProjectManagerActorError> {
+        match ty {
+            project_manager::ProjectType::Core => {
+                let source = self.core_project_collection.get(id)?;
+                let value = serde_json::to_value(source)?;
+                let duplicate = serde_json::from_value(value)?;
+
+                Ok(self
+                    .core_project_collection
+                    .create(event_collector, new_id, duplicate)
+                    .await?)
+            }
+            project_manager::ProjectType::Ui => {
+                let source = self.ui_project_collection.get(id)?;
+                let value = serde_json::to_value(source)?;
+                let duplicate = serde_json::from_value(value)?;
+
+                Ok(self
+                    .ui_project_collection
+                    .create(event_collector, new_id, duplicate)
+                    .await?)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -532,6 +563,16 @@ impl message::Message<ServiceRequest<DuplicateReq>> for ProjectManager {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let call = request.into_call();
+        let request = call.request();
+        let ty = request.r#type;
+
+        let mut event_collector = Vec::new();
+        let res = self
+            .duplicate_project(&mut event_collector, ty, &request.id, &request.new_id)
+            .await;
+        call.reply_result(res);
+
+        self.emit_events(event_collector, ty);
     }
 }
 
@@ -544,6 +585,25 @@ impl message::Message<ServiceRequest<RenameReq>> for ProjectManager {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let call = request.into_call();
+        let request = call.request();
+        let ty = request.r#type;
+
+        let mut event_collector = Vec::new();
+        let res = match ty {
+            project_manager::ProjectType::Core => {
+                self.core_project_collection
+                    .rename(&mut event_collector, &request.id, &request.new_id)
+                    .await
+            }
+            project_manager::ProjectType::Ui => {
+                self.ui_project_collection
+                    .rename(&mut event_collector, &request.id, &request.new_id)
+                    .await
+            }
+        };
+        call.reply_result(res);
+
+        self.emit_events(event_collector, ty);
     }
 }
 
@@ -555,7 +615,28 @@ impl message::Message<ServiceRequest<DeleteReq>> for ProjectManager {
         request: ServiceRequest<DeleteReq>,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let call = request.into_call();
+        let call: crate::web::ServiceCall<DeleteReq> = request.into_call();
+        let request = call.request();
+        let ty = request.r#type;
+
+        // TODO: fail if opened?
+
+        let mut event_collector = Vec::new();
+        let res = match ty {
+            project_manager::ProjectType::Core => {
+                self.core_project_collection
+                    .delete(&mut event_collector, &request.id)
+                    .await
+            }
+            project_manager::ProjectType::Ui => {
+                self.ui_project_collection
+                    .delete(&mut event_collector, &request.id)
+                    .await
+            }
+        };
+        call.reply_result(res);
+
+        self.emit_events(event_collector, ty);
     }
 }
 
