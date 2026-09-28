@@ -545,12 +545,17 @@ impl message::Message<ServiceRequest<CreateNewReq>> for ProjectManager {
         let call = request.into_call();
         let request = call.request();
         let ty = request.r#type;
+        let id = request.id.clone();
 
         let mut event_collector = Vec::new();
         let res = self
-            .create_new_project(&mut event_collector, ty, &request.id)
+            .create_new_project(&mut event_collector, ty, &id)
             .await;
-        call.reply_result(res);
+
+        call.reply_result(res.map(|_| CreateNewRes {
+            r#type: ty,
+            created_id: id,
+        }));
 
         self.emit_events(event_collector, ty);
     }
@@ -567,12 +572,17 @@ impl message::Message<ServiceRequest<DuplicateReq>> for ProjectManager {
         let call = request.into_call();
         let request = call.request();
         let ty = request.r#type;
+        let new_id = request.new_id.clone();
 
         let mut event_collector = Vec::new();
         let res = self
-            .duplicate_project(&mut event_collector, ty, &request.id, &request.new_id)
+            .duplicate_project(&mut event_collector, ty, &request.id, &new_id)
             .await;
-        call.reply_result(res);
+
+        call.reply_result(res.map(|_| DuplicateRes {
+            r#type: ty,
+            created_id: new_id,
+        }));
 
         self.emit_events(event_collector, ty);
     }
@@ -603,7 +613,8 @@ impl message::Message<ServiceRequest<RenameReq>> for ProjectManager {
                     .await
             }
         };
-        call.reply_result(res);
+
+        call.reply_result(res.map(|_| RenameRes));
 
         self.emit_events(event_collector, ty);
     }
@@ -636,7 +647,8 @@ impl message::Message<ServiceRequest<DeleteReq>> for ProjectManager {
                     .await
             }
         };
-        call.reply_result(res);
+
+        call.reply_result(res.map(|_| DeleteRes));
 
         self.emit_events(event_collector, ty);
     }
