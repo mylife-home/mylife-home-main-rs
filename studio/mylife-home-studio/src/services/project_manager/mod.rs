@@ -1,8 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
-    format,
-    path::PathBuf,
-    time::Duration,
+    collections::{HashMap, HashSet}, format, path::PathBuf, time::Duration,
 };
 
 use common::utils::actors::{
@@ -13,11 +10,11 @@ use studio_web_api::{component_model, project_manager, protocol};
 use thiserror::Error;
 
 use crate::{
-    services::project_manager::fs_collection::{Event, FsCollection, FsCollectionError, Kind},
-    web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
+    services::project_manager::{fs_collection::{Event, FsCollection, FsCollectionError, Kind, Origin}, opened_projects::OpenedProjects}, web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
 };
 
 mod fs_collection;
+mod opened_projects;
 
 const PROJECT_MANAGER_NAME: &str = "project-manager";
 
@@ -159,6 +156,7 @@ struct ProjectManager {
     list_notifiers: NotifierManager<project_manager::UpdateListNotification>,
     core_project_collection: FsCollection<project_manager::CoreProject>,
     ui_project_collection: FsCollection<project_manager::UiProject>,
+    opened_projects: OpenedProjects,
 }
 
 /// Error that occurs when the ProjectManager actor fails to start due to issues with actor handle lookup or scheduler setup.
@@ -191,6 +189,7 @@ impl Actor for ProjectManager {
             list_notifiers: NotifierManager::new("project-manager/list"),
             core_project_collection: FsCollection::new(args.core_projects_store_path),
             ui_project_collection: FsCollection::new(args.ui_projects_store_path),
+            opened_projects: OpenedProjects::new(),
         })
     }
 }
@@ -331,15 +330,15 @@ impl ProjectManager {
         Ok(notification)
     }
 
-    fn emit_events(&self, event_collector: Vec<Event>, ty: project_manager::ProjectType) {
+    fn process_events(&mut self, event_collector: Vec<Event>, ty: project_manager::ProjectType) {
         for event in event_collector {
-            self.emit_event(ty, &event);
+            self.process_event(ty, &event);
         }
 
         // Services.instance.git.notifyFileUpdate();
     }
 
-    fn emit_event(&self, ty: project_manager::ProjectType, event: &Event) {
+    fn process_event(&mut self, ty: project_manager::ProjectType, event: &Event) {
         let notification = match self.translate_event(ty, &event) {
             Ok(notification) => notification,
             Err(_) => {
@@ -349,6 +348,11 @@ impl ProjectManager {
         };
 
         self.list_notifiers.notify_all(&notification);
+
+        if let Kind::Updated = event.kind && event.origin == Origin::External {
+            // Need to reload project if it has been updated externally
+            self.opened_projects.reload_project(ty, &event.id);
+        }
     }
 
     fn emit_initial(
@@ -471,8 +475,8 @@ impl message::Message<Refresh> for ProjectManager {
             .refresh(&mut ui_event_collector)
             .await;
 
-        self.emit_events(core_event_collector, project_manager::ProjectType::Core);
-        self.emit_events(ui_event_collector, project_manager::ProjectType::Ui);
+        self.process_events(core_event_collector, project_manager::ProjectType::Core);
+        self.process_events(ui_event_collector, project_manager::ProjectType::Ui);
     }
 }
 
@@ -485,7 +489,7 @@ impl message::Message<SessionEvent> for ProjectManager {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.list_notifiers.session_event(&msg);
-        // TODO: close opened projects
+        self.opened_projects.session_event(msg);
     }
 }
 
@@ -557,7 +561,7 @@ impl message::Message<ServiceRequest<CreateNewReq>> for ProjectManager {
             created_id: id,
         }));
 
-        self.emit_events(event_collector, ty);
+        self.process_events(event_collector, ty);
     }
 }
 
@@ -584,7 +588,7 @@ impl message::Message<ServiceRequest<DuplicateReq>> for ProjectManager {
             created_id: new_id,
         }));
 
-        self.emit_events(event_collector, ty);
+        self.process_events(event_collector, ty);
     }
 }
 
@@ -616,7 +620,7 @@ impl message::Message<ServiceRequest<RenameReq>> for ProjectManager {
 
         call.reply_result(res.map(|_| RenameRes));
 
-        self.emit_events(event_collector, ty);
+        self.process_events(event_collector, ty);
     }
 }
 
@@ -650,7 +654,7 @@ impl message::Message<ServiceRequest<DeleteReq>> for ProjectManager {
 
         call.reply_result(res.map(|_| DeleteRes));
 
-        self.emit_events(event_collector, ty);
+        self.process_events(event_collector, ty);
     }
 }
 

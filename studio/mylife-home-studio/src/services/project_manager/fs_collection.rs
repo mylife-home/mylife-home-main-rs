@@ -28,7 +28,7 @@ pub enum Kind {
 }
 
 /// Represents the origin of a change to an item in the `FsCollection`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Origin {
     Internal,
     External,
