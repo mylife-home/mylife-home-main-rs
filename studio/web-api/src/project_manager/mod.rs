@@ -131,7 +131,7 @@ register_ts!(CoreComponentDefinition);
 pub struct CoreComponentData {
     pub definition: CoreComponentDefinition,
     pub position: CorePosition,
-    pub config: CoreComponentConfiguration,
+    pub config: Option<CoreComponentConfiguration>, // no config for external components
     pub external: bool,
 }
 
