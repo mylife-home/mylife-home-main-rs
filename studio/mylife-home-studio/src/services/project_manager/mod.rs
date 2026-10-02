@@ -1,5 +1,8 @@
 use std::{
-    collections::{HashMap, HashSet}, format, path::PathBuf, time::Duration,
+    collections::{HashMap, HashSet},
+    format,
+    path::PathBuf,
+    time::Duration,
 };
 
 use common::utils::actors::{
@@ -10,7 +13,11 @@ use studio_web_api::{component_model, project_manager, protocol};
 use thiserror::Error;
 
 use crate::{
-    services::project_manager::{fs_collection::{Event, FsCollection, FsCollectionError, Kind, Origin}, opened_projects::OpenedProjects}, web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
+    services::project_manager::{
+        fs_collection::{Event, FsCollection, FsCollectionError, Kind, Origin},
+        opened_projects::OpenedProjects,
+    },
+    web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
 };
 
 mod fs_collection;
@@ -349,7 +356,9 @@ impl ProjectManager {
 
         self.list_notifiers.notify_all(&notification);
 
-        if let Kind::Updated = event.kind && event.origin == Origin::External {
+        if let Kind::Updated = event.kind
+            && event.origin == Origin::External
+        {
             // Need to reload project if it has been updated externally
             self.opened_projects.reload_project(ty, &event.id);
         }
@@ -489,7 +498,7 @@ impl message::Message<SessionEvent> for ProjectManager {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.list_notifiers.session_event(&msg);
-        self.opened_projects.session_event(msg);
+        self.opened_projects.session_event(&msg);
     }
 }
 
@@ -532,7 +541,7 @@ impl message::Message<ServiceRequest<StopNotifyListReq>> for ProjectManager {
         let call = request.into_call();
         let notifier_id = &call.request().0;
         self.list_notifiers
-            .remove_notifier(notifier_id.notifier_id.as_str());
+            .remove_notifier(call.session(), notifier_id.notifier_id.as_str());
 
         call.reply_ok(StopNotifyListRes);
     }
@@ -552,9 +561,7 @@ impl message::Message<ServiceRequest<CreateNewReq>> for ProjectManager {
         let id = request.id.clone();
 
         let mut event_collector = Vec::new();
-        let res = self
-            .create_new_project(&mut event_collector, ty, &id)
-            .await;
+        let res = self.create_new_project(&mut event_collector, ty, &id).await;
 
         call.reply_result(res.map(|_| CreateNewRes {
             r#type: ty,
@@ -667,6 +674,25 @@ impl message::Message<ServiceRequest<OpenReq>> for ProjectManager {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let call = request.into_call();
+        let request = call.request();
+
+        let mut notifications_emitter =
+            match self
+                .opened_projects
+                .open_project(call.session(), request.r#type, &request.id)
+            {
+                Ok((notifier_id, notifications_emitter)) => {
+                    call.reply_ok(OpenRes(notifier_id));
+
+                    notifications_emitter
+                }
+                Err(err) => {
+                    call.reply_error(err);
+                    return;
+                }
+            };
+
+        notifications_emitter.emit_notifications();
     }
 }
 
@@ -679,6 +705,13 @@ impl message::Message<ServiceRequest<CloseReq>> for ProjectManager {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let call = request.into_call();
+        let request = call.request();
+
+        let res = self
+            .opened_projects
+            .close_project(call.session(), request.0.clone());
+
+        call.reply_result(res.map(|_| CloseRes));
     }
 }
 
@@ -691,5 +724,26 @@ impl message::Message<ServiceRequest<CallOpenedReq>> for ProjectManager {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let call = request.into_call();
+        let request = call.request();
+        let notifier_id = protocol::NotifierId {
+            notifier_id: request.notifier_id.clone(),
+        };
+
+        let mut notifications_emitter = match self.opened_projects.call_project(
+            call.session(),
+            notifier_id,
+            request.call_data.clone(),
+        ) {
+            Ok((data, notifications_emitter)) => {
+                call.reply_ok(CallOpenedRes(data));
+                notifications_emitter
+            }
+            Err(err) => {
+                call.reply_error(err);
+                return;
+            }
+        };
+
+        notifications_emitter.emit_notifications();
     }
 }

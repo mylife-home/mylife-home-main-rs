@@ -104,7 +104,7 @@ impl message::Message<ServiceRequest<StopNotifyReq>> for Git {
         let call = request.into_call();
         let notifier_id = &call.request().0;
         self.notifiers
-            .remove_notifier(notifier_id.notifier_id.as_str());
+            .remove_notifier(call.session(), notifier_id.notifier_id.as_str());
 
         call.reply_ok(StopNotifyRes);
     }

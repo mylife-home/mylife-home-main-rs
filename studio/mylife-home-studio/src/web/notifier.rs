@@ -86,8 +86,18 @@ impl<Data: serde::Serialize> NotifierManager<Data> {
     }
 
     /// Remove a Notifier from the manager by its ID.
-    pub fn remove_notifier(&mut self, notifier_id: &str) {
+    pub fn remove_notifier(&mut self, session: &SessionHandle, notifier_id: &str) -> bool {
+        // Ensure the notifier belongs to the specified session before removing it.
+        let Some(notifier) = self.notifiers.get(notifier_id) else {
+            return false;
+        };
+
+        if notifier.session.id() != session.id() {
+            return false;
+        }
+
         self.notifiers.remove(notifier_id);
+        true
     }
 
     /// Notify all active notifiers with the provided data.
