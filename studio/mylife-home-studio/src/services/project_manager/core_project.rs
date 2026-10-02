@@ -91,6 +91,8 @@ impl OpenedProject for CoreProject {
         ),
         ProjectManagerActorError,
     > {
+        let data = serde_json::from_value::<project_manager::CoreProjectCall>(data.0)?;
+
         todo!()
     }
 }

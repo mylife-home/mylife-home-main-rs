@@ -90,6 +90,8 @@ impl OpenedProject for UiProject {
         ),
         ProjectManagerActorError,
     > {
+        let data = serde_json::from_value::<project_manager::UiProjectCall>(data.0)?;
+
         todo!()
     }
 }

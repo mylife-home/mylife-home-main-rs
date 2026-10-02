@@ -883,14 +883,14 @@ register_ts!(RenameCoreTemplateNotification);
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[ts(type = "{}")]
-pub struct ProjectCall(serde_json::Value);
+pub struct ProjectCall(pub serde_json::Value);
 
 register_ts!(ProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[ts(type = "{}")]
-pub struct ProjectCallResult(serde_json::Value);
+pub struct ProjectCallResult(pub serde_json::Value);
 
 register_ts!(ProjectCallResult);
 
