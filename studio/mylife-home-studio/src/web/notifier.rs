@@ -106,6 +106,24 @@ impl<Data: serde::Serialize> NotifierManager<Data> {
             notifier.notify(data);
         }
     }
+
+    /// Get a Notifier by its ID and session.
+    pub fn get_notifier(
+        &self,
+        session: &SessionHandle,
+        notifier_id: &str,
+    ) -> Option<&Notifier<Data>> {
+        let Some(notifier) = self.notifiers.get(notifier_id) else {
+            return None;
+        };
+
+        // Ensure the notifier belongs to the specified session.
+        if notifier.session.id() != session.id() {
+            return None;
+        }
+
+        Some(notifier)
+    }
 }
 
 #[derive(Debug)]

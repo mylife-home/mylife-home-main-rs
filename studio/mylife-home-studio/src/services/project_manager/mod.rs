@@ -179,6 +179,8 @@ pub enum ProjectManagerActorError {
     DataProcessingError(String),
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
+    #[error("Project not found: {0}")]
+    ProjectNotFound(String),
 }
 
 impl Actor for ProjectManager {
@@ -359,8 +361,38 @@ impl ProjectManager {
         if let Kind::Updated = event.kind
             && event.origin == Origin::External
         {
-            // Need to reload project if it has been updated externally
-            self.opened_projects.reload_project(ty, &event.id);
+            self.process_external_update(ty, &event.id);
+        }
+    }
+
+    fn process_external_update(&mut self, ty: project_manager::ProjectType, id: &str) {
+        tracing::info!(?ty, id, "Processing external project update");
+
+        match ty {
+            project_manager::ProjectType::Core => {
+                let project = match self.core_project_collection.get(id) {
+                    Ok(project) => project,
+                    Err(error) => {
+                        tracing::error!(%error, id, "Failed to get core project from collection");
+                        return;
+                    }
+                };
+
+                self.opened_projects
+                    .reload_project(id, opened_projects::TypedProjectData::Core(project.clone()));
+            }
+            project_manager::ProjectType::Ui => {
+                let project = match self.ui_project_collection.get(id) {
+                    Ok(project) => project,
+                    Err(error) => {
+                        tracing::error!(%error, id, "Failed to get UI project from collection");
+                        return;
+                    }
+                };
+
+                self.opened_projects
+                    .reload_project(id, opened_projects::TypedProjectData::Ui(project.clone()));
+            }
         }
     }
 
@@ -458,6 +490,44 @@ impl ProjectManager {
                     .ui_project_collection
                     .create(event_collector, new_id, duplicate)
                     .await?)
+            }
+        }
+    }
+
+    async fn handle_project_update(
+        &mut self,
+        project_data: Option<(String, opened_projects::TypedProjectData)>,
+    ) {
+        let Some((id, project_data)) = project_data else {
+            return;
+        };
+
+        match project_data {
+            opened_projects::TypedProjectData::Core(core_project) => {
+                let mut event_collector = Vec::new();
+
+                if let Err(error) = self
+                    .core_project_collection
+                    .update(&mut event_collector, &id, core_project)
+                    .await
+                {
+                    tracing::error!(%error, id, "Failed to update core project");
+                }
+
+                self.process_events(event_collector, project_manager::ProjectType::Core);
+            }
+            opened_projects::TypedProjectData::Ui(ui_project) => {
+                let mut event_collector = Vec::new();
+
+                if let Err(error) = self
+                    .ui_project_collection
+                    .update(&mut event_collector, &id, ui_project)
+                    .await
+                {
+                    tracing::error!(%error, id, "Failed to update UI project");
+                }
+
+                self.process_events(event_collector, project_manager::ProjectType::Ui);
             }
         }
     }
@@ -676,10 +746,31 @@ impl message::Message<ServiceRequest<OpenReq>> for ProjectManager {
         let call = request.into_call();
         let request = call.request();
 
+        let project_data = match request.r#type {
+            project_manager::ProjectType::Core => {
+                let Some(core_project) = self.core_project_collection.get(&request.id).ok() else {
+                    let err = ProjectManagerActorError::ProjectNotFound(request.id.clone());
+                    call.reply_error(err);
+                    return;
+                };
+
+                opened_projects::TypedProjectData::Core(core_project.clone())
+            }
+            project_manager::ProjectType::Ui => {
+                let Some(ui_project) = self.ui_project_collection.get(&request.id).ok() else {
+                    let err = ProjectManagerActorError::ProjectNotFound(request.id.clone());
+                    call.reply_error(err);
+                    return;
+                };
+
+                opened_projects::TypedProjectData::Ui(ui_project.clone())
+            }
+        };
+
         let mut notifications_emitter =
             match self
                 .opened_projects
-                .open_project(call.session(), request.r#type, &request.id)
+                .open_project(call.session(), project_data, &request.id)
             {
                 Ok((notifier_id, notifications_emitter)) => {
                     call.reply_ok(OpenRes(notifier_id));
@@ -729,14 +820,14 @@ impl message::Message<ServiceRequest<CallOpenedReq>> for ProjectManager {
             notifier_id: request.notifier_id.clone(),
         };
 
-        let mut notifications_emitter = match self.opened_projects.call_project(
-            call.session(),
-            notifier_id,
-            request.call_data.clone(),
-        ) {
-            Ok((data, notifications_emitter)) => {
+        let (mut notifications_emitter, project_data) = match self
+            .opened_projects
+            .call_project(call.session(), notifier_id, request.call_data.clone())
+            .await
+        {
+            Ok((data, notifications_emitter, project_data)) => {
                 call.reply_ok(CallOpenedRes(data));
-                notifications_emitter
+                (notifications_emitter, project_data)
             }
             Err(err) => {
                 call.reply_error(err);
@@ -745,5 +836,7 @@ impl message::Message<ServiceRequest<CallOpenedReq>> for ProjectManager {
         };
 
         notifications_emitter.emit_notifications();
+
+        self.handle_project_update(project_data).await;
     }
 }

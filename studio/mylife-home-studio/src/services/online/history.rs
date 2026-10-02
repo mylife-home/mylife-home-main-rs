@@ -188,7 +188,8 @@ impl message::Message<ServiceRequest<StopNotifyReq>> for OnlineHistory {
     ) -> Self::Reply {
         let call = request.into_call();
         let notifier_id = &call.request().0;
-        self.notifiers.remove_notifier(call.session(), &notifier_id.notifier_id);
+        self.notifiers
+            .remove_notifier(call.session(), &notifier_id.notifier_id);
 
         call.reply_ok(StopNotifyRes);
     }
