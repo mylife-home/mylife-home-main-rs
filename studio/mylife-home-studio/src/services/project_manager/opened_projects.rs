@@ -69,11 +69,24 @@ pub trait NotificationsEmitter: Debug + Send + Sync {
     fn emit_notifications(&mut self);
 }
 
-// TODO: Move to projects
+/// Represents an emitter that initially sends a set of notifications for an opened project.
 #[derive(Debug)]
-struct InitialEmitter {
+pub struct InitialEmitter {
     notifier: Notifier<project_manager::UpdateProjectNotification>,
     notifications: Vec<project_manager::UpdateProjectNotification>,
+}
+
+impl InitialEmitter {
+    /// Creates a new instance of `InitialEmitter` with the specified notifier and initial notifications.
+    pub fn new(
+        notifier: Notifier<project_manager::UpdateProjectNotification>,
+        notifications: Vec<project_manager::UpdateProjectNotification>,
+    ) -> Self {
+        Self {
+            notifier,
+            notifications,
+        }
+    }
 }
 
 impl NotificationsEmitter for InitialEmitter {
@@ -84,11 +97,24 @@ impl NotificationsEmitter for InitialEmitter {
     }
 }
 
-// TODO: Move to projects
+/// Represents an emitter that broadcasts notifications to all notifiers for an opened project.
 #[derive(Debug)]
-struct BroadcastEmitter {
+pub struct BroadcastEmitter {
     notifiers: Arc<NotifierManager<project_manager::UpdateProjectNotification>>,
     notifications: Vec<project_manager::UpdateProjectNotification>,
+}
+
+impl BroadcastEmitter {
+    /// Creates a new instance of `BroadcastEmitter` with the specified notifiers and initial notifications.
+    pub fn new(
+        notifiers: Arc<NotifierManager<project_manager::UpdateProjectNotification>>,
+        notifications: Vec<project_manager::UpdateProjectNotification>,
+    ) -> Self {
+        Self {
+            notifiers,
+            notifications,
+        }
+    }
 }
 
 impl NotificationsEmitter for BroadcastEmitter {
