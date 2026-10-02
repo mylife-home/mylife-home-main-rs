@@ -1,6 +1,3 @@
-use async_trait::async_trait;
-use studio_web_api::{project_manager, protocol};
-
 use crate::{
     services::project_manager::{
         ProjectManagerActorError,
@@ -8,20 +5,22 @@ use crate::{
     },
     web::{NotifierManager, SessionEvent, SessionHandle},
 };
+use async_trait::async_trait;
+use studio_web_api::{project_manager, protocol};
 
-/// Represents an opened core project
+/// Represents an opened UI project
 #[derive(Debug)]
-pub struct CoreProject {
+pub struct UiProject {
     name: String,
     notifiers: NotifierManager<project_manager::UpdateProjectNotification>,
-    data: project_manager::CoreProject,
+    data: project_manager::UiProject,
 }
 
-impl CoreProject {
-    /// Opens a core project with the given data.
+impl UiProject {
+    /// Opens a UI project with the given data.
     pub fn open(
         name: &str,
-        data: project_manager::CoreProject,
+        data: project_manager::UiProject,
     ) -> Result<Self, ProjectManagerActorError> {
         Ok(Self {
             name: name.to_owned(),
@@ -32,9 +31,9 @@ impl CoreProject {
 }
 
 #[async_trait]
-impl OpenedProject for CoreProject {
+impl OpenedProject for UiProject {
     fn r#type(&self) -> project_manager::ProjectType {
-        project_manager::ProjectType::Core
+        project_manager::ProjectType::Ui
     }
 
     fn rename(&mut self, new_name: &str) {

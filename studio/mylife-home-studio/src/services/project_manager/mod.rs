@@ -20,8 +20,10 @@ use crate::{
     web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
 };
 
+mod core_project;
 mod fs_collection;
 mod opened_projects;
+mod ui_project;
 
 const PROJECT_MANAGER_NAME: &str = "project-manager";
 

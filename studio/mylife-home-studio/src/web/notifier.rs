@@ -8,12 +8,24 @@ use std::{
 use super::{SessionEvent, SessionEventType, SessionHandle, SessionId};
 
 /// Represents an individual active notification subscription channel linked to a specific Session.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Notifier<Data: serde::Serialize> {
     session: SessionHandle,
     notifier_type: String,
     notifier_id: String,
     _phantom: PhantomData<Data>,
+}
+
+// impl even if Data is not Clone
+impl<Data: serde::Serialize> Clone for Notifier<Data> {
+    fn clone(&self) -> Self {
+        Self {
+            session: self.session.clone(),
+            notifier_type: self.notifier_type.clone(),
+            notifier_id: self.notifier_id.clone(),
+            _phantom: self._phantom.clone(),
+        }
+    }
 }
 
 impl<Data: serde::Serialize> Notifier<Data> {
@@ -123,6 +135,16 @@ impl<Data: serde::Serialize> NotifierManager<Data> {
         }
 
         Some(notifier)
+    }
+
+    /// Get a list of all active notifiers in the manager.
+    pub fn get_all_notifiers(&self) -> Vec<Notifier<Data>> {
+        self.notifiers.values().cloned().collect()
+    }
+
+    /// Check if there are no active notifiers in the manager.
+    pub fn is_empty(&self) -> bool {
+        self.notifiers.is_empty()
     }
 }
 

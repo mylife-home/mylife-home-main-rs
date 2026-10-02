@@ -5,13 +5,15 @@
 // when an opened project has no notifier anymore, it is closed (removed from the opened projects list)
 // project can be renamed while opened
 
-use std::{collections::HashMap, fmt::Debug, format, sync::Arc, todo};
+use std::{collections::HashMap, fmt::Debug, format, sync::Arc};
 
 use async_trait::async_trait;
 use studio_web_api::{project_manager, protocol};
 
 use crate::{
-    services::project_manager::ProjectManagerActorError,
+    services::project_manager::{
+        ProjectManagerActorError, core_project::CoreProject, ui_project::UiProject,
+    },
     web::{Notifier, NotifierManager, SessionEvent, SessionHandle, SessionId},
 };
 
@@ -100,18 +102,18 @@ impl NotificationsEmitter for InitialEmitter {
 /// Represents an emitter that broadcasts notifications to all notifiers for an opened project.
 #[derive(Debug)]
 pub struct BroadcastEmitter {
-    notifiers: Arc<NotifierManager<project_manager::UpdateProjectNotification>>,
+    notifiers: Vec<Notifier<project_manager::UpdateProjectNotification>>,
     notifications: Vec<project_manager::UpdateProjectNotification>,
 }
 
 impl BroadcastEmitter {
     /// Creates a new instance of `BroadcastEmitter` with the specified notifiers and initial notifications.
     pub fn new(
-        notifiers: Arc<NotifierManager<project_manager::UpdateProjectNotification>>,
+        notifiers: &NotifierManager<project_manager::UpdateProjectNotification>,
         notifications: Vec<project_manager::UpdateProjectNotification>,
     ) -> Self {
         Self {
-            notifiers,
+            notifiers: notifiers.get_all_notifiers(),
             notifications,
         }
     }
@@ -120,7 +122,9 @@ impl BroadcastEmitter {
 impl NotificationsEmitter for BroadcastEmitter {
     fn emit_notifications(&mut self) {
         for notification in self.notifications.drain(..) {
-            self.notifiers.notify_all(&notification);
+            for notifier in &self.notifiers {
+                notifier.notify(&notification);
+            }
         }
     }
 }
@@ -212,7 +216,10 @@ impl OpenedProjects {
         let project_id = match self.names.get(&project_name) {
             Some(&project_id) => project_id,
             None => {
-                let project = self.do_open_project(name, project_data)?;
+                let project: Box<dyn OpenedProject> = match project_data {
+                    TypedProjectData::Core(data) => Box::new(CoreProject::open(name, data)?),
+                    TypedProjectData::Ui(data) => Box::new(UiProject::open(name, data)?),
+                };
 
                 let id = self.make_id();
                 self.projects.insert(id, project);
@@ -228,6 +235,11 @@ impl OpenedProjects {
             .expect("Project should exist");
         let (notifier, notifications_emitter) = project.add_notifier(session.clone());
 
+        self.notifiers
+            .insert((session.id(), notifier.notifier_id.clone()), project_id);
+
+        tracing::debug!(name, ?project_id, session_id = ?session.id(), notifier = ?notifier.notifier_id, "Project opened");
+
         Ok((notifier, notifications_emitter))
     }
 
@@ -235,14 +247,6 @@ impl OpenedProjects {
         let id = self.next_id;
         self.next_id += 1;
         OpenedProjectId(id)
-    }
-
-    fn do_open_project(
-        &mut self,
-        name: &str,
-        project_data: TypedProjectData,
-    ) -> Result<Box<dyn OpenedProject>, ProjectManagerActorError> {
-        todo!()
     }
 
     /// Closes the project with the specified ID.
@@ -255,9 +259,9 @@ impl OpenedProjects {
 
         let Some(&project_id) = self.notifiers.get(&key) else {
             return Err(ProjectManagerActorError::DataProcessingError(format!(
-                "Project with notifier ID {:?} not found for session {:?}",
+                "Project with notifier ID '{}' not found for session '{}'",
                 id.notifier_id,
-                session.id()
+                session.id().to_string()
             )));
         };
 
@@ -269,6 +273,8 @@ impl OpenedProjects {
         // Map key lookup success so the notifier must exist for the session
         project.remove_notifier(session, &id.notifier_id);
         self.notifiers.remove(&key);
+
+        tracing::debug!(name = project.name(), ?project_id, session_id = ?session.id(), notifier = ?id.notifier_id, "Project closed");
 
         self.check_project_unused(project_id);
 
