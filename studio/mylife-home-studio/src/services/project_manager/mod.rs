@@ -1,6 +1,10 @@
 use std::{
-    collections::{HashMap, HashSet}, format, path::PathBuf, sync::{
-        Arc, Mutex, atomic::{AtomicUsize, Ordering},
+    collections::{HashMap, HashSet},
+    format,
+    path::PathBuf,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -203,6 +207,8 @@ impl OpenedProjectEntry {
         name: String,
         fs_collection: FsCollectionHandle<project_manager::CoreProject>,
     ) -> Result<Arc<Self>, ProjectManagerActorError> {
+        tracing::debug!(name, "creating opened project");
+
         let handle = OpenedProjectHandle::Core(
             CoreProjectHandle::create(name.clone(), fs_collection).await?,
         );
@@ -218,6 +224,8 @@ impl OpenedProjectEntry {
         name: String,
         fs_collection: FsCollectionHandle<project_manager::UiProject>,
     ) -> Result<Arc<Self>, ProjectManagerActorError> {
+        tracing::debug!(name, "creating opened project");
+
         let handle =
             OpenedProjectHandle::Ui(UiProjectHandle::create(name.clone(), fs_collection).await?);
 
@@ -236,6 +244,8 @@ impl OpenedProjectEntry {
     }
 
     pub async fn terminate(&self) {
+        tracing::debug!(name = self.name(), "terminating opened project");
+
         match &self.handle {
             OpenedProjectHandle::Core(handle) => handle.terminate().await,
             OpenedProjectHandle::Ui(handle) => handle.terminate().await,
@@ -391,9 +401,13 @@ impl message::Message<fs_collection::Update<project_manager::CoreProject>> for P
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         if let fs_collection::Kind::Renamed { new_id } = &msg.kind {
-            self.rename(project_manager::ProjectType::Core, msg.id.clone(), new_id.clone());
+            self.rename(
+                project_manager::ProjectType::Core,
+                msg.id.clone(),
+                new_id.clone(),
+            );
         }
-        
+
         let notification = match msg.kind {
             fs_collection::Kind::Created { value } | fs_collection::Kind::Updated { value } => {
                 let info = match self.compute_core_project_info(&value) {
@@ -440,7 +454,11 @@ impl message::Message<fs_collection::Update<project_manager::UiProject>> for Pro
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         if let fs_collection::Kind::Renamed { new_id } = &msg.kind {
-            self.rename(project_manager::ProjectType::Ui, msg.id.clone(), new_id.clone());
+            self.rename(
+                project_manager::ProjectType::Ui,
+                msg.id.clone(),
+                new_id.clone(),
+            );
         }
 
         let notification = match msg.kind {
@@ -716,12 +734,17 @@ impl message::Message<ServiceRequest<CreateNewReq>> for ProjectManager {
         let ty = request.r#type;
         let id = request.id.clone();
 
-        let res = self.create_new_project(ty, id.clone()).await;
+        if let Err(error) = self.create_new_project(ty, id.clone()).await {
+            call.reply_error(error);
+            return;
+        }
 
-        call.reply_result(res.map(|_| CreateNewRes {
+        tracing::info!(r#type = ?ty, id, "created new project");
+
+        call.reply_ok(CreateNewRes {
             r#type: ty,
             created_id: id,
-        }));
+        });
     }
 }
 
@@ -758,12 +781,17 @@ impl message::Message<ServiceRequest<DuplicateReq>> for ProjectManager {
         let id = request.id.clone();
         let new_id = request.new_id.clone();
 
-        let res = self.duplicate_project(ty, id, new_id.clone()).await;
+        if let Err(error) = self.duplicate_project(ty, id.clone(), new_id.clone()).await {
+            call.reply_error(error);
+            return;
+        }
 
-        call.reply_result(res.map(|_| DuplicateRes {
+        tracing::info!(r#type = ?ty, id, new_id, "duplicated project");
+
+        call.reply_ok(DuplicateRes {
             r#type: ty,
             created_id: new_id,
-        }));
+        });
     }
 }
 
@@ -807,21 +835,35 @@ impl message::Message<ServiceRequest<RenameReq>> for ProjectManager {
         let call = request.into_call();
         let request = call.request();
         let ty = request.r#type;
+        let id = request.id.clone();
+        let new_id = request.new_id.clone();
 
-        let res = match ty {
+        match ty {
             project_manager::ProjectType::Core => {
-                self.core_project_collection
-                    .rename(request.id.clone(), request.new_id.clone())
+                if let Err(error) = self
+                    .core_project_collection
+                    .rename(id.clone(), new_id.clone())
                     .await
+                {
+                    call.reply_error(error);
+                    return;
+                }
             }
             project_manager::ProjectType::Ui => {
-                self.ui_project_collection
-                    .rename(request.id.clone(), request.new_id.clone())
+                if let Err(error) = self
+                    .ui_project_collection
+                    .rename(id.clone(), new_id.clone())
                     .await
+                {
+                    call.reply_error(error);
+                    return;
+                }
             }
         };
 
-        call.reply_result(res.map(|_| RenameRes));
+        tracing::info!(r#type = ?ty, id, new_id, "renamed project");
+
+        call.reply_ok(RenameRes);
     }
 }
 
@@ -836,21 +878,32 @@ impl message::Message<ServiceRequest<DeleteReq>> for ProjectManager {
         let call: crate::web::ServiceCall<DeleteReq> = request.into_call();
         let request = call.request();
         let ty = request.r#type;
+        let id = request.id.clone();
 
         // TODO: fail if opened?
 
-        let res = match ty {
+        match ty {
             project_manager::ProjectType::Core => {
-                self.core_project_collection
+                if let Err(error) = self
+                    .core_project_collection
                     .delete(request.id.clone())
                     .await
+                {
+                    call.reply_error(error);
+                    return;
+                }
             }
             project_manager::ProjectType::Ui => {
-                self.ui_project_collection.delete(request.id.clone()).await
+                if let Err(error) = self.ui_project_collection.delete(request.id.clone()).await {
+                    call.reply_error(error);
+                    return;
+                }
             }
-        };
+        }
 
-        call.reply_result(res.map(|_| DeleteRes));
+        tracing::info!(r#type = ?ty, id, "deleted project");
+
+        call.reply_ok(DeleteRes);
     }
 }
 
@@ -890,6 +943,11 @@ impl message::Message<ServiceRequest<OpenReq>> for ProjectManager {
                 return;
             }
         };
+
+        self.opened_projects_notifiers
+            .insert(notifier_id.clone(), project.clone());
+        project.inc_open_count();
+        tracing::debug!(notifier_id, name = project.name(), "opened project");
 
         call.reply_ok(OpenRes(protocol::NotifierId { notifier_id }));
 
@@ -995,6 +1053,8 @@ impl ProjectManager {
         };
 
         let used = entry.dec_open_count();
+        tracing::debug!(notifier_id, name = entry.name(), "closed project");
+
         if !used {
             entry.terminate().await;
             self.opened_projects_names
