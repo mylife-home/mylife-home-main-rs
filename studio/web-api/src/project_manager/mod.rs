@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -306,7 +307,7 @@ pub struct UiTemplateInstanceData {
     pub template_id: String,
     pub x: i32,
     pub y: i32,
-    pub bindings: HashMap<String, UiTemplateInstanceBinding>,
+    pub bindings: Arc<HashMap<String, Arc<UiTemplateInstanceBinding>>>,
 }
 
 register_ts!(UiTemplateInstanceData);
@@ -345,12 +346,12 @@ pub struct UiControlData {
     pub x: i32,
     pub y: i32,
     /// null when the control has no display
-    pub display: Option<ControlDisplay>,
-    pub text: Option<UiControlTextData>,
+    pub display: Arc<Option<ControlDisplay>>,
+    pub text: Arc<Option<UiControlTextData>>,
     /// null when there is no primary action
-    pub primary_action: Option<UiActionData>,
+    pub primary_action: Arc<Option<UiActionData>>,
     /// null when there is no secondary action
-    pub secondary_action: Option<UiActionData>,
+    pub secondary_action: Arc<Option<UiActionData>>,
 }
 
 register_ts!(UiControlData);
@@ -397,8 +398,8 @@ register_ts!(UiViewData);
 pub struct UiWindowData {
     pub height: i32,
     pub width: i32,
-    pub controls: HashMap<String, UiControlData>,
-    pub templates: HashMap<String, UiTemplateInstanceData>,
+    pub controls: Arc<HashMap<String, Arc<UiControlData>>>,
+    pub templates: Arc<HashMap<String, Arc<UiTemplateInstanceData>>>,
     pub style: Style,
     pub background_resource: Option<Resource>,
 }
@@ -423,9 +424,9 @@ register_ts!(UiTemplateExport);
 pub struct UiTemplateData {
     pub height: i32,
     pub width: i32,
-    pub controls: HashMap<String, UiControlData>,
-    pub templates: HashMap<String, UiTemplateInstanceData>,
-    pub exports: HashMap<String, UiTemplateExport>,
+    pub controls: Arc<HashMap<String, Arc<UiControlData>>>,
+    pub templates: Arc<HashMap<String, Arc<UiTemplateInstanceData>>>,
+    pub exports: Arc<HashMap<String, Arc<UiTemplateExport>>>,
 }
 
 register_ts!(UiTemplateData);
@@ -440,13 +441,13 @@ pub struct UiDefaultWindowData(pub HashMap<String, Option<String>>);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiProject {
-    pub resources: HashMap<String, UiResourceData>,
-    pub styles: HashMap<String, UiStyleData>,
-    pub windows: HashMap<String, UiWindowData>,
-    pub templates: HashMap<String, UiTemplateData>,
-    pub default_window: UiDefaultWindowData,
-    pub components: HashMap<String, UiComponentData>,
-    pub plugins: HashMap<String, UiPluginData>,
+    pub resources: Arc<HashMap<String, Arc<UiResourceData>>>,
+    pub styles: Arc<HashMap<String, Arc<UiStyleData>>>,
+    pub windows: Arc<HashMap<String, Arc<UiWindowData>>>,
+    pub templates: Arc<HashMap<String, Arc<UiTemplateData>>>,
+    pub default_window: Arc<UiDefaultWindowData>,
+    pub components: Arc<HashMap<String, Arc<UiComponentData>>>,
+    pub plugins: Arc<HashMap<String, Arc<UiPluginData>>>,
 }
 
 register_ts!(UiProject);

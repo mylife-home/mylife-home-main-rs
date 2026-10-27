@@ -1,6 +1,7 @@
 use std::{mem, sync::Arc, todo};
 
 use common::utils::actors::{CallError, SpawnExt};
+use serde::Serialize;
 use std::collections::HashMap;
 use studio_web_api::project_manager;
 
@@ -14,16 +15,16 @@ use kameo::{error::Infallible, message, prelude::*};
 
 pub fn new_ui_project_data() -> Arc<project_manager::UiProject> {
     Arc::new(project_manager::UiProject {
-        resources: HashMap::new(),
-        styles: HashMap::new(),
-        windows: HashMap::new(),
-        templates: HashMap::new(),
-        default_window: project_manager::UiDefaultWindowData(HashMap::from_iter([
+        resources: Arc::new(HashMap::new()),
+        styles: Arc::new(HashMap::new()),
+        windows: Arc::new(HashMap::new()),
+        templates: Arc::new(HashMap::new()),
+        default_window: Arc::new(project_manager::UiDefaultWindowData(HashMap::from_iter([
             ("desktop".to_string(), None),
             ("mobile".to_string(), None),
-        ])),
-        components: HashMap::new(),
-        plugins: HashMap::new(),
+        ]))),
+        components: Arc::new(HashMap::new()),
+        plugins: Arc::new(HashMap::new()),
     })
 }
 
@@ -205,7 +206,134 @@ impl message::Message<Call> for UiProject {
     type Reply = Result<project_manager::ProjectCallResult, ProjectManagerActorError>;
 
     async fn handle(&mut self, msg: Call, ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
-        todo!()
+        let call_data = serde_json::from_value::<project_manager::UiProjectCall>(msg.call_data.0)?;
+
+        fn map_call_result<T: Serialize>(
+            result: Result<T, ProjectManagerActorError>,
+        ) -> Result<project_manager::ProjectCallResult, ProjectManagerActorError> {
+            match result {
+                Ok(value) => Ok(project_manager::ProjectCallResult(serde_json::to_value(
+                    value,
+                )?)),
+                Err(err) => Err(err),
+            }
+        }
+
+        match call_data {
+            project_manager::UiProjectCall::Validate => map_call_result(self.validate().await),
+            project_manager::UiProjectCall::RefreshComponentsFromOnline => {
+                map_call_result(self.refresh_components_from_online().await)
+            }
+            project_manager::UiProjectCall::RefreshComponentsFromProject(call_data) => {
+                map_call_result(self.refresh_components_from_project(call_data).await)
+            }
+            project_manager::UiProjectCall::ApplyRefreshComponents(call_data) => {
+                map_call_result(self.apply_refresh_components(call_data).await)
+            }
+            project_manager::UiProjectCall::Deploy => map_call_result(self.deploy().await),
+            project_manager::UiProjectCall::SetDefaultWindow(call_data) => {
+                map_call_result(self.set_default_window(call_data).await)
+            }
+
+            project_manager::UiProjectCall::SetResource(call_data) => {
+                map_call_result(self.set_resource(call_data).await)
+            }
+            project_manager::UiProjectCall::ClearResource(call_data) => {
+                map_call_result(self.clear_resource(call_data).await)
+            }
+            project_manager::UiProjectCall::RenameResource(call_data) => {
+                map_call_result(self.rename_resource(call_data).await)
+            }
+
+            project_manager::UiProjectCall::SetStyle(call_data) => {
+                map_call_result(self.set_style(call_data).await)
+            }
+            project_manager::UiProjectCall::ClearStyle(call_data) => {
+                map_call_result(self.clear_style(call_data).await)
+            }
+            project_manager::UiProjectCall::RenameStyle(call_data) => {
+                map_call_result(self.rename_style(call_data).await)
+            }
+
+            project_manager::UiProjectCall::NewWindow(call_data) => {
+                map_call_result(self.new_window(call_data).await)
+            }
+            project_manager::UiProjectCall::ClearWindow(call_data) => {
+                map_call_result(self.clear_window(call_data).await)
+            }
+            project_manager::UiProjectCall::RenameWindow(call_data) => {
+                map_call_result(self.rename_window(call_data).await)
+            }
+            project_manager::UiProjectCall::CloneWindow(call_data) => {
+                map_call_result(self.clone_window(call_data).await)
+            }
+            project_manager::UiProjectCall::SetWindowProperties(call_data) => {
+                map_call_result(self.set_window_properties(call_data).await)
+            }
+
+            project_manager::UiProjectCall::NewTemplate(call_data) => {
+                map_call_result(self.new_template(call_data).await)
+            }
+            project_manager::UiProjectCall::ClearTemplate(call_data) => {
+                map_call_result(self.clear_template(call_data).await)
+            }
+            project_manager::UiProjectCall::RenameTemplate(call_data) => {
+                map_call_result(self.rename_template(call_data).await)
+            }
+            project_manager::UiProjectCall::CloneTemplate(call_data) => {
+                map_call_result(self.clone_template(call_data).await)
+            }
+            project_manager::UiProjectCall::SetTemplateProperties(call_data) => {
+                map_call_result(self.set_template_properties(call_data).await)
+            }
+            project_manager::UiProjectCall::SetTemplateExport(call_data) => {
+                map_call_result(self.set_template_export(call_data).await)
+            }
+            project_manager::UiProjectCall::ClearTemplateExport(call_data) => {
+                map_call_result(self.clear_template_export(call_data).await)
+            }
+            project_manager::UiProjectCall::SetTemplateBulkPatterns(call_data) => {
+                map_call_result(self.set_template_bulk_patterns(call_data).await)
+            }
+
+            project_manager::UiProjectCall::NewControl(call_data) => {
+                map_call_result(self.new_control(call_data).await)
+            }
+            project_manager::UiProjectCall::ClearControl(call_data) => {
+                map_call_result(self.clear_control(call_data).await)
+            }
+            project_manager::UiProjectCall::RenameControl(call_data) => {
+                map_call_result(self.rename_control(call_data).await)
+            }
+            project_manager::UiProjectCall::CloneControl(call_data) => {
+                map_call_result(self.clone_control(call_data).await)
+            }
+            project_manager::UiProjectCall::SetControlProperties(call_data) => {
+                map_call_result(self.set_control_properties(call_data).await)
+            }
+
+            project_manager::UiProjectCall::NewTemplateInstance(call_data) => {
+                map_call_result(self.new_template_instance(call_data).await)
+            }
+            project_manager::UiProjectCall::ClearTemplateInstance(call_data) => {
+                map_call_result(self.clear_template_instance(call_data).await)
+            }
+            project_manager::UiProjectCall::RenameTemplateInstance(call_data) => {
+                map_call_result(self.rename_template_instance(call_data).await)
+            }
+            project_manager::UiProjectCall::CloneTemplateInstance(call_data) => {
+                map_call_result(self.clone_template_instance(call_data).await)
+            }
+            project_manager::UiProjectCall::MoveTemplateInstance(call_data) => {
+                map_call_result(self.move_template_instance(call_data).await)
+            }
+            project_manager::UiProjectCall::SetTemplateInstanceTemplate(call_data) => {
+                map_call_result(self.set_template_instance_template(call_data).await)
+            }
+            project_manager::UiProjectCall::SetTemplateInstanceBindings(call_data) => {
+                map_call_result(self.set_template_instance_bindings(call_data).await)
+            }
+        }
     }
 }
 
@@ -222,7 +350,7 @@ impl message::Message<Update<project_manager::UiProject>> for UiProject {
         }
 
         match msg.kind {
-            fs_collection::Kind::Created { value } => {
+            fs_collection::Kind::Created { .. } => {
                 tracing::warn!(name = self.name, "unexpected creation of project");
             }
             fs_collection::Kind::Deleted => {
@@ -255,13 +383,6 @@ impl message::Message<Update<project_manager::UiProject>> for UiProject {
     }
 }
 
-impl UiProject {
-    fn reload(&mut self, value: Arc<project_manager::UiProject>) {
-        // TODO
-        self.data = value;
-    }
-}
-
 impl message::Message<SessionEvent> for UiProject {
     type Reply = Vec<String>;
 
@@ -271,5 +392,270 @@ impl message::Message<SessionEvent> for UiProject {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.notifiers.session_event(&msg)
+    }
+}
+
+impl UiProject {
+    fn reload(&mut self, value: Arc<project_manager::UiProject>) {
+        // TODO
+        self.data = value;
+    }
+
+    async fn validate(
+        &mut self,
+    ) -> Result<project_manager::ValidateUiProjectCallResult, ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn refresh_components_from_online(
+        &mut self,
+    ) -> Result<project_manager::RefreshComponentsUiProjectCallResult, ProjectManagerActorError>
+    {
+        todo!()
+    }
+
+    async fn refresh_components_from_project(
+        &mut self,
+        call_data: project_manager::RefreshComponentsFromProjectUiProjectCall,
+    ) -> Result<project_manager::RefreshComponentsUiProjectCallResult, ProjectManagerActorError>
+    {
+        todo!()
+    }
+
+    async fn apply_refresh_components(
+        &mut self,
+        call_data: project_manager::ApplyRefreshComponentsUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn deploy(
+        &mut self,
+    ) -> Result<project_manager::DeployUiProjectCallResult, ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn set_default_window(
+        &mut self,
+        call_data: project_manager::SetDefaultWindowUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn set_resource(
+        &mut self,
+        call_data: project_manager::SetResourceUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn clear_resource(
+        &mut self,
+        call_data: project_manager::ClearResourceUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn rename_resource(
+        &mut self,
+        call_data: project_manager::RenameResourceUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn set_style(
+        &mut self,
+        call_data: project_manager::SetStyleUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn clear_style(
+        &mut self,
+        call_data: project_manager::ClearStyleUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn rename_style(
+        &mut self,
+        call_data: project_manager::RenameStyleUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn new_window(
+        &mut self,
+        call_data: project_manager::NewWindowUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn clear_window(
+        &mut self,
+        call_data: project_manager::ClearWindowUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn rename_window(
+        &mut self,
+        call_data: project_manager::RenameWindowUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn clone_window(
+        &mut self,
+        call_data: project_manager::CloneWindowUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn set_window_properties(
+        &mut self,
+        call_data: project_manager::SetWindowPropertiesUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn new_template(
+        &mut self,
+        call_data: project_manager::NewTemplateUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn clear_template(
+        &mut self,
+        call_data: project_manager::ClearTemplateUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn rename_template(
+        &mut self,
+        call_data: project_manager::RenameTemplateUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn clone_template(
+        &mut self,
+        call_data: project_manager::CloneTemplateUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn set_template_properties(
+        &mut self,
+        call_data: project_manager::SetTemplatePropertiesUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn set_template_export(
+        &mut self,
+        call_data: project_manager::SetTemplateExportUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn clear_template_export(
+        &mut self,
+        call_data: project_manager::ClearTemplateExportUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn set_template_bulk_patterns(
+        &mut self,
+        call_data: project_manager::SetTemplateBulkPatternsUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn new_control(
+        &mut self,
+        call_data: project_manager::NewControlUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn clear_control(
+        &mut self,
+        call_data: project_manager::ClearControlUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn rename_control(
+        &mut self,
+        call_data: project_manager::RenameControlUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn clone_control(
+        &mut self,
+        call_data: project_manager::CloneControlUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn set_control_properties(
+        &mut self,
+        call_data: project_manager::SetControlPropertiesUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn new_template_instance(
+        &mut self,
+        call_data: project_manager::NewTemplateInstanceUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn clear_template_instance(
+        &mut self,
+        call_data: project_manager::ClearTemplateInstanceUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn rename_template_instance(
+        &mut self,
+        call_data: project_manager::RenameTemplateInstanceUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn clone_template_instance(
+        &mut self,
+        call_data: project_manager::CloneTemplateInstanceUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn move_template_instance(
+        &mut self,
+        call_data: project_manager::MoveTemplateInstanceUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn set_template_instance_template(
+        &mut self,
+        call_data: project_manager::SetTemplateInstanceTemplateUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
+    }
+
+    async fn set_template_instance_bindings(
+        &mut self,
+        call_data: project_manager::SetTemplateInstanceBindingsUiProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        todo!()
     }
 }
