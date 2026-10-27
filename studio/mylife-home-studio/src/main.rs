@@ -7,6 +7,7 @@ use common::{
 use crate::web::WebServer;
 
 mod services;
+mod utils;
 mod web;
 
 #[derive(Parser, Debug)]

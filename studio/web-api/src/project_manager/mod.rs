@@ -32,7 +32,7 @@ pub enum ChangeType {
 
 register_ts!(ChangeType);
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectType {

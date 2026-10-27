@@ -75,7 +75,11 @@ impl<Data: serde::Serialize> NotifierManager<Data> {
     }
 
     /// Handle session events.
-    pub fn session_event(&mut self, event: &SessionEvent) {
+    ///
+    /// Returns a list of notifier IDs that were removed as a result of the session event.
+    pub fn session_event(&mut self, event: &SessionEvent) -> Vec<String> {
+        let mut removed_notifiers = Vec::new();
+
         if event.event_type() == SessionEventType::Stopped {
             // Remove all notifiers associated with the stopped session.
             for (id, _) in self
@@ -83,8 +87,11 @@ impl<Data: serde::Serialize> NotifierManager<Data> {
                 .extract_if(|_, notifier| notifier.session == *event.session())
             {
                 tracing::trace!(notifier = %id, session = %event.session().id(), "removing notifier for stopped session");
+                removed_notifiers.push(id);
             }
         }
+
+        removed_notifiers
     }
 
     /// Create a new Notifier for a specific session and add it to the manager.

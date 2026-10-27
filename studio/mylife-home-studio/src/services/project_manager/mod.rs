@@ -1,12 +1,11 @@
 use std::{
-    collections::{HashMap, HashSet},
-    format,
-    path::PathBuf,
-    time::Duration,
+    collections::{HashMap, HashSet}, format, path::PathBuf, sync::{
+        Arc, Mutex, atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use common::utils::actors::{
-    ActorHandle, CallError, HandleLookupError, SchedulerHandle, SpawnedActor, SpawnedActors,
+    ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors,
 };
 use kameo::{message, prelude::*};
 use studio_web_api::{component_model, project_manager, protocol};
@@ -14,29 +13,56 @@ use thiserror::Error;
 
 use crate::{
     services::project_manager::{
-        fs_collection::{Event, FsCollection, FsCollectionError, Kind, Origin},
-        opened_projects::OpenedProjects,
+        core_project::{CoreProjectHandle, new_core_project_data},
+        ui_project::{UiProjectHandle, new_ui_project_data},
     },
-    web::{DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent},
+    utils::fs_collection::{self, FsCollectionError, FsCollectionHandle},
+    web::{
+        DispatcherBuilder, Notifier, NotifierManager, ServiceRequest, SessionEvent, SessionHandle,
+    },
 };
 
 mod core_project;
-mod fs_collection;
-mod opened_projects;
 mod ui_project;
 
 const PROJECT_MANAGER_NAME: &str = "project-manager";
+
+const CORE_PROJECTS_FS_COLLECTION: &str = "core-projects";
+const UI_PROJECTS_FS_COLLECTION: &str = "ui-projects";
+
+#[derive(Debug)]
+pub struct ProjectManagerConfig {
+    pub core_projects_store_path: PathBuf,
+    pub ui_projects_store_path: PathBuf,
+}
 
 pub async fn init(
     actors: &mut SpawnedActors,
     dispatcher: &mut DispatcherBuilder,
     config: ProjectManagerConfig,
 ) {
-    let (project_manager, _) = SpawnedActor::start::<ProjectManager>(config).await;
+    fs_collection::init_collection::<project_manager::CoreProject>(
+        actors,
+        CORE_PROJECTS_FS_COLLECTION,
+        config.core_projects_store_path,
+    )
+    .await;
+    fs_collection::init_collection::<project_manager::UiProject>(
+        actors,
+        UI_PROJECTS_FS_COLLECTION,
+        config.ui_projects_store_path,
+    )
+    .await;
+
+    let (project_manager, _) = SpawnedActor::start::<ProjectManager>(()).await;
 
     project_manager.register(PROJECT_MANAGER_NAME);
 
     actors.add(project_manager);
+
+    fs_collection::start_collection::<project_manager::CoreProject>(CORE_PROJECTS_FS_COLLECTION)
+        .await;
+    fs_collection::start_collection::<project_manager::UiProject>(UI_PROJECTS_FS_COLLECTION).await;
 
     let actor: ActorRef<_> = ActorHandle::<ProjectManager>::from_name(PROJECT_MANAGER_NAME)
         .expect("cannot get project manager actor handle")
@@ -155,17 +181,161 @@ struct CallOpenedReq {
 struct CallOpenedRes(project_manager::ProjectCallResult);
 
 #[derive(Debug)]
-pub struct ProjectManagerConfig {
-    pub core_projects_store_path: PathBuf,
-    pub ui_projects_store_path: PathBuf,
+struct ProjectManager {
+    list_notifiers: NotifierManager<project_manager::UpdateListNotification>,
+
+    core_project_collection: FsCollectionHandle<project_manager::CoreProject>,
+    ui_project_collection: FsCollectionHandle<project_manager::UiProject>,
+
+    opened_projects_notifiers: HashMap<String, Arc<OpenedProjectEntry>>,
+    opened_projects_names: HashMap<(project_manager::ProjectType, String), Arc<OpenedProjectEntry>>,
 }
 
 #[derive(Debug)]
-struct ProjectManager {
-    list_notifiers: NotifierManager<project_manager::UpdateListNotification>,
-    core_project_collection: FsCollection<project_manager::CoreProject>,
-    ui_project_collection: FsCollection<project_manager::UiProject>,
-    opened_projects: OpenedProjects,
+struct OpenedProjectEntry {
+    name: Mutex<String>, // Allow immutable rename
+    open_count: AtomicUsize,
+    handle: OpenedProjectHandle,
+}
+
+impl OpenedProjectEntry {
+    pub async fn create_core(
+        name: String,
+        fs_collection: FsCollectionHandle<project_manager::CoreProject>,
+    ) -> Result<Arc<Self>, ProjectManagerActorError> {
+        let handle = OpenedProjectHandle::Core(
+            CoreProjectHandle::create(name.clone(), fs_collection).await?,
+        );
+
+        Ok(Arc::new(Self {
+            name: Mutex::new(name),
+            open_count: AtomicUsize::new(0),
+            handle,
+        }))
+    }
+
+    pub async fn create_ui(
+        name: String,
+        fs_collection: FsCollectionHandle<project_manager::UiProject>,
+    ) -> Result<Arc<Self>, ProjectManagerActorError> {
+        let handle =
+            OpenedProjectHandle::Ui(UiProjectHandle::create(name.clone(), fs_collection).await?);
+
+        Ok(Arc::new(Self {
+            name: Mutex::new(name),
+            open_count: AtomicUsize::new(0),
+            handle,
+        }))
+    }
+
+    pub async fn session_event(&self, event: SessionEvent) -> Vec<String> {
+        match &self.handle {
+            OpenedProjectHandle::Core(handle) => handle.session_event(event).await,
+            OpenedProjectHandle::Ui(handle) => handle.session_event(event).await,
+        }
+    }
+
+    pub async fn terminate(&self) {
+        match &self.handle {
+            OpenedProjectHandle::Core(handle) => handle.terminate().await,
+            OpenedProjectHandle::Ui(handle) => handle.terminate().await,
+        }
+    }
+
+    pub async fn open(
+        &self,
+        session: SessionHandle,
+    ) -> Result<(String, InitialEmitter), ProjectManagerActorError> {
+        match &self.handle {
+            OpenedProjectHandle::Core(handle) => handle.open(session).await,
+            OpenedProjectHandle::Ui(handle) => handle.open(session).await,
+        }
+    }
+
+    pub async fn close(
+        &self,
+        session: SessionHandle,
+        notifier_id: String,
+    ) -> Result<(), ProjectManagerActorError> {
+        match &self.handle {
+            OpenedProjectHandle::Core(handle) => handle.close(session, notifier_id).await,
+            OpenedProjectHandle::Ui(handle) => handle.close(session, notifier_id).await,
+        }
+    }
+
+    pub async fn call(
+        &self,
+        session: SessionHandle,
+        notifier_id: String,
+        call_data: project_manager::ProjectCall,
+    ) -> Result<project_manager::ProjectCallResult, ProjectManagerActorError> {
+        match &self.handle {
+            OpenedProjectHandle::Core(handle) => handle.call(session, notifier_id, call_data).await,
+            OpenedProjectHandle::Ui(handle) => handle.call(session, notifier_id, call_data).await,
+        }
+    }
+
+    pub fn rename(&self, new_name: String) {
+        let mut name = self.name.lock().expect("Failed to lock name mutex");
+        *name = new_name;
+    }
+
+    pub fn name(&self) -> String {
+        self.name.lock().expect("Failed to lock name mutex").clone()
+    }
+
+    pub fn project_type(&self) -> project_manager::ProjectType {
+        match &self.handle {
+            OpenedProjectHandle::Core(_) => project_manager::ProjectType::Core,
+            OpenedProjectHandle::Ui(_) => project_manager::ProjectType::Ui,
+        }
+    }
+
+    /// Increments the open count for the project.
+    pub fn inc_open_count(&self) {
+        self.open_count.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// Decrements the open count and returns true if the project is still opened by any session.
+    pub fn dec_open_count(&self) -> bool {
+        self.open_count.fetch_sub(1, Ordering::SeqCst) > 1
+    }
+
+    pub fn used(&self) -> bool {
+        self.open_count.load(Ordering::SeqCst) > 0
+    }
+}
+
+#[derive(Debug, Clone)]
+enum OpenedProjectHandle {
+    Core(CoreProjectHandle),
+    Ui(UiProjectHandle),
+}
+
+/// Represents an emitter that initially sends a set of notifications for an opened project.
+#[derive(Debug)]
+struct InitialEmitter {
+    notifier: Notifier<project_manager::UpdateProjectNotification>,
+    notifications: Vec<project_manager::UpdateProjectNotification>,
+}
+
+impl InitialEmitter {
+    /// Creates a new instance of `InitialEmitter` with the specified notifier and initial notifications.
+    pub fn new(
+        notifier: Notifier<project_manager::UpdateProjectNotification>,
+        notifications: Vec<project_manager::UpdateProjectNotification>,
+    ) -> Self {
+        Self {
+            notifier,
+            notifications,
+        }
+    }
+
+    pub fn emit_notifications(self) {
+        for notification in self.notifications {
+            self.notifier.notify(&notification);
+        }
+    }
 }
 
 /// Error that occurs when the ProjectManager actor fails to start due to issues with actor handle lookup or scheduler setup.
@@ -173,45 +343,156 @@ struct ProjectManager {
 pub enum ProjectManagerActorError {
     #[error("Failed to lookup actor handle: {0}")]
     HandleLookupError(#[from] HandleLookupError),
-    #[error("Failed to set interval: {0}")]
-    SchedulerError(#[from] CallError),
     #[error("Failed to access data: {0}")]
-    DataAccessError(#[from] FsCollectionError),
+    DataAccessError(#[from] CallError<FsCollectionError>),
     #[error("Failed to process data: {0}")]
     DataProcessingError(String),
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
     #[error("Project not found: {0}")]
     ProjectNotFound(String),
+    #[error("Opened project error: {0}")]
+    OpenedProjectError(Box<CallError<ProjectManagerActorError>>),
+    #[error("Notifier not found: {0}")]
+    NotifierNotFound(String),
 }
 
 impl Actor for ProjectManager {
-    type Args = ProjectManagerConfig;
+    type Args = ();
     type Error = ProjectManagerActorError;
 
-    async fn on_start(args: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
-        let scheduler = SchedulerHandle::new()?;
+    async fn on_start(_args: Self::Args, actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
+        let core_project_collection = FsCollectionHandle::new(CORE_PROJECTS_FS_COLLECTION)?;
+        let ui_project_collection = FsCollectionHandle::new(UI_PROJECTS_FS_COLLECTION)?;
 
-        scheduler
-            .set_interval(actor_ref.downgrade(), Duration::from_millis(200), Refresh)
-            .await?;
+        core_project_collection
+            .on_update()
+            .subscribe(actor_ref.clone());
+        ui_project_collection
+            .on_update()
+            .subscribe(actor_ref.clone());
 
         Ok(Self {
             list_notifiers: NotifierManager::new("project-manager/list"),
-            core_project_collection: FsCollection::new(args.core_projects_store_path),
-            ui_project_collection: FsCollection::new(args.ui_projects_store_path),
-            opened_projects: OpenedProjects::new(),
+            core_project_collection,
+            ui_project_collection,
+            opened_projects_notifiers: HashMap::new(),
+            opened_projects_names: HashMap::new(),
         })
     }
 }
 
+impl message::Message<fs_collection::Update<project_manager::CoreProject>> for ProjectManager {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: fs_collection::Update<project_manager::CoreProject>,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        if let fs_collection::Kind::Renamed { new_id } = &msg.kind {
+            self.rename(project_manager::ProjectType::Core, msg.id.clone(), new_id.clone());
+        }
+        
+        let notification = match msg.kind {
+            fs_collection::Kind::Created { value } | fs_collection::Kind::Updated { value } => {
+                let info = match self.compute_core_project_info(&value) {
+                    Ok(info) => info,
+                    Err(err) => {
+                        tracing::error!(%err, id = %msg.id, "failed to compute core project info");
+                        return;
+                    }
+                };
+
+                project_manager::UpdateListNotification::Set(project_manager::SetListNotification {
+                    r#type: project_manager::ProjectType::Core,
+                    name: msg.id.clone(),
+                    info,
+                })
+            }
+            fs_collection::Kind::Renamed { new_id } => {
+                project_manager::UpdateListNotification::Rename(
+                    project_manager::RenameListNotification {
+                        r#type: project_manager::ProjectType::Core,
+                        name: msg.id.clone(),
+                        new_name: new_id.clone(),
+                    },
+                )
+            }
+            fs_collection::Kind::Deleted => project_manager::UpdateListNotification::Clear(
+                project_manager::ClearListNotification {
+                    r#type: project_manager::ProjectType::Core,
+                    name: msg.id.clone(),
+                },
+            ),
+        };
+
+        self.list_notifiers.notify_all(&notification);
+    }
+}
+
+impl message::Message<fs_collection::Update<project_manager::UiProject>> for ProjectManager {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: fs_collection::Update<project_manager::UiProject>,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        if let fs_collection::Kind::Renamed { new_id } = &msg.kind {
+            self.rename(project_manager::ProjectType::Ui, msg.id.clone(), new_id.clone());
+        }
+
+        let notification = match msg.kind {
+            fs_collection::Kind::Created { value } | fs_collection::Kind::Updated { value } => {
+                let info = match self.compute_ui_project_info(&value) {
+                    Ok(info) => info,
+                    Err(err) => {
+                        tracing::error!(%err, id = %msg.id, "failed to compute UI project info");
+                        return;
+                    }
+                };
+
+                project_manager::UpdateListNotification::Set(project_manager::SetListNotification {
+                    r#type: project_manager::ProjectType::Ui,
+                    name: msg.id.clone(),
+                    info,
+                })
+            }
+            fs_collection::Kind::Renamed { new_id } => {
+                project_manager::UpdateListNotification::Rename(
+                    project_manager::RenameListNotification {
+                        r#type: project_manager::ProjectType::Ui,
+                        name: msg.id.clone(),
+                        new_name: new_id.clone(),
+                    },
+                )
+            }
+            fs_collection::Kind::Deleted => project_manager::UpdateListNotification::Clear(
+                project_manager::ClearListNotification {
+                    r#type: project_manager::ProjectType::Ui,
+                    name: msg.id.clone(),
+                },
+            ),
+        };
+
+        self.list_notifiers.notify_all(&notification);
+    }
+}
+
 impl ProjectManager {
+    fn rename(&mut self, ty: project_manager::ProjectType, old_id: String, new_id: String) {
+        if let Some(project) = self.opened_projects_names.remove(&(ty, old_id.clone())) {
+            // Only rename the entry, the opened project itself will be renamed through its actor mailbox
+            project.rename(new_id.clone());
+            self.opened_projects_names.insert((ty, new_id), project);
+        }
+    }
+
     fn compute_core_project_info(
         &self,
-        id: &str,
+        project: &project_manager::CoreProject,
     ) -> Result<project_manager::ProjectInfo, ProjectManagerActorError> {
-        let project = self.core_project_collection.get(id)?;
-
         let mut instances = HashSet::new();
 
         for plugin in project.plugins.values() {
@@ -273,10 +554,8 @@ impl ProjectManager {
 
     fn compute_ui_project_info(
         &self,
-        id: &str,
+        project: &project_manager::UiProject,
     ) -> Result<project_manager::ProjectInfo, ProjectManagerActorError> {
-        let project = self.ui_project_collection.get(id)?;
-
         let resource_binary_length = |resource: &project_manager::UiResourceData| -> usize {
             // base64 length = 4 chars represents 3 binary bytes
             (resource.data.len() * 3) / 4
@@ -296,269 +575,6 @@ impl ProjectManager {
 
         Ok(project_manager::ProjectInfo(serde_json::to_value(&info)?))
     }
-
-    fn compute_project_info(
-        &self,
-        ty: project_manager::ProjectType,
-        id: &str,
-    ) -> Result<project_manager::ProjectInfo, ProjectManagerActorError> {
-        match ty {
-            project_manager::ProjectType::Core => self.compute_core_project_info(id),
-            project_manager::ProjectType::Ui => self.compute_ui_project_info(id),
-        }
-    }
-
-    fn translate_event(
-        &self,
-        ty: project_manager::ProjectType,
-        event: &Event,
-    ) -> Result<project_manager::UpdateListNotification, ProjectManagerActorError> {
-        let notification = match &event.kind {
-            Kind::Created | Kind::Updated => {
-                let info = self.compute_project_info(ty, &event.id)?;
-
-                project_manager::UpdateListNotification::Set(project_manager::SetListNotification {
-                    r#type: ty,
-                    name: event.id.clone(),
-                    info,
-                })
-            }
-            Kind::Deleted => project_manager::UpdateListNotification::Clear(
-                project_manager::ClearListNotification {
-                    r#type: ty,
-                    name: event.id.clone(),
-                },
-            ),
-            Kind::Renamed { new_id } => project_manager::UpdateListNotification::Rename(
-                project_manager::RenameListNotification {
-                    r#type: ty,
-                    name: event.id.clone(),
-                    new_name: new_id.clone(),
-                },
-            ),
-        };
-
-        Ok(notification)
-    }
-
-    fn process_events(&mut self, event_collector: Vec<Event>, ty: project_manager::ProjectType) {
-        for event in event_collector {
-            self.process_event(ty, &event);
-        }
-
-        // Services.instance.git.notifyFileUpdate();
-    }
-
-    fn process_event(&mut self, ty: project_manager::ProjectType, event: &Event) {
-        let notification = match self.translate_event(ty, &event) {
-            Ok(notification) => notification,
-            Err(_) => {
-                tracing::error!("Failed to translate event: {:?}", event);
-                return;
-            }
-        };
-
-        self.list_notifiers.notify_all(&notification);
-
-        if let Kind::Updated = event.kind
-            && event.origin == Origin::External
-        {
-            self.process_external_update(ty, &event.id);
-        }
-    }
-
-    fn process_external_update(&mut self, ty: project_manager::ProjectType, id: &str) {
-        tracing::info!(?ty, id, "Processing external project update");
-
-        match ty {
-            project_manager::ProjectType::Core => {
-                let project = match self.core_project_collection.get(id) {
-                    Ok(project) => project,
-                    Err(error) => {
-                        tracing::error!(%error, id, "Failed to get core project from collection");
-                        return;
-                    }
-                };
-
-                self.opened_projects
-                    .reload_project(id, opened_projects::TypedProjectData::Core(project.clone()));
-            }
-            project_manager::ProjectType::Ui => {
-                let project = match self.ui_project_collection.get(id) {
-                    Ok(project) => project,
-                    Err(error) => {
-                        tracing::error!(%error, id, "Failed to get UI project from collection");
-                        return;
-                    }
-                };
-
-                self.opened_projects
-                    .reload_project(id, opened_projects::TypedProjectData::Ui(project.clone()));
-            }
-        }
-    }
-
-    fn emit_initial(
-        &self,
-        notifier: &Notifier<project_manager::UpdateListNotification>,
-        ty: project_manager::ProjectType,
-        id: &str,
-    ) {
-        let info = match self.compute_project_info(ty, id) {
-            Ok(info) => info,
-            Err(e) => {
-                tracing::error!("Failed to compute project info for id {}: {:?}", id, e);
-                return;
-            }
-        };
-
-        let notification =
-            project_manager::UpdateListNotification::Set(project_manager::SetListNotification {
-                r#type: ty,
-                name: id.to_owned(),
-                info,
-            });
-
-        notifier.notify(&notification);
-    }
-
-    async fn create_new_project(
-        &mut self,
-        event_collector: &mut Vec<Event>,
-        ty: project_manager::ProjectType,
-        id: &str,
-    ) -> Result<(), ProjectManagerActorError> {
-        match ty {
-            project_manager::ProjectType::Core => {
-                // Implementation for creating a new core project goes here
-                let project = project_manager::CoreProject {
-                    components: HashMap::new(),
-                    plugins: HashMap::new(),
-                    bindings: HashMap::new(),
-                    templates: HashMap::new(),
-                };
-
-                Ok(self
-                    .core_project_collection
-                    .create(event_collector, id, project)
-                    .await?)
-            }
-            project_manager::ProjectType::Ui => {
-                let project = project_manager::UiProject {
-                    resources: HashMap::new(),
-                    styles: HashMap::new(),
-                    windows: HashMap::new(),
-                    templates: HashMap::new(),
-                    default_window: project_manager::UiDefaultWindowData(HashMap::from_iter([
-                        ("desktop".to_string(), None),
-                        ("mobile".to_string(), None),
-                    ])),
-                    components: HashMap::new(),
-                    plugins: HashMap::new(),
-                };
-
-                Ok(self
-                    .ui_project_collection
-                    .create(event_collector, id, project)
-                    .await?)
-            }
-        }
-    }
-
-    async fn duplicate_project(
-        &mut self,
-        event_collector: &mut Vec<Event>,
-        ty: project_manager::ProjectType,
-        id: &str,
-        new_id: &str,
-    ) -> Result<(), ProjectManagerActorError> {
-        match ty {
-            project_manager::ProjectType::Core => {
-                let source = self.core_project_collection.get(id)?;
-                let value = serde_json::to_value(source)?;
-                let duplicate = serde_json::from_value(value)?;
-
-                Ok(self
-                    .core_project_collection
-                    .create(event_collector, new_id, duplicate)
-                    .await?)
-            }
-            project_manager::ProjectType::Ui => {
-                let source = self.ui_project_collection.get(id)?;
-                let value = serde_json::to_value(source)?;
-                let duplicate = serde_json::from_value(value)?;
-
-                Ok(self
-                    .ui_project_collection
-                    .create(event_collector, new_id, duplicate)
-                    .await?)
-            }
-        }
-    }
-
-    async fn handle_project_update(
-        &mut self,
-        project_data: Option<(String, opened_projects::TypedProjectData)>,
-    ) {
-        let Some((id, project_data)) = project_data else {
-            return;
-        };
-
-        match project_data {
-            opened_projects::TypedProjectData::Core(core_project) => {
-                let mut event_collector = Vec::new();
-
-                if let Err(error) = self
-                    .core_project_collection
-                    .update(&mut event_collector, &id, core_project)
-                    .await
-                {
-                    tracing::error!(%error, id, "Failed to update core project");
-                }
-
-                self.process_events(event_collector, project_manager::ProjectType::Core);
-            }
-            opened_projects::TypedProjectData::Ui(ui_project) => {
-                let mut event_collector = Vec::new();
-
-                if let Err(error) = self
-                    .ui_project_collection
-                    .update(&mut event_collector, &id, ui_project)
-                    .await
-                {
-                    tracing::error!(%error, id, "Failed to update UI project");
-                }
-
-                self.process_events(event_collector, project_manager::ProjectType::Ui);
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Refresh;
-
-impl message::Message<Refresh> for ProjectManager {
-    type Reply = ();
-
-    async fn handle(
-        &mut self,
-        _msg: Refresh,
-        _ctx: &mut message::Context<Self, Self::Reply>,
-    ) -> Self::Reply {
-        let mut core_event_collector = Vec::new();
-        let mut ui_event_collector = Vec::new();
-
-        self.core_project_collection
-            .refresh(&mut core_event_collector)
-            .await;
-        self.ui_project_collection
-            .refresh(&mut ui_event_collector)
-            .await;
-
-        self.process_events(core_event_collector, project_manager::ProjectType::Core);
-        self.process_events(ui_event_collector, project_manager::ProjectType::Ui);
-    }
 }
 
 impl message::Message<SessionEvent> for ProjectManager {
@@ -570,7 +586,20 @@ impl message::Message<SessionEvent> for ProjectManager {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.list_notifiers.session_event(&msg);
-        self.opened_projects.session_event(&msg);
+
+        // dispatch to opened projects (they cannot register session events directly)
+        let futures = self
+            .opened_projects_names
+            .values()
+            .map(|project| project.session_event(msg.clone()));
+        let removed_notifiers = futures::future::join_all(futures)
+            .await
+            .into_iter()
+            .flatten();
+
+        for removed_notifier in removed_notifiers {
+            self.close_project(removed_notifier).await;
+        }
     }
 }
 
@@ -592,12 +621,66 @@ impl message::Message<ServiceRequest<StartNotifyListReq>> for ProjectManager {
             notifier_id: notifier.notifier_id().into(),
         }));
 
-        for id in self.core_project_collection.ids() {
-            self.emit_initial(&notifier, project_manager::ProjectType::Core, id);
+        self.emit_initial(&notifier).await;
+    }
+}
+
+impl ProjectManager {
+    async fn emit_initial(&self, notifier: &Notifier<project_manager::UpdateListNotification>) {
+        let projects = match self.core_project_collection.get_all().await {
+            Ok(projects) => projects,
+            Err(error) => {
+                tracing::error!(%error, "failed to get all core projects");
+                return;
+            }
+        };
+
+        for (id, project) in projects {
+            let info = match self.compute_core_project_info(&project) {
+                Ok(info) => info,
+                Err(error) => {
+                    tracing::error!(%error, "failed to compute core project info");
+                    continue;
+                }
+            };
+
+            let notification = project_manager::UpdateListNotification::Set(
+                project_manager::SetListNotification {
+                    r#type: project_manager::ProjectType::Core,
+                    name: id.clone(),
+                    info,
+                },
+            );
+
+            notifier.notify(&notification);
         }
 
-        for id in self.ui_project_collection.ids() {
-            self.emit_initial(&notifier, project_manager::ProjectType::Ui, id);
+        let projects = match self.ui_project_collection.get_all().await {
+            Ok(projects) => projects,
+            Err(error) => {
+                tracing::error!(%error, "failed to get all UI projects");
+                return;
+            }
+        };
+
+        for (id, project) in projects {
+            let info = match self.compute_ui_project_info(&project) {
+                Ok(info) => info,
+                Err(error) => {
+                    tracing::error!(%error, "failed to compute UI project info");
+                    continue;
+                }
+            };
+
+            let notification = project_manager::UpdateListNotification::Set(
+                project_manager::SetListNotification {
+                    r#type: project_manager::ProjectType::Ui,
+                    name: id.clone(),
+                    info,
+                },
+            );
+
+            notifier.notify(&notification);
         }
     }
 }
@@ -629,18 +712,35 @@ impl message::Message<ServiceRequest<CreateNewReq>> for ProjectManager {
     ) -> Self::Reply {
         let call = request.into_call();
         let request = call.request();
+
         let ty = request.r#type;
         let id = request.id.clone();
 
-        let mut event_collector = Vec::new();
-        let res = self.create_new_project(&mut event_collector, ty, &id).await;
+        let res = self.create_new_project(ty, id.clone()).await;
 
         call.reply_result(res.map(|_| CreateNewRes {
             r#type: ty,
             created_id: id,
         }));
+    }
+}
 
-        self.process_events(event_collector, ty);
+impl ProjectManager {
+    async fn create_new_project(
+        &mut self,
+        ty: project_manager::ProjectType,
+        id: String,
+    ) -> Result<(), ProjectManagerActorError> {
+        match ty {
+            project_manager::ProjectType::Core => Ok(self
+                .core_project_collection
+                .create(id, new_core_project_data())
+                .await?),
+            project_manager::ProjectType::Ui => Ok(self
+                .ui_project_collection
+                .create(id, new_ui_project_data())
+                .await?),
+        }
     }
 }
 
@@ -655,19 +755,44 @@ impl message::Message<ServiceRequest<DuplicateReq>> for ProjectManager {
         let call = request.into_call();
         let request = call.request();
         let ty = request.r#type;
+        let id = request.id.clone();
         let new_id = request.new_id.clone();
 
-        let mut event_collector = Vec::new();
-        let res = self
-            .duplicate_project(&mut event_collector, ty, &request.id, &new_id)
-            .await;
+        let res = self.duplicate_project(ty, id, new_id.clone()).await;
 
         call.reply_result(res.map(|_| DuplicateRes {
             r#type: ty,
             created_id: new_id,
         }));
+    }
+}
 
-        self.process_events(event_collector, ty);
+impl ProjectManager {
+    async fn duplicate_project(
+        &mut self,
+        ty: project_manager::ProjectType,
+        id: String,
+        new_id: String,
+    ) -> Result<(), ProjectManagerActorError> {
+        match ty {
+            project_manager::ProjectType::Core => {
+                let source = self.core_project_collection.get(id).await?;
+                // Don't clone the Arc itself, but the underlying data
+                let duplicate = Arc::new(source.as_ref().clone());
+
+                Ok(self
+                    .core_project_collection
+                    .create(new_id, duplicate)
+                    .await?)
+            }
+            project_manager::ProjectType::Ui => {
+                let source = self.ui_project_collection.get(id).await?;
+                // Don't clone the Arc itself, but the underlying data
+                let duplicate = Arc::new(source.as_ref().clone());
+
+                Ok(self.ui_project_collection.create(new_id, duplicate).await?)
+            }
+        }
     }
 }
 
@@ -683,23 +808,20 @@ impl message::Message<ServiceRequest<RenameReq>> for ProjectManager {
         let request = call.request();
         let ty = request.r#type;
 
-        let mut event_collector = Vec::new();
         let res = match ty {
             project_manager::ProjectType::Core => {
                 self.core_project_collection
-                    .rename(&mut event_collector, &request.id, &request.new_id)
+                    .rename(request.id.clone(), request.new_id.clone())
                     .await
             }
             project_manager::ProjectType::Ui => {
                 self.ui_project_collection
-                    .rename(&mut event_collector, &request.id, &request.new_id)
+                    .rename(request.id.clone(), request.new_id.clone())
                     .await
             }
         };
 
         call.reply_result(res.map(|_| RenameRes));
-
-        self.process_events(event_collector, ty);
     }
 }
 
@@ -717,23 +839,18 @@ impl message::Message<ServiceRequest<DeleteReq>> for ProjectManager {
 
         // TODO: fail if opened?
 
-        let mut event_collector = Vec::new();
         let res = match ty {
             project_manager::ProjectType::Core => {
                 self.core_project_collection
-                    .delete(&mut event_collector, &request.id)
+                    .delete(request.id.clone())
                     .await
             }
             project_manager::ProjectType::Ui => {
-                self.ui_project_collection
-                    .delete(&mut event_collector, &request.id)
-                    .await
+                self.ui_project_collection.delete(request.id.clone()).await
             }
         };
 
         call.reply_result(res.map(|_| DeleteRes));
-
-        self.process_events(event_collector, ty);
     }
 }
 
@@ -748,44 +865,85 @@ impl message::Message<ServiceRequest<OpenReq>> for ProjectManager {
         let call = request.into_call();
         let request = call.request();
 
-        let project_data = match request.r#type {
-            project_manager::ProjectType::Core => {
-                let Some(core_project) = self.core_project_collection.get(&request.id).ok() else {
-                    let err = ProjectManagerActorError::ProjectNotFound(request.id.clone());
-                    call.reply_error(err);
-                    return;
-                };
-
-                opened_projects::TypedProjectData::Core(core_project.clone())
-            }
-            project_manager::ProjectType::Ui => {
-                let Some(ui_project) = self.ui_project_collection.get(&request.id).ok() else {
-                    let err = ProjectManagerActorError::ProjectNotFound(request.id.clone());
-                    call.reply_error(err);
-                    return;
-                };
-
-                opened_projects::TypedProjectData::Ui(ui_project.clone())
+        let project = match self
+            .get_or_open_project(request.r#type, request.id.clone())
+            .await
+        {
+            Ok(project) => project,
+            Err(err) => {
+                call.reply_error(err);
+                return;
             }
         };
 
-        let mut notifications_emitter =
-            match self
-                .opened_projects
-                .open_project(call.session(), project_data, &request.id)
-            {
-                Ok((notifier_id, notifications_emitter)) => {
-                    call.reply_ok(OpenRes(notifier_id));
-
-                    notifications_emitter
+        let (notifier_id, initial_emitter) = match project.open(call.session().clone()).await {
+            Ok((notifier_id, initial_emitter)) => (notifier_id, initial_emitter),
+            Err(err) => {
+                // Need to cleanup if just opened
+                if !project.used() {
+                    project.terminate().await;
+                    self.opened_projects_names
+                        .remove(&(project.project_type(), project.name().to_owned()));
                 }
-                Err(err) => {
-                    call.reply_error(err);
-                    return;
-                }
-            };
 
-        notifications_emitter.emit_notifications();
+                call.reply_error(err);
+                return;
+            }
+        };
+
+        call.reply_ok(OpenRes(protocol::NotifierId { notifier_id }));
+
+        initial_emitter.emit_notifications();
+    }
+}
+
+impl ProjectManager {
+    async fn get_or_open_project(
+        &mut self,
+        project_type: project_manager::ProjectType,
+        id: String,
+    ) -> Result<Arc<OpenedProjectEntry>, ProjectManagerActorError> {
+        let key = (project_type, id.clone());
+
+        let project = match self.opened_projects_names.get(&key) {
+            Some(project) => project.clone(),
+            None => {
+                let project = match project_type {
+                    project_manager::ProjectType::Core => {
+                        OpenedProjectEntry::create_core(
+                            id.clone(),
+                            self.core_project_collection.clone(),
+                        )
+                        .await?
+                    }
+                    project_manager::ProjectType::Ui => {
+                        OpenedProjectEntry::create_ui(
+                            id.clone(),
+                            self.ui_project_collection.clone(),
+                        )
+                        .await?
+                    }
+                };
+
+                self.opened_projects_names.insert(key, project.clone());
+
+                project
+            }
+        };
+
+        Ok(project)
+    }
+
+    fn get_project(
+        &self,
+        notifier_id: &str,
+    ) -> Result<&OpenedProjectEntry, ProjectManagerActorError> {
+        match self.opened_projects_notifiers.get(notifier_id) {
+            Some(entry) => Ok(entry),
+            None => Err(ProjectManagerActorError::NotifierNotFound(
+                notifier_id.to_owned(),
+            )),
+        }
     }
 }
 
@@ -799,12 +957,49 @@ impl message::Message<ServiceRequest<CloseReq>> for ProjectManager {
     ) -> Self::Reply {
         let call = request.into_call();
         let request = call.request();
+        let notifier_id = request.0.notifier_id.clone();
 
-        let res = self
-            .opened_projects
-            .close_project(call.session(), request.0.clone());
+        let project = match self.get_project(&notifier_id) {
+            Ok(project) => project,
+            Err(err) => {
+                call.reply_error(err);
+                return;
+            }
+        };
 
-        call.reply_result(res.map(|_| CloseRes));
+        match project
+            .close(call.session().clone(), notifier_id.clone())
+            .await
+        {
+            Ok(_) => {}
+            Err(err) => {
+                call.reply_error(err);
+                return;
+            }
+        }
+
+        self.close_project(notifier_id).await;
+
+        call.reply_ok(CloseRes);
+    }
+}
+
+impl ProjectManager {
+    async fn close_project(&mut self, notifier_id: String) {
+        let entry = match self.opened_projects_notifiers.remove(&notifier_id) {
+            Some(entry) => entry,
+            None => {
+                tracing::error!(notifier_id, "notifier not found");
+                return;
+            }
+        };
+
+        let used = entry.dec_open_count();
+        if !used {
+            entry.terminate().await;
+            self.opened_projects_names
+                .remove(&(entry.project_type(), entry.name().to_owned()));
+        }
     }
 }
 
@@ -818,27 +1013,31 @@ impl message::Message<ServiceRequest<CallOpenedReq>> for ProjectManager {
     ) -> Self::Reply {
         let call = request.into_call();
         let request = call.request();
-        let notifier_id = protocol::NotifierId {
-            notifier_id: request.notifier_id.clone(),
-        };
+        let notifier_id = request.notifier_id.clone();
 
-        let (mut notifications_emitter, project_data) = match self
-            .opened_projects
-            .call_project(call.session(), notifier_id, request.call_data.clone())
-            .await
-        {
-            Ok((data, notifications_emitter, project_data)) => {
-                call.reply_ok(CallOpenedRes(data));
-                (notifications_emitter, project_data)
-            }
+        let project = match self.get_project(&notifier_id) {
+            Ok(project) => project,
             Err(err) => {
                 call.reply_error(err);
                 return;
             }
         };
 
-        notifications_emitter.emit_notifications();
+        let res = match project
+            .call(
+                call.session().clone(),
+                notifier_id,
+                request.call_data.clone(),
+            )
+            .await
+        {
+            Ok(res) => res,
+            Err(err) => {
+                call.reply_error(err);
+                return;
+            }
+        };
 
-        self.handle_project_update(project_data).await;
+        call.reply_ok(CallOpenedRes(res));
     }
 }

@@ -196,7 +196,7 @@ impl<Message: Send + Clone + 'static> From<ActorHandle<PubSub<Message>>>
     }
 }
 
-pub async fn spawn_pubsub<Message: 'static>(name: &'static str) -> SpawnedActor {
+pub async fn spawn_pubsub<Message: 'static>(name: impl Into<Cow<'static, str>>) -> SpawnedActor {
     let (actor, _) = SpawnedActor::start::<PubSub<Message>>(PubSub::<Message>::new(
         kameo_actors::DeliveryStrategy::Guaranteed,
     ))
