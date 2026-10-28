@@ -8,9 +8,7 @@ use crate::register_ts;
 
 // Adjust these paths to your actual module layout.
 use crate::component_model::{ConfigItem, Member, MemberType, PluginUsage};
-use crate::ui_model::{
-    ActionWindow, ControlDisplay, ControlDisplayMapItem, DefaultWindow, Resource, Style,
-};
+pub use crate::ui_model::{ActionWindow, ControlDisplay, ControlDisplayMapItem, Resource, Style};
 use core_import_data::ObjectChange;
 use core_validation::Item;
 
@@ -431,7 +429,7 @@ pub struct UiTemplateData {
 
 register_ts!(UiTemplateData);
 
-/// DefaultWindow maps a context key to a window id.
+/// UiDefaultWindowData maps a context key to a window id.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export_to = "model.ts")]
 #[ts(type = "{ [key: string]: string }")]
@@ -619,7 +617,7 @@ register_ts!(ResetProjectNotification);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetUiDefaultWindowNotification {
-    pub default_window: DefaultWindow,
+    pub default_window: UiDefaultWindowData,
 }
 
 register_ts!(SetUiDefaultWindowNotification);
@@ -976,7 +974,7 @@ register_ts!(ApplyRefreshComponentsUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetDefaultWindowUiProjectCall {
-    pub default_window: DefaultWindow,
+    pub default_window: UiDefaultWindowData,
 }
 
 register_ts!(SetDefaultWindowUiProjectCall);

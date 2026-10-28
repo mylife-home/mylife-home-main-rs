@@ -133,7 +133,7 @@ struct UiProjectArgs {
 struct UiProject {
     name: String,
     notifiers: NotifierManager<project_manager::UpdateProjectNotification>,
-    data: Arc<project_manager::UiProject>,
+    model: ProjectModel,
     fs_collection: FsCollectionHandle<project_manager::UiProject>,
 }
 
@@ -147,7 +147,7 @@ impl Actor for UiProject {
         Ok(Self {
             name: args.name,
             notifiers: NotifierManager::new("project-manager/opened-project"),
-            data: args.data,
+            model: ProjectModel::new(&args.data),
             fs_collection: args.fs_collection,
         })
     }
@@ -165,8 +165,36 @@ impl message::Message<Open> for UiProject {
         let notifier = self.notifiers.create_notifier(msg.session);
 
         // TODO: initial notifications
-        let notifications = Vec::new();
+        let mut notifications = Vec::new();
 
+        notifications.push(
+            project_manager::UpdateProjectNotification::SetUiDefaultWindow(
+                project_manager::SetUiDefaultWindowNotification {
+                    default_window: self.model.default_window.data.as_ref().clone(),
+                },
+            ),
+        );
+        /*
+
+            notifier.notify({ operation: 'set-ui-default-window', defaultWindow: this.project.defaultWindow } as SetUiDefaultWindowNotification);
+            notifier.notify({ operation: 'set-ui-component-data', components: this.project.components, plugins: this.project.plugins } as SetUiComponentDataNotification);
+
+            for (const [id, resource] of Object.entries(this.project.resources)) {
+              notifier.notify({ operation: 'set-ui-resource', id, resource } as SetUiResourceNotification);
+            }
+
+            for (const [id, style] of Object.entries(this.project.styles)) {
+              notifier.notify({ operation: 'set-ui-style', id, style } as SetUiStyleNotification);
+            }
+
+            for (const [id, window] of Object.entries(this.project.windows)) {
+              notifier.notify({ operation: 'set-ui-window', id, window } as SetUiWindowNotification);
+            }
+
+            for (const [id, template] of Object.entries(this.project.templates)) {
+              notifier.notify({ operation: 'set-ui-template', id, template } as SetUiTemplateNotification);
+            }
+        */
         let notifier_id = notifier.notifier_id().to_owned();
         let notification_emitter = InitialEmitter::new(notifier.clone(), notifications);
 
@@ -359,7 +387,7 @@ impl message::Message<Update<project_manager::UiProject>> for UiProject {
 
             fs_collection::Kind::Updated { value } => {
                 // Was it our update?
-                if Arc::ptr_eq(&self.data, &value) {
+                if Arc::ptr_eq(&self.model.data, &value) {
                     return;
                 }
 
@@ -397,8 +425,15 @@ impl message::Message<SessionEvent> for UiProject {
 
 impl UiProject {
     fn reload(&mut self, value: Arc<project_manager::UiProject>) {
-        // TODO
-        self.data = value;
+        self.model = ProjectModel::new(&value);
+        // TODO: notify
+    }
+
+    async fn update(&mut self) -> Result<(), ProjectManagerActorError> {
+        self.fs_collection
+            .update(self.name.clone(), self.model.data.clone())
+            .await?;
+        Ok(())
     }
 
     async fn validate(
@@ -439,7 +474,9 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetDefaultWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        self.model.set_default_window(call_data.default_window);
+        self.notify_all_default_window();
+        self.update().await
     }
 
     async fn set_resource(
@@ -657,5 +694,60 @@ impl UiProject {
         call_data: project_manager::SetTemplateInstanceBindingsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         todo!()
+    }
+
+    fn notify_all_default_window(&mut self) {
+        self.notifiers.notify_all(
+            &project_manager::UpdateProjectNotification::SetUiDefaultWindow(
+                project_manager::SetUiDefaultWindowNotification {
+                    default_window: self.model.default_window.data.as_ref().clone(),
+                },
+            ),
+        );
+    }
+}
+
+#[derive(Debug)]
+struct ProjectModel {
+    pub data: Arc<project_manager::UiProject>,
+    pub default_window: DefaultWindowModel,
+}
+
+impl ProjectModel {
+    pub fn new(data: &Arc<project_manager::UiProject>) -> Self {
+        Self {
+            default_window: DefaultWindowModel::new(&data.default_window),
+            data: data.clone(),
+        }
+    }
+
+    pub fn set_default_window(&mut self, data: project_manager::UiDefaultWindowData) {
+        self.default_window.set(data);
+
+        self.data = Arc::new(project_manager::UiProject {
+            default_window: self.default_window.data.clone(),
+            ..(*self.data).clone()
+        });
+    }
+}
+
+#[derive(Debug)]
+struct DefaultWindowModel {
+    pub data: Arc<project_manager::UiDefaultWindowData>,
+}
+
+impl DefaultWindowModel {
+    pub fn new(data: &Arc<project_manager::UiDefaultWindowData>) -> Self {
+        Self { data: data.clone() }
+    }
+
+    pub fn set(&mut self, data: project_manager::UiDefaultWindowData) {
+        let mut new_map = self.data.0.clone();
+
+        for (key, value) in data.0 {
+            new_map.insert(key.clone(), value);
+        }
+
+        self.data = Arc::new(project_manager::UiDefaultWindowData(new_map));
     }
 }
