@@ -516,21 +516,38 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut notifications = Vec::new();
+
+        self.model
+            .set_style(&mut notifications, call_data.id, call_data.style)?;
+
+        self.notify_all(&notifications);
+        self.update().await
     }
 
     async fn clear_style(
         &mut self,
         call_data: project_manager::ClearStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut notifications = Vec::new();
+
+        self.model.clear_style(&mut notifications, call_data.id)?;
+
+        self.notify_all(&notifications);
+        self.update().await
     }
 
     async fn rename_style(
         &mut self,
         call_data: project_manager::RenameStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut notifications = Vec::new();
+
+        self.model
+            .rename_style(&mut notifications, call_data.id, call_data.new_id)?;
+
+        self.notify_all(&notifications);
+        self.update().await
     }
 
     async fn new_window(

@@ -506,7 +506,7 @@ impl CollectionItem for StyleModel {
 
         Ok(())
     }
-    
+
     fn clear(self, notifications: &mut Vec<project_manager::UpdateProjectNotification>) {
         notifications.push(project_manager::UpdateProjectNotification::ClearUiStyle(
             project_manager::ClearUiStyleNotification { id: self.id },
