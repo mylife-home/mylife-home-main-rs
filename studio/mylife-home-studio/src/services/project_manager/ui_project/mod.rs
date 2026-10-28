@@ -467,7 +467,7 @@ impl UiProject {
         let mut notifications = Vec::new();
 
         self.model
-            .set_default_window(&mut notifications, call_data.default_window);
+            .set_default_window(&mut notifications, call_data.default_window)?;
 
         self.notify_all(&notifications);
         self.update().await
@@ -477,7 +477,13 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut notifications = Vec::new();
+
+        self.model
+            .set_resource(&mut notifications, call_data.id, call_data.resource)?;
+
+        self.notify_all(&notifications);
+        self.update().await
     }
 
     async fn clear_resource(

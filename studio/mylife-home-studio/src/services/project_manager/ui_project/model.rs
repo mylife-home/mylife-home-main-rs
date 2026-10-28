@@ -1,18 +1,24 @@
-use std::sync::Arc;
+use std::{collections::HashMap, format, sync::Arc};
 
 use studio_web_api::project_manager;
+
+use crate::services::project_manager::ProjectManagerActorError;
 
 #[derive(Debug)]
 pub struct ProjectModel {
     data: Arc<project_manager::UiProject>,
+
     default_window: DefaultWindowModel,
+    resources: ResourcesModel,
 }
 
 impl ProjectModel {
     pub fn new(data: &Arc<project_manager::UiProject>) -> Self {
         Self {
-            default_window: DefaultWindowModel::new(&data.default_window),
             data: data.clone(),
+
+            default_window: DefaultWindowModel::new(&data.default_window),
+            resources: ResourcesModel::new(&data.resources),
         }
     }
 
@@ -20,21 +26,16 @@ impl ProjectModel {
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
     ) {
-        notifications.push(
-            project_manager::UpdateProjectNotification::SetUiDefaultWindow(
-                project_manager::SetUiDefaultWindowNotification {
-                    default_window: self.default_window.data.as_ref().clone(),
-                },
-            ),
-        );
+        self.default_window.initial_notifications(notifications);
         /*
 
             notifier.notify({ operation: 'set-ui-default-window', defaultWindow: this.project.defaultWindow } as SetUiDefaultWindowNotification);
             notifier.notify({ operation: 'set-ui-component-data', components: this.project.components, plugins: this.project.plugins } as SetUiComponentDataNotification);
+        */
 
-            for (const [id, resource] of Object.entries(this.project.resources)) {
-              notifier.notify({ operation: 'set-ui-resource', id, resource } as SetUiResourceNotification);
-            }
+        self.resources.initial_notifications(notifications);
+
+        /*
 
             for (const [id, style] of Object.entries(this.project.styles)) {
               notifier.notify({ operation: 'set-ui-style', id, style } as SetUiStyleNotification);
@@ -58,13 +59,31 @@ impl ProjectModel {
         &mut self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         data: project_manager::UiDefaultWindowData,
-    ) {
-        self.default_window.set(notifications, data);
+    ) -> Result<(), ProjectManagerActorError> {
+        self.default_window.set(notifications, data)?;
 
         self.data = Arc::new(project_manager::UiProject {
-            default_window: self.default_window.data.clone(),
+            default_window: self.default_window.data().clone(),
             ..(*self.data).clone()
         });
+
+        Ok(())
+    }
+
+    pub fn set_resource(
+        &mut self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        id: String,
+        resource: project_manager::UiResourceData,
+    ) -> Result<(), ProjectManagerActorError> {
+        self.resources.set(notifications, id, resource)?;
+
+        self.data = Arc::new(project_manager::UiProject {
+            resources: self.resources.data().clone(),
+            ..(*self.data).clone()
+        });
+
+        Ok(())
     }
 }
 
@@ -78,11 +97,28 @@ impl DefaultWindowModel {
         Self { data: data.clone() }
     }
 
+    pub fn initial_notifications(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+    ) {
+        notifications.push(
+            project_manager::UpdateProjectNotification::SetUiDefaultWindow(
+                project_manager::SetUiDefaultWindowNotification {
+                    default_window: self.data.as_ref().clone(),
+                },
+            ),
+        );
+    }
+
+    pub fn data(&self) -> &Arc<project_manager::UiDefaultWindowData> {
+        &self.data
+    }
+
     pub fn set(
         &mut self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         data: project_manager::UiDefaultWindowData,
-    ) {
+    ) -> Result<(), ProjectManagerActorError> {
         let mut new_map = self.data.0.clone();
 
         for (key, value) in data.0 {
@@ -98,5 +134,131 @@ impl DefaultWindowModel {
                 },
             ),
         );
+
+        Ok(())
     }
+}
+
+#[derive(Debug)]
+struct ResourceModel {
+    id: String,
+    data: Arc<project_manager::UiResourceData>,
+}
+
+impl ResourceModel {
+    pub fn new(id: &String, data: &Arc<project_manager::UiResourceData>) -> Self {
+        Self {
+            id: id.clone(),
+            data: data.clone(),
+        }
+    }
+
+    pub fn initial_notifications(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+    ) {
+        notifications.push(project_manager::UpdateProjectNotification::SetUiResource(
+            project_manager::SetUiResourceNotification {
+                id: self.id.clone(),
+                resource: self.data.as_ref().clone(),
+            },
+        ));
+    }
+
+    pub fn data(&self) -> &Arc<project_manager::UiResourceData> {
+        &self.data
+    }
+
+    pub fn set(
+        &mut self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        data: project_manager::UiResourceData,
+    ) -> Result<(), ProjectManagerActorError> {
+        self.data = Arc::new(data);
+
+        notifications.push(project_manager::UpdateProjectNotification::SetUiResource(
+            project_manager::SetUiResourceNotification {
+                id: self.id.clone(),
+                resource: self.data.as_ref().clone(),
+            },
+        ));
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct ResourcesModel {
+    data: Arc<HashMap<String, Arc<project_manager::UiResourceData>>>,
+    resources: HashMap<String, ResourceModel>,
+}
+
+impl ResourcesModel {
+    pub fn new(data: &Arc<HashMap<String, Arc<project_manager::UiResourceData>>>) -> Self {
+        let mut resources = HashMap::new();
+
+        for (id, resource_data) in data.as_ref() {
+            resources.insert(id.clone(), ResourceModel::new(id, resource_data));
+        }
+
+        Self {
+            data: data.clone(),
+            resources,
+        }
+    }
+
+    pub fn initial_notifications(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+    ) {
+        for resource in self.resources.values() {
+            resource.initial_notifications(notifications);
+        }
+    }
+
+    pub fn data(&self) -> &Arc<HashMap<String, Arc<project_manager::UiResourceData>>> {
+        &self.data
+    }
+
+    pub fn set(
+        &mut self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        id: String,
+        resource: project_manager::UiResourceData,
+    ) -> Result<(), ProjectManagerActorError> {
+        check_id(&id)?;
+
+        let new_data = match self.resources.get_mut(&id) {
+            Some(item) => {
+                item.set(notifications, resource)?;
+                item.data().clone()
+            }
+            None => {
+                let new_item = ResourceModel::new(&id, &Arc::new(resource));
+                let data = new_item.data().clone();
+                new_item.initial_notifications(notifications);
+                self.resources.insert(id.clone(), new_item);
+
+                data
+            }
+        };
+
+        // Rebuild the map
+        let mut new_map = self.data.as_ref().clone();
+        new_map.insert(id.clone(), new_data);
+
+        self.data = Arc::new(new_map);
+
+        Ok(())
+    }
+}
+
+fn check_id(id: &str) -> Result<(), ProjectManagerActorError> {
+    if id.contains(':') {
+        return Err(ProjectManagerActorError::DataProcessingError(format!(
+            "Id '{}' contains forbidden character ':'",
+            id
+        )));
+    }
+    Ok(())
 }
