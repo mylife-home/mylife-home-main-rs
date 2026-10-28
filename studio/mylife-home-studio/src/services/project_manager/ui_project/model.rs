@@ -1,4 +1,4 @@
-use std::{collections::HashMap, format, sync::Arc};
+use std::{collections::HashMap, format, mem, sync::Arc};
 
 use studio_web_api::project_manager;
 
@@ -77,6 +77,41 @@ impl ProjectModel {
         resource: project_manager::UiResourceData,
     ) -> Result<(), ProjectManagerActorError> {
         self.resources.set(notifications, id, resource)?;
+
+        self.data = Arc::new(project_manager::UiProject {
+            resources: self.resources.data().clone(),
+            ..(*self.data).clone()
+        });
+
+        Ok(())
+    }
+
+    pub fn clear_resource(
+        &mut self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        id: String,
+    ) -> Result<(), ProjectManagerActorError> {
+        self.resources.clear(notifications, id)?;
+
+        // TODO: impacts
+
+        self.data = Arc::new(project_manager::UiProject {
+            resources: self.resources.data().clone(),
+            ..(*self.data).clone()
+        });
+
+        Ok(())
+    }
+
+    pub fn rename_resource(
+        &mut self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        old_id: String,
+        new_id: String,
+    ) -> Result<(), ProjectManagerActorError> {
+        self.resources.rename(notifications, old_id, new_id)?;
+
+        // TODO: impacts
 
         self.data = Arc::new(project_manager::UiProject {
             resources: self.resources.data().clone(),
@@ -169,6 +204,22 @@ impl ResourceModel {
         &self.data
     }
 
+    pub fn rename(
+        &mut self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        new_id: String,
+    ) {
+        let mut old_id = new_id;
+        mem::swap(&mut old_id, &mut self.id);
+
+        notifications.push(project_manager::UpdateProjectNotification::RenameUiResource(
+            project_manager::RenameUiResourceNotification {
+                id: old_id,
+                new_id: self.id.clone(),
+            },
+        ));
+    }
+
     pub fn set(
         &mut self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
@@ -247,6 +298,59 @@ impl ResourcesModel {
         let mut new_map = self.data.as_ref().clone();
         new_map.insert(id.clone(), new_data);
 
+        self.data = Arc::new(new_map);
+
+        Ok(())
+    }
+
+    pub fn clear(
+        &mut self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        id: String,
+    ) -> Result<(), ProjectManagerActorError> {
+        if self.resources.remove(&id).is_none() {
+            return Ok(());
+        }
+
+        notifications.push(project_manager::UpdateProjectNotification::ClearUiResource(project_manager::ClearUiResourceNotification{id: id.clone()}));
+
+        let mut new_map = self.data.as_ref().clone();
+        new_map.remove(&id);
+        self.data = Arc::new(new_map);
+
+        Ok(())
+    }
+
+    pub fn rename(
+        &mut self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        old_id: String,
+        new_id: String,
+    ) -> Result<(), ProjectManagerActorError> {
+        check_id(&new_id)?;
+
+        if self.resources.get(&new_id).is_some() {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Resource with id '{}' already exists",
+                new_id
+            )));
+        }
+
+        let Some(mut resource) = self.resources.remove(&old_id) else {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Resource with id '{}' not found",
+                old_id
+            )));
+        };
+
+        let data = resource.data().clone();
+
+        resource.rename(notifications, new_id.clone());
+        self.resources.insert(new_id.clone(), resource);
+
+        let mut new_map = self.data.as_ref().clone();
+        new_map.remove(&old_id);
+        new_map.insert(new_id, data);
         self.data = Arc::new(new_map);
 
         Ok(())

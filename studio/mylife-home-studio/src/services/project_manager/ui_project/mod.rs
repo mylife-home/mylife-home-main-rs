@@ -490,14 +490,24 @@ impl UiProject {
         &mut self,
         call_data: project_manager::ClearResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut notifications = Vec::new();
+
+        self.model.clear_resource(&mut notifications, call_data.id)?;
+
+        self.notify_all(&notifications);
+        self.update().await
     }
 
     async fn rename_resource(
         &mut self,
         call_data: project_manager::RenameResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut notifications = Vec::new();
+
+        self.model.rename_resource(&mut notifications, call_data.id, call_data.new_id)?;
+
+        self.notify_all(&notifications);
+        self.update().await
     }
 
     async fn set_style(
