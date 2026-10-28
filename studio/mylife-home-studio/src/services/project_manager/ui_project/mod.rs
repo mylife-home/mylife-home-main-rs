@@ -492,7 +492,8 @@ impl UiProject {
     ) -> Result<(), ProjectManagerActorError> {
         let mut notifications = Vec::new();
 
-        self.model.clear_resource(&mut notifications, call_data.id)?;
+        self.model
+            .clear_resource(&mut notifications, call_data.id)?;
 
         self.notify_all(&notifications);
         self.update().await
@@ -504,7 +505,8 @@ impl UiProject {
     ) -> Result<(), ProjectManagerActorError> {
         let mut notifications = Vec::new();
 
-        self.model.rename_resource(&mut notifications, call_data.id, call_data.new_id)?;
+        self.model
+            .rename_resource(&mut notifications, call_data.id, call_data.new_id)?;
 
         self.notify_all(&notifications);
         self.update().await
