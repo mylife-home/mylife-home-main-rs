@@ -9,6 +9,7 @@ pub mod online;
 pub mod project_manager;
 pub mod protocol;
 pub mod ui_model;
+pub mod utils;
 
 // Generation helpers
 
