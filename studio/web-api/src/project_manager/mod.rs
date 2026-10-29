@@ -9,6 +9,7 @@ use crate::register_ts;
 // Adjust these paths to your actual module layout.
 use crate::component_model::{ConfigItem, Member, MemberType, PluginUsage};
 pub use crate::ui_model::{ActionWindow, ControlDisplay, ControlDisplayMapItem, Resource, Style};
+use crate::utils::PartialField;
 use core_import_data::ObjectChange;
 use core_validation::Item;
 
@@ -355,6 +356,32 @@ pub struct UiControlData {
 register_ts!(UiControlData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "project-manager.ts")]
+#[ts(type = "Partial<UiControlData>")]
+pub struct UiControlDataPartial {
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub style: PartialField<Style>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub height: PartialField<i32>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub width: PartialField<i32>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub x: PartialField<i32>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub y: PartialField<i32>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub display: PartialField<Option<ControlDisplay>>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub text: PartialField<Option<UiControlTextData>>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub primary_action: PartialField<Option<UiActionData>>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub secondary_action: PartialField<Option<UiActionData>>,
+}
+
+register_ts!(UiControlDataPartial);
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiActionData {
@@ -378,6 +405,7 @@ register_ts!(UiActionComponentData);
 pub type UiControlDisplayData = ControlDisplay;
 pub type UiControlDisplayMapItemData = ControlDisplayMapItem;
 
+// Used TS-side only for now
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
@@ -1225,8 +1253,7 @@ pub struct SetControlPropertiesUiProjectCall {
     pub view_type: String,
     pub view_id: String,
     pub id: String,
-    #[ts(type = "any")]
-    pub properties: serde_json::Value,
+    pub properties: UiControlDataPartial,
 }
 
 register_ts!(SetControlPropertiesUiProjectCall);

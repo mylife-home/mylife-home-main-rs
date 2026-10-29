@@ -28,7 +28,6 @@ use serde::{Deserialize, Serialize};
 pub enum PartialField<T> {
     #[default]
     Missing,
-    Null,
     Value(T),
 }
 
@@ -39,21 +38,19 @@ impl<T> PartialField<T> {
     }
 }
 
-impl<T: Serialize> Serialize for PartialField<T> {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        match self {
-            PartialField::Value(v) => s.serialize_some(v),
-            PartialField::Null =>s.serialize_none(),
-            PartialField::Missing => panic!("Attempted to serialize a missing field"),
-        }
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for PartialField<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        T::deserialize(d).map(PartialField::Value)
     }
 }
 
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for PartialField<T> {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        Ok(match Option::<T>::deserialize(d)? {
-            Some(v) => PartialField::Value(v),
-            None => PartialField::Null,
-        })
+impl<T: Serialize> Serialize for PartialField<T> {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            PartialField::Value(v) => v.serialize(s),
+            PartialField::Missing => Err(serde::ser::Error::custom(
+                "PartialField::Missing must be skipped with skip_serializing_if",
+            )),
+        }
     }
 }
