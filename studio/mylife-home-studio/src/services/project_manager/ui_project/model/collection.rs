@@ -55,8 +55,8 @@ impl<Item: CollectionItem> CollectionModel<Item> {
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
     ) {
-        for resource in self.items.values() {
-            resource.initial_notifications(notifications);
+        for item in self.items.values() {
+            item.initial_notifications(notifications);
         }
     }
 
@@ -129,17 +129,17 @@ impl<Item: CollectionItem> CollectionModel<Item> {
             )));
         }
 
-        let Some(mut resource) = self.items.remove(&old_id) else {
+        let Some(mut item) = self.items.remove(&old_id) else {
             return Err(ProjectManagerActorError::DataProcessingError(format!(
                 "Item with id '{}' not found",
                 old_id
             )));
         };
 
-        let data = resource.data().clone();
+        let data = item.data().clone();
 
-        resource.rename(notifications, new_id.clone());
-        self.items.insert(new_id.clone(), resource);
+        item.rename(notifications, new_id.clone());
+        self.items.insert(new_id.clone(), item);
 
         let mut new_map = self.data.as_ref().clone();
         new_map.remove(&old_id);
