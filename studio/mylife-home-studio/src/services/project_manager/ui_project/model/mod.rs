@@ -11,9 +11,13 @@ use crate::services::project_manager::{
 };
 
 mod collection;
+mod control;
 mod default_window;
 mod resource;
 mod style;
+mod template;
+mod template_instance;
+mod view;
 
 #[derive(Debug)]
 pub struct ProjectModel {

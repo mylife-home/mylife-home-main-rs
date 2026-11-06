@@ -150,7 +150,7 @@ impl<Item: CollectionItem> CollectionModel<Item> {
     }
 }
 
-fn check_id(id: &str) -> Result<(), ProjectManagerActorError> {
+pub fn check_id(id: &str) -> Result<(), ProjectManagerActorError> {
     if id.contains(':') {
         return Err(ProjectManagerActorError::DataProcessingError(format!(
             "Id '{}' contains forbidden character ':'",
