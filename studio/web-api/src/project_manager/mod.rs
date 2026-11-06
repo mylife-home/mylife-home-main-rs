@@ -92,6 +92,16 @@ pub enum ComponentsImportType {
 
 register_ts!(ComponentsImportType);
 
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "project-manager.ts")]
+#[serde(rename_all = "lowercase")]
+pub enum UiControlType {
+    Display,
+    Text,
+}
+
+register_ts!(UiControlType);
+
 // ===========================================================================
 // Core project data model
 // ===========================================================================
@@ -645,7 +655,7 @@ register_ts!(ResetProjectNotification);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetUiDefaultWindowNotification {
-    pub default_window: UiDefaultWindowData,
+    pub default_window: Arc<UiDefaultWindowData>,
 }
 
 register_ts!(SetUiDefaultWindowNotification);
@@ -654,8 +664,8 @@ register_ts!(SetUiDefaultWindowNotification);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetUiComponentDataNotification {
-    pub components: HashMap<String, UiComponentData>,
-    pub plugins: HashMap<String, UiPluginData>,
+    pub components: Arc<HashMap<String, Arc<UiComponentData>>>,
+    pub plugins: Arc<HashMap<String, Arc<UiPluginData>>>,
 }
 
 register_ts!(SetUiComponentDataNotification);
@@ -665,7 +675,7 @@ register_ts!(SetUiComponentDataNotification);
 #[serde(rename_all = "camelCase")]
 pub struct SetUiResourceNotification {
     pub id: String,
-    pub resource: UiResourceData,
+    pub resource: Arc<UiResourceData>,
 }
 
 register_ts!(SetUiResourceNotification);
@@ -694,7 +704,7 @@ register_ts!(RenameUiResourceNotification);
 #[serde(rename_all = "camelCase")]
 pub struct SetUiStyleNotification {
     pub id: String,
-    pub style: UiStyleData,
+    pub style: Arc<UiStyleData>,
 }
 
 register_ts!(SetUiStyleNotification);
@@ -723,7 +733,7 @@ register_ts!(RenameUiStyleNotification);
 #[serde(rename_all = "camelCase")]
 pub struct SetUiWindowNotification {
     pub id: String,
-    pub window: UiWindowData,
+    pub window: Arc<UiWindowData>,
 }
 
 register_ts!(SetUiWindowNotification);
@@ -752,7 +762,7 @@ register_ts!(RenameUiWindowNotification);
 #[serde(rename_all = "camelCase")]
 pub struct SetUiTemplateNotification {
     pub id: String,
-    pub template: UiTemplateData,
+    pub template: Arc<UiTemplateData>,
 }
 
 register_ts!(SetUiTemplateNotification);
@@ -1204,7 +1214,7 @@ pub struct NewControlUiProjectCall {
     pub id: String,
     pub x: i32,
     pub y: i32,
-    pub r#type: String,
+    pub r#type: UiControlType,
 }
 
 register_ts!(NewControlUiProjectCall);
