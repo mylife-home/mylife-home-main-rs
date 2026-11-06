@@ -6,16 +6,14 @@ use std::collections::HashMap;
 use studio_web_api::project_manager;
 
 use crate::{
-    services::project_manager::{
-        InitialEmitter, ProjectManagerActorError, ui_project::model::ProjectModel,
-    },
+    services::project_manager::{InitialEmitter, ProjectManagerActorError},
     utils::fs_collection::{self, FsCollectionHandle, Update},
     web::{NotifierManager, SessionEvent, SessionHandle},
 };
 
 use kameo::{error::Infallible, message, prelude::*};
 
-mod model;
+mod update;
 
 pub fn new_ui_project_data() -> Arc<project_manager::UiProject> {
     Arc::new(project_manager::UiProject {
@@ -137,7 +135,7 @@ struct UiProjectArgs {
 struct UiProject {
     name: String,
     notifiers: NotifierManager<project_manager::UpdateProjectNotification>,
-    model: ProjectModel,
+    data: Arc<project_manager::UiProject>,
     fs_collection: FsCollectionHandle<project_manager::UiProject>,
 }
 
@@ -151,7 +149,7 @@ impl Actor for UiProject {
         Ok(Self {
             name: args.name,
             notifiers: NotifierManager::new("project-manager/opened-project"),
-            model: ProjectModel::new(&args.data),
+            data: args.data,
             fs_collection: args.fs_collection,
         })
     }
@@ -168,8 +166,10 @@ impl message::Message<Open> for UiProject {
     async fn handle(&mut self, msg: Open, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
         let notifier = self.notifiers.create_notifier(msg.session);
 
-        let mut notifications = Vec::new();
-        self.model.initial_notifications(&mut notifications);
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::initial_notifications(&mut ctx);
+        let (notifications, _) = ctx.output();
+
         let notifier_id = notifier.notifier_id().to_owned();
         let notification_emitter = InitialEmitter::new(notifier.clone(), notifications);
 
@@ -362,7 +362,7 @@ impl message::Message<Update<project_manager::UiProject>> for UiProject {
 
             fs_collection::Kind::Updated { value } => {
                 // Was it our update?
-                if Arc::ptr_eq(self.model.data(), &value) {
+                if Arc::ptr_eq(&self.data, &value) {
                     return;
                 }
 
@@ -400,16 +400,17 @@ impl message::Message<SessionEvent> for UiProject {
 
 impl UiProject {
     fn reload(&mut self, value: Arc<project_manager::UiProject>) {
-        self.model = ProjectModel::new(&value);
+        self.data = value;
 
-        let mut notifications = Vec::new();
+        let mut ctx = update::UpdateContext::new(&self.data);
 
-        notifications.push(project_manager::UpdateProjectNotification::Reset(
+        ctx.push_notification(project_manager::UpdateProjectNotification::Reset(
             project_manager::ResetProjectNotification {},
         ));
 
-        self.model.initial_notifications(&mut notifications);
+        update::initial_notifications(&mut ctx);
 
+        let (notifications, _) = ctx.output();
         self.notify_all(&notifications);
     }
 
@@ -419,10 +420,22 @@ impl UiProject {
         }
     }
 
-    async fn update(&mut self) -> Result<(), ProjectManagerActorError> {
-        self.fs_collection
-            .update(self.name.clone(), self.model.data().clone())
-            .await?;
+    async fn apply_update(
+        &mut self,
+        ctx: update::UpdateContext,
+    ) -> Result<(), ProjectManagerActorError> {
+        let (notifications, new_data) = ctx.output();
+
+        if !Arc::ptr_eq(&self.data, &new_data) {
+            self.data = new_data;
+
+            self.fs_collection
+                .update(self.name.clone(), self.data.clone())
+                .await?;
+        }
+
+        self.notify_all(&notifications);
+
         Ok(())
     }
 
@@ -464,125 +477,108 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetDefaultWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-
-        self.model
-            .set_default_window(&mut notifications, call_data.default_window)?;
-
-        self.notify_all(&notifications);
-        self.update().await
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::set_default_window(&mut ctx, call_data.default_window)?;
+        self.apply_update(ctx).await
     }
 
     async fn set_resource(
         &mut self,
         call_data: project_manager::SetResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-
-        self.model
-            .set_resource(&mut notifications, call_data.id, call_data.resource)?;
-
-        self.notify_all(&notifications);
-        self.update().await
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::set_resource(&mut ctx, call_data.id, call_data.resource)?;
+        self.apply_update(ctx).await
     }
 
     async fn clear_resource(
         &mut self,
         call_data: project_manager::ClearResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-
-        self.model
-            .clear_resource(&mut notifications, call_data.id)?;
-
-        self.notify_all(&notifications);
-        self.update().await
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::clear_resource(&mut ctx, call_data.id)?;
+        self.apply_update(ctx).await
     }
 
     async fn rename_resource(
         &mut self,
         call_data: project_manager::RenameResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-
-        self.model
-            .rename_resource(&mut notifications, call_data.id, call_data.new_id)?;
-
-        self.notify_all(&notifications);
-        self.update().await
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::rename_resource(&mut ctx, call_data.id, call_data.new_id)?;
+        self.apply_update(ctx).await
     }
 
     async fn set_style(
         &mut self,
         call_data: project_manager::SetStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-
-        self.model
-            .set_style(&mut notifications, call_data.id, call_data.style)?;
-
-        self.notify_all(&notifications);
-        self.update().await
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::set_style(&mut ctx, call_data.id, call_data.style)?;
+        self.apply_update(ctx).await
     }
 
     async fn clear_style(
         &mut self,
         call_data: project_manager::ClearStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-
-        self.model.clear_style(&mut notifications, call_data.id)?;
-
-        self.notify_all(&notifications);
-        self.update().await
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::clear_style(&mut ctx, call_data.id)?;
+        self.apply_update(ctx).await
     }
 
     async fn rename_style(
         &mut self,
         call_data: project_manager::RenameStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-
-        self.model
-            .rename_style(&mut notifications, call_data.id, call_data.new_id)?;
-
-        self.notify_all(&notifications);
-        self.update().await
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::rename_style(&mut ctx, call_data.id, call_data.new_id)?;
+        self.apply_update(ctx).await
     }
 
     async fn new_window(
         &mut self,
         call_data: project_manager::NewWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::new_window(&mut ctx, call_data.id)?;
+        self.apply_update(ctx).await
     }
 
     async fn clear_window(
         &mut self,
         call_data: project_manager::ClearWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::clear_window(&mut ctx, call_data.id)?;
+        self.apply_update(ctx).await
     }
 
     async fn rename_window(
         &mut self,
         call_data: project_manager::RenameWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::rename_window(&mut ctx, call_data.id, call_data.new_id)?;
+        self.apply_update(ctx).await
     }
 
     async fn clone_window(
         &mut self,
         call_data: project_manager::CloneWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::clone_window(&mut ctx, call_data.id, call_data.new_id)?;
+        self.apply_update(ctx).await
     }
 
     async fn set_window_properties(
         &mut self,
         call_data: project_manager::SetWindowPropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::set_window_properties(&mut ctx, call_data.id, call_data.properties)?;
+        self.apply_update(ctx).await
     }
 
     async fn new_template(

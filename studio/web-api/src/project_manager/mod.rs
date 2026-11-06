@@ -366,32 +366,6 @@ pub struct UiControlData {
 register_ts!(UiControlData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export_to = "project-manager.ts")]
-#[ts(type = "Partial<UiControlData>")]
-pub struct UiControlDataPartial {
-    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
-    pub style: PartialField<Style>,
-    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
-    pub height: PartialField<i32>,
-    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
-    pub width: PartialField<i32>,
-    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
-    pub x: PartialField<i32>,
-    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
-    pub y: PartialField<i32>,
-    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
-    pub display: PartialField<Option<ControlDisplay>>,
-    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
-    pub text: PartialField<Option<UiControlTextData>>,
-    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
-    pub primary_action: PartialField<Option<UiActionData>>,
-    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
-    pub secondary_action: PartialField<Option<UiActionData>>,
-}
-
-register_ts!(UiControlDataPartial);
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiActionData {
@@ -1118,11 +1092,26 @@ register_ts!(CloneWindowUiProjectCall);
 #[serde(rename_all = "camelCase")]
 pub struct SetWindowPropertiesUiProjectCall {
     pub id: String,
-    #[ts(type = "any")]
-    pub properties: serde_json::Value,
+    pub properties: UiWindowProperties,
 }
 
 register_ts!(SetWindowPropertiesUiProjectCall);
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "project-manager.ts")]
+#[ts(type = "Partial<UiWindowData>")]
+pub struct UiWindowProperties {
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub height: PartialField<i32>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub width: PartialField<i32>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub style: PartialField<Style>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub background_resource: PartialField<Option<Resource>>,
+}
+
+register_ts!(UiWindowProperties);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
@@ -1263,10 +1252,36 @@ pub struct SetControlPropertiesUiProjectCall {
     pub view_type: String,
     pub view_id: String,
     pub id: String,
-    pub properties: UiControlDataPartial,
+    pub properties: UiControlProperties,
 }
 
 register_ts!(SetControlPropertiesUiProjectCall);
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "project-manager.ts")]
+#[ts(type = "Partial<UiControlData>")]
+pub struct UiControlProperties {
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub style: PartialField<Style>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub height: PartialField<i32>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub width: PartialField<i32>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub x: PartialField<i32>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub y: PartialField<i32>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub display: PartialField<Option<ControlDisplay>>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub text: PartialField<Option<UiControlTextData>>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub primary_action: PartialField<Option<UiActionData>>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub secondary_action: PartialField<Option<UiActionData>>,
+}
+
+register_ts!(UiControlProperties);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
