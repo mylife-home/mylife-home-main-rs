@@ -58,10 +58,6 @@ pub fn initial_notifications(ctx: &mut UpdateContext) {
         ),
     );
 
-    /*
-        notifier.notify({ operation: 'set-ui-component-data', components: this.project.components, plugins: this.project.plugins } as SetUiComponentDataNotification);
-    */
-
     for (id, resource) in ctx.data().resources.clone().iter() {
         ctx.push_notification(project_manager::UpdateProjectNotification::SetUiResource(
             project_manager::SetUiResourceNotification {
@@ -426,7 +422,7 @@ pub fn clone_window(
 fn update_window(
     ctx: &mut UpdateContext,
     id: String,
-    mutator: impl FnOnce(&mut project_manager::UiWindowData) -> Result<bool, ProjectManagerActorError>,
+    mutator: impl FnOnce(&UpdateContext, &mut project_manager::UiWindowData) -> Result<bool, ProjectManagerActorError>,
 ) -> Result<(), ProjectManagerActorError> {
     let mut new_windows = ctx.data().windows.as_ref().clone();
     let Some(window) = new_windows.get(&id).cloned() else {
@@ -437,7 +433,7 @@ fn update_window(
     };
 
     let mut window = window.as_ref().clone();
-    let changed = mutator(&mut window)?;
+    let changed = mutator(ctx, &mut window)?;
 
     if !changed {
         return Ok(());
@@ -463,7 +459,7 @@ pub fn set_window_properties(
     id: String,
     properties: project_manager::UiWindowProperties,
 ) -> Result<(), ProjectManagerActorError> {
-    update_window(ctx, id, |window| {
+    update_window(ctx, id, |_, window| {
         let mut changed = false;
 
         if let PartialField::Value(height) = properties.height {
@@ -626,7 +622,7 @@ pub fn clone_template(
 fn update_template(
     ctx: &mut UpdateContext,
     id: String,
-    mutator: impl FnOnce(&mut project_manager::UiTemplateData) -> Result<bool, ProjectManagerActorError>,
+    mutator: impl FnOnce(&UpdateContext, &mut project_manager::UiTemplateData) -> Result<bool, ProjectManagerActorError>,
 ) -> Result<(), ProjectManagerActorError> {
     let mut new_templates = ctx.data().templates.as_ref().clone();
     let Some(template) = new_templates.get(&id).cloned() else {
@@ -637,7 +633,7 @@ fn update_template(
     };
 
     let mut template = template.as_ref().clone();
-    let changed = mutator(&mut template)?;
+    let changed = mutator(ctx, &mut template)?;
 
     if !changed {
         return Ok(());
@@ -663,7 +659,7 @@ pub fn set_template_properties(
     id: String,
     properties: project_manager::UiTemplateProperties,
 ) -> Result<(), ProjectManagerActorError> {
-    update_template(ctx, id, |template| {
+    update_template(ctx, id, |_, template| {
         let mut changed = false;
 
         if let PartialField::Value(height) = properties.height {
@@ -686,7 +682,7 @@ pub fn set_template_export(
     member_type: project_manager::MemberType,
     value_type: String,
 ) -> Result<(), ProjectManagerActorError> {
-    update_template(ctx, id, |template| {
+    update_template(ctx, id, |_, template| {
         let mut new_exports = template.exports.as_ref().clone();
         let export = Arc::new(project_manager::UiTemplateExport {
             bulk_pattern: None,
@@ -711,7 +707,7 @@ pub fn clear_template_export(
     id: String,
     export_id: String,
 ) -> Result<(), ProjectManagerActorError> {
-    update_template(ctx, id, |template| {
+    update_template(ctx, id, |_, template| {
         let mut new_exports = template.exports.as_ref().clone();
         new_exports.remove(&export_id);
         template.exports = Arc::new(new_exports);
@@ -731,7 +727,7 @@ pub fn set_template_bulk_patterns(
     id: String,
     patterns: HashMap<String, String>,
 ) -> Result<(), ProjectManagerActorError> {
-    update_template(ctx, id.clone(), |template| {
+    update_template(ctx, id.clone(), |_, template| {
         let mut changed = false;
         let mut new_exports = template.exports.as_ref().clone();
 
@@ -754,26 +750,57 @@ pub fn set_template_bulk_patterns(
     })
 }
 
+fn prepare_template_bindings(ctx: &UpdateContext, id: &str) -> Result<Arc<HashMap<String, Arc<project_manager::UiTemplateInstanceBinding>>>, ProjectManagerActorError> {
+    let template = get_template(ctx, id)?;
+
+    let mut bindings = HashMap::new();
+    let binding = Arc::new(project_manager::UiTemplateInstanceBinding {
+        component_id: None,
+        member_name: None,
+    });
+
+    for export_id in template.exports.keys() {
+        bindings.insert(export_id.clone(), binding.clone());
+    }
+
+    Ok(Arc::new(bindings))
+}
+
+fn get_template_export_value_type(ctx: &UpdateContext, id: &str, member_name: &str, member_type: project_manager::MemberType) -> Result<Option<String>, ProjectManagerActorError> {
+    let template = get_template(ctx, id)?;
+
+    let Some(export) = template.exports.get(member_name) else {
+        return Ok(None);
+    };
+
+    if export.member_type != member_type {
+        return Ok(None);
+    }
+
+    Ok(Some(export.value_type.clone()))
+}
+
 fn update_view_controls(
     ctx: &mut UpdateContext,
     view_type: project_manager::ViewType,
     view_id: String,
     mutator: impl FnOnce(
+        &UpdateContext,
         &mut HashMap<String, Arc<project_manager::UiControlData>>,
     ) -> Result<bool, ProjectManagerActorError>,
 ) -> Result<(), ProjectManagerActorError> {
     match view_type {
-        project_manager::ViewType::Window => update_window(ctx, view_id, |window| {
+        project_manager::ViewType::Window => update_window(ctx, view_id, |ctx, window| {
             let mut new_controls = window.controls.as_ref().clone();
-            let changed = mutator(&mut new_controls)?;
+            let changed = mutator(ctx, &mut new_controls)?;
             if changed {
                 window.controls = Arc::new(new_controls);
             }
             Ok(changed)
         }),
-        project_manager::ViewType::Template { .. } => update_template(ctx, view_id, |template| {
+        project_manager::ViewType::Template => update_template(ctx, view_id, |ctx, template| {
             let mut new_controls = template.controls.as_ref().clone();
-            let changed = mutator(&mut new_controls)?;
+            let changed = mutator(ctx, &mut new_controls)?;
             if changed {
                 template.controls = Arc::new(new_controls);
             }
@@ -793,7 +820,7 @@ pub fn new_control(
 ) -> Result<(), ProjectManagerActorError> {
     check_id(&id)?;
 
-    update_view_controls(ctx, view_type, view_id, |controls| {
+    update_view_controls(ctx, view_type, view_id, |_, controls| {
         if controls.contains_key(&id) {
             return Err(ProjectManagerActorError::DataProcessingError(format!(
                 "Control with id '{}' already exists",
@@ -843,7 +870,7 @@ pub fn clear_control(
     view_id: String,
     id: String,
 ) -> Result<(), ProjectManagerActorError> {
-    update_view_controls(ctx, view_type, view_id, |controls| {
+    update_view_controls(ctx, view_type, view_id, |_, controls| {
         Ok(controls.remove(&id).is_some())
     })
 }
@@ -857,7 +884,7 @@ pub fn rename_control(
 ) -> Result<(), ProjectManagerActorError> {
     check_id(&new_id)?;
 
-    update_view_controls(ctx, view_type, view_id, |controls| {
+    update_view_controls(ctx, view_type, view_id, |_, controls| {
         if controls.contains_key(&new_id) {
             return Err(ProjectManagerActorError::DataProcessingError(format!(
                 "Control with id '{}' already exists",
@@ -897,13 +924,13 @@ pub fn clone_control(
         new_control.x += 10;
         new_control.y += 10;
     } else {
-      new_control.x = 10;
-      new_control.y = 10;
+        new_control.x = 10;
+        new_control.y = 10;
     }
 
     let new_control = Arc::new(new_control);
 
-    update_view_controls(ctx, target_view_type, target_view_id, |controls| {
+    update_view_controls(ctx, target_view_type, target_view_id, |_, controls| {
         if controls.contains_key(&new_id) {
             return Err(ProjectManagerActorError::DataProcessingError(format!(
                 "Control with id '{}' already exists",
@@ -924,7 +951,7 @@ pub fn set_control_properties(
     id: String,
     properties: project_manager::UiControlProperties,
 ) -> Result<(), ProjectManagerActorError> {
-    update_view_controls(ctx, view_type, view_id, |controls| {
+    update_view_controls(ctx, view_type, view_id, |_, controls| {
         let Some(control) = controls.get_mut(&id) else {
             return Err(ProjectManagerActorError::DataProcessingError(format!(
                 "Control with id '{}' does not exist",
@@ -940,7 +967,7 @@ pub fn set_control_properties(
             control.style = style;
             changed = true;
         }
-       if let PartialField::Value(height) = properties.height {
+        if let PartialField::Value(height) = properties.height {
             control.height = height;
             changed = true;
         }
@@ -982,6 +1009,292 @@ pub fn set_control_properties(
     })
 }
 
+fn update_view_template_instances(
+    ctx: &mut UpdateContext,
+    view_type: project_manager::ViewType,
+    view_id: String,
+    mutator: impl FnOnce(
+        &UpdateContext,
+        &mut HashMap<String, Arc<project_manager::UiTemplateInstanceData>>,
+    ) -> Result<bool, ProjectManagerActorError>,
+) -> Result<(), ProjectManagerActorError> {
+    match view_type {
+        project_manager::ViewType::Window => update_window(ctx, view_id, |ctx, window| {
+            let mut new_templates = window.templates.as_ref().clone();
+            let changed = mutator(ctx, &mut new_templates)?;
+            if changed {
+                window.templates = Arc::new(new_templates);
+            }
+            Ok(changed)
+        }),
+        project_manager::ViewType::Template { .. } => update_template(ctx, view_id, |ctx, template| {
+            let mut new_templates = template.templates.as_ref().clone();
+            let changed = mutator(ctx, &mut new_templates)?;
+            if changed {
+                template.templates = Arc::new(new_templates);
+            }
+            Ok(changed)
+        }),
+    }
+}
+
+pub fn new_template_instance(
+    ctx: &mut UpdateContext,
+    view_type: project_manager::ViewType,
+    view_id: String,
+    id: String,
+    template_id: String,
+    x: i32,
+    y: i32,
+) -> Result<(), ProjectManagerActorError> {
+    check_id(&id)?;
+
+    if !ctx.data().templates.contains_key(&template_id) {
+        return Err(ProjectManagerActorError::DataProcessingError(format!(
+            "Template '{}' does not exist",
+            template_id
+        )));
+    }
+
+    let bindings = prepare_template_bindings(ctx, &id)?;
+
+    update_view_template_instances(ctx, view_type, view_id, |_, templates| {
+        if templates.contains_key(&id) {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Template instance with id '{}' already exists",
+                id
+            )));
+        }
+
+        let template = project_manager::UiTemplateInstanceData {
+            template_id,
+            x,
+            y,
+            bindings,
+        };
+
+        templates.insert(id, Arc::new(template));
+
+        Ok(true)
+    })?;
+
+    Ok(())
+}
+
+pub fn clear_template_instance(
+    ctx: &mut UpdateContext,
+    view_type: project_manager::ViewType,
+    view_id: String,
+    id: String,
+) -> Result<(), ProjectManagerActorError> {
+    update_view_template_instances(ctx, view_type, view_id, |_, templates| {
+        Ok(templates.remove(&id).is_some())
+    })?;
+
+    Ok(())
+}
+
+pub fn rename_template_instance(
+    ctx: &mut UpdateContext,
+    view_type: project_manager::ViewType,
+    view_id: String,
+    id: String,
+    new_id: String,
+) -> Result<(), ProjectManagerActorError> {
+    check_id(&new_id)?;
+
+    update_view_template_instances(ctx, view_type, view_id, |_, templates| {
+        if templates.contains_key(&new_id) {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Template instance with id '{}' already exists",
+                new_id
+            )));
+        }
+
+        let Some(template) = templates.remove(&id) else {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Template instance with id '{}' does not exist",
+                id
+            )));
+        };
+
+        templates.insert(new_id, template);
+
+        Ok(true)
+    })?;
+
+    Ok(())
+}
+
+pub fn clone_template_instance(
+    ctx: &mut UpdateContext,
+    view_type: project_manager::ViewType,
+    view_id: String,
+    id: String,
+    new_id: String,
+) -> Result<(), ProjectManagerActorError> {
+    check_id(&new_id)?;
+
+    update_view_template_instances(ctx, view_type, view_id, |_, templates| {
+        if templates.contains_key(&new_id) {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Template instance with id '{}' already exists",
+                new_id
+            )));
+        }
+
+        let Some(source) = templates.get(&id) else {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Template instance with id '{}' does not exist",
+                id
+            )));
+        };
+
+        let mut new_template_instance = source.as_ref().clone();
+        new_template_instance.x += 10;
+        new_template_instance.y += 10;
+
+        templates.insert(new_id, Arc::new(new_template_instance));
+
+        Ok(true)
+    })
+}
+
+pub fn move_template_instance(
+    ctx: &mut UpdateContext,
+    view_type: project_manager::ViewType,
+    view_id: String,
+    id: String,
+    x: i32,
+    y: i32,
+) -> Result<(), ProjectManagerActorError> {
+    update_view_template_instances(ctx, view_type, view_id, |_, templates| {
+        let Some(template) = templates.get(&id) else {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Template instance with id '{}' does not exist",
+                id
+            )));
+        };
+
+        let mut template = template.as_ref().clone();
+        template.x = x;
+        template.y = y;
+
+        templates.insert(id, Arc::new(template));
+
+        Ok(true)
+    })?;
+
+    Ok(())
+}
+
+pub fn set_template_instance_template(
+    ctx: &mut UpdateContext,
+    view_type: project_manager::ViewType,
+    view_id: String,
+    id: String,
+    template_id: String,
+) -> Result<(), ProjectManagerActorError> {
+    let bindings = prepare_template_bindings(ctx, &template_id)?;
+
+    update_view_template_instances(ctx, view_type, view_id, |_, templates| {
+        let Some(template_instance) = templates.get(&id) else {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Template instance with id '{}' does not exist",
+                id
+            )));
+        };
+
+        let mut template_instance = template_instance.as_ref().clone();
+        template_instance.template_id = template_id;
+        // reset bindings
+        template_instance.bindings = bindings;
+
+        templates.insert(id, Arc::new(template_instance));
+
+        Ok(true)
+    })?;
+
+    Ok(())
+}
+
+pub fn set_template_instance_bindings(
+    ctx: &mut UpdateContext,
+    view_type: project_manager::ViewType,
+    view_id: String,
+    id: String,
+    bindings: HashMap<String, project_manager::UiTemplateInstanceBinding>,
+) -> Result<(), ProjectManagerActorError> {
+    update_view_template_instances(ctx, view_type, view_id.clone(), |ctx, templates| {
+        let Some(template_instance) = templates.get(&id) else {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Template instance with id '{}' does not exist",
+                id
+            )));
+        };
+
+        let mut template_instance = template_instance.as_ref().clone();
+        let mut new_bindings = template_instance.bindings.as_ref().clone();
+
+        let template = get_template(ctx, &template_instance.template_id)?.clone();
+
+        for (export_id, project_manager::UiTemplateInstanceBinding { component_id, member_name }) in bindings {
+            let Some(binding) = new_bindings.get_mut(&export_id) else {
+                return Err(ProjectManagerActorError::DataProcessingError(format!(
+                    "Binding from export '{}' not found on template '{}'",
+                    export_id,
+                    id
+                )));
+            };
+
+            let mut binding = binding.as_ref().clone();
+
+            let Some(member_name) = member_name else {
+                return Err(ProjectManagerActorError::DataProcessingError(format!(
+                    "Member name not provided for export '{}'",
+                    export_id
+                )));
+            };
+
+            let Some(export_data) = template.exports.get(&export_id) else {
+                return Err(ProjectManagerActorError::DataProcessingError(format!(
+                    "Export '{}' does not exist on template '{}'",
+                    export_id,
+                    template_instance.template_id
+                )));
+            };
+
+            let value_type = if let Some(component_id) = &component_id {
+                find_component_member_value_type(ctx, component_id, &member_name, export_data.member_type)
+            } else if view_type == project_manager::ViewType::Template {
+                get_template_export_value_type(ctx, &view_id, &member_name, export_data.member_type)?
+            } else {
+                None
+            };
+
+            if value_type != Some(export_data.value_type.clone()) {
+                return Err(ProjectManagerActorError::DataProcessingError(format!(
+                    "Binding mismatch: cannot bind '{}.{}' on export '{}'",
+                    component_id.as_deref().unwrap_or("<template>"),
+                    member_name,
+                    export_id
+                )));
+            }
+
+            binding.component_id = component_id;
+            binding.member_name = Some(member_name);
+            new_bindings.insert(export_id, Arc::new(binding));
+        }
+
+        template_instance.bindings = Arc::new(new_bindings);
+        templates.insert(id, Arc::new(template_instance));
+
+        Ok(true)
+    })?;
+
+    Ok(())
+}
+
 fn check_id(id: &str) -> Result<(), ProjectManagerActorError> {
     if id.trim().is_empty() {
         return Err(ProjectManagerActorError::DataProcessingError(String::from(
@@ -998,8 +1311,33 @@ fn check_id(id: &str) -> Result<(), ProjectManagerActorError> {
     Ok(())
 }
 
+fn find_component_member_value_type(
+    ctx: &UpdateContext,
+    component_id: &str,
+    member_name: &str,
+    member_type: project_manager::MemberType,
+) -> Option<String> {
+    let Some(component) = ctx.data.components.get(component_id) else {
+        return None;
+    };
+
+    let Some(plugin) = ctx.data.plugins.get(&component.plugin) else {
+        return None;
+    };
+
+    let Some(member) = plugin.members.get(member_name) else {
+        return None;
+    };
+
+    if member.member_type != member_type {
+        return None;
+    }
+
+    Some(member.value_type.clone())
+}
+
 fn get_window<'a>(
-    ctx: &'a mut UpdateContext,
+    ctx: &'a UpdateContext,
     id: &str,
 ) -> Result<&'a Arc<project_manager::UiWindowData>, ProjectManagerActorError> {
     let Some(window) = ctx.data().windows.get(id) else {
@@ -1013,13 +1351,13 @@ fn get_window<'a>(
 }
 
 fn get_template<'a>(
-    ctx: &'a mut UpdateContext,
-    view_id: &str,
+    ctx: &'a UpdateContext,
+    id: &str,
 ) -> Result<&'a Arc<project_manager::UiTemplateData>, ProjectManagerActorError> {
-    let Some(template) = ctx.data().templates.get(view_id) else {
+    let Some(template) = ctx.data().templates.get(id) else {
         return Err(ProjectManagerActorError::DataProcessingError(format!(
             "Template '{}' does not exist",
-            view_id
+            id
         )));
     };
 
@@ -1027,7 +1365,7 @@ fn get_template<'a>(
 }
 
 fn get_view_control<'a>(
-    ctx: &'a mut UpdateContext,
+    ctx: &'a UpdateContext,
     view_type: project_manager::ViewType,
     view_id: &str,
     id: &str,
@@ -1043,7 +1381,7 @@ fn get_view_control<'a>(
             };
 
             Ok(control)
-        },
+        }
         project_manager::ViewType::Template => {
             let template = get_template(ctx, view_id)?;
             let Some(control) = template.controls.get(id) else {
@@ -1054,6 +1392,38 @@ fn get_view_control<'a>(
             };
 
             Ok(control)
+        }
+    }
+}
+
+fn get_view_template_instance<'a>(
+    ctx: &'a UpdateContext,
+    view_type: project_manager::ViewType,
+    view_id: &str,
+    id: &str,
+) -> Result<&'a Arc<project_manager::UiTemplateInstanceData>, ProjectManagerActorError> {
+    match view_type {
+        project_manager::ViewType::Window => {
+            let window = get_window(ctx, view_id)?;
+            let Some(template_instance) = window.templates.get(id) else {
+                return Err(ProjectManagerActorError::DataProcessingError(format!(
+                    "Template instance '{}' does not exist in window '{}'",
+                    id, view_id
+                )));
+            };
+
+            Ok(template_instance)
+        }
+        project_manager::ViewType::Template => {
+            let template = get_template(ctx, view_id)?;
+            let Some(template_instance) = template.templates.get(id) else {
+                return Err(ProjectManagerActorError::DataProcessingError(format!(
+                    "Template instance '{}' does not exist in template '{}'",
+                    id, view_id
+                )));
+            };
+
+            Ok(template_instance)
         }
     }
 }

@@ -39,7 +39,7 @@ pub struct Plugin {
 
 register_ts!(Plugin);
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, Eq, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "component-model.ts")]
 pub enum MemberType {

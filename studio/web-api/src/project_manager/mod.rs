@@ -102,7 +102,7 @@ pub enum UiControlType {
 
 register_ts!(UiControlType);
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, TS)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum ViewType {
@@ -313,8 +313,8 @@ register_ts!(UiPluginData);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiTemplateInstanceBinding {
-    pub component_id: String,
-    pub member_name: String,
+    pub component_id: Option<String>,
+    pub member_name: Option<String>,
 }
 
 register_ts!(UiTemplateInstanceBinding);

@@ -741,48 +741,106 @@ impl UiProject {
         &mut self,
         call_data: project_manager::NewTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::new_template_instance(
+            &mut ctx,
+            call_data.view_type,
+            call_data.view_id,
+            call_data.id,
+            call_data.template_id,
+            call_data.x,
+            call_data.y,
+        )?;
+        self.apply_update(ctx).await
     }
 
     async fn clear_template_instance(
         &mut self,
         call_data: project_manager::ClearTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::clear_template_instance(
+            &mut ctx,
+            call_data.view_type,
+            call_data.view_id,
+            call_data.id,
+        )?;
+        self.apply_update(ctx).await
     }
 
     async fn rename_template_instance(
         &mut self,
         call_data: project_manager::RenameTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::rename_template_instance(
+            &mut ctx,
+            call_data.view_type,
+            call_data.view_id,
+            call_data.id,
+            call_data.new_id,
+        )?;
+        self.apply_update(ctx).await
     }
 
     async fn clone_template_instance(
         &mut self,
         call_data: project_manager::CloneTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::clone_template_instance(
+            &mut ctx,
+            call_data.view_type,
+            call_data.view_id,
+            call_data.id,
+            call_data.new_id,
+        )?;
+        self.apply_update(ctx).await
     }
 
     async fn move_template_instance(
         &mut self,
         call_data: project_manager::MoveTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::move_template_instance(
+            &mut ctx,
+            call_data.view_type,
+            call_data.view_id,
+            call_data.id,
+            call_data.x,
+            call_data.y,
+        )?;
+        self.apply_update(ctx).await
     }
 
     async fn set_template_instance_template(
         &mut self,
         call_data: project_manager::SetTemplateInstanceTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::set_template_instance_template(
+            &mut ctx,
+            call_data.view_type,
+            call_data.view_id,
+            call_data.id,
+            call_data.template_id,
+        )?;
+        self.apply_update(ctx).await
     }
 
     async fn set_template_instance_bindings(
         &mut self,
         call_data: project_manager::SetTemplateInstanceBindingsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut ctx = update::UpdateContext::new(&self.data);
+        update::set_template_instance_bindings(
+            &mut ctx,
+            call_data.view_type,
+            call_data.view_id,
+            call_data.id,
+            call_data.bindings,
+        )?;
+        self.apply_update(ctx).await
     }
 }
