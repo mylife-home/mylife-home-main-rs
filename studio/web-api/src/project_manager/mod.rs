@@ -7,7 +7,7 @@ use ts_rs::TS;
 use crate::register_ts;
 
 // Adjust these paths to your actual module layout.
-use crate::component_model::{ConfigItem, Member, MemberType, PluginUsage};
+pub use crate::component_model::{ConfigItem, Member, MemberType, PluginUsage};
 pub use crate::ui_model::{ActionWindow, ControlDisplay, ControlDisplayMapItem, Resource, Style};
 use crate::utils::PartialField;
 use core_import_data::ObjectChange;
@@ -101,6 +101,16 @@ pub enum UiControlType {
 }
 
 register_ts!(UiControlType);
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, TS)]
+#[ts(export, export_to = "project-manager.ts")]
+#[serde(rename_all = "lowercase")]
+pub enum ViewType {
+    Window,
+    Template,
+}
+
+register_ts!(ViewType);
 
 // ===========================================================================
 // Core project data model
@@ -420,7 +430,7 @@ register_ts!(UiWindowData);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiTemplateExport {
-    pub bulk_pattern: String,
+    pub bulk_pattern: Option<String>,
     pub description: Option<String>,
     pub member_type: MemberType,
     pub value_type: String,
@@ -1099,7 +1109,7 @@ register_ts!(SetWindowPropertiesUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export_to = "project-manager.ts")]
-#[ts(type = "Partial<UiWindowData>")]
+#[ts(type = "Partial<Omit<UiWindowData, 'controls' | 'templates'>>")]
 pub struct UiWindowProperties {
     #[serde(default, skip_serializing_if = "PartialField::is_missing")]
     pub height: PartialField<i32>,
@@ -1156,11 +1166,22 @@ register_ts!(CloneTemplateUiProjectCall);
 #[serde(rename_all = "camelCase")]
 pub struct SetTemplatePropertiesUiProjectCall {
     pub id: String,
-    #[ts(type = "any")]
-    pub properties: serde_json::Value,
+    pub properties: UiTemplateProperties,
 }
 
 register_ts!(SetTemplatePropertiesUiProjectCall);
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "project-manager.ts")]
+#[ts(type = "Partial<Omit<UiTemplateData, 'exports' | 'controls' | 'templates'>>")]
+pub struct UiTemplateProperties {
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub height: PartialField<i32>,
+    #[serde(default, skip_serializing_if = "PartialField::is_missing")]
+    pub width: PartialField<i32>,
+}
+
+register_ts!(UiTemplateProperties);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
@@ -1198,7 +1219,7 @@ register_ts!(SetTemplateBulkPatternsUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct NewControlUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
     pub x: i32,
@@ -1212,7 +1233,7 @@ register_ts!(NewControlUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearControlUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
 }
@@ -1223,7 +1244,7 @@ register_ts!(ClearControlUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameControlUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
     pub new_id: String,
@@ -1235,11 +1256,11 @@ register_ts!(RenameControlUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CloneControlUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
     pub new_id: String,
-    pub target_view_type: String,
+    pub target_view_type: ViewType,
     pub target_view_id: String,
 }
 
@@ -1249,7 +1270,7 @@ register_ts!(CloneControlUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetControlPropertiesUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
     pub properties: UiControlProperties,
@@ -1287,7 +1308,7 @@ register_ts!(UiControlProperties);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct NewTemplateInstanceUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
     pub template_id: String,
@@ -1301,7 +1322,7 @@ register_ts!(NewTemplateInstanceUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearTemplateInstanceUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
 }
@@ -1312,7 +1333,7 @@ register_ts!(ClearTemplateInstanceUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameTemplateInstanceUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
     pub new_id: String,
@@ -1324,7 +1345,7 @@ register_ts!(RenameTemplateInstanceUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CloneTemplateInstanceUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
     pub new_id: String,
@@ -1336,7 +1357,7 @@ register_ts!(CloneTemplateInstanceUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct MoveTemplateInstanceUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
     pub x: i32,
@@ -1349,7 +1370,7 @@ register_ts!(MoveTemplateInstanceUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetTemplateInstanceTemplateUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
     pub template_id: String,
@@ -1361,7 +1382,7 @@ register_ts!(SetTemplateInstanceTemplateUiProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetTemplateInstanceBindingsUiProjectCall {
-    pub view_type: String,
+    pub view_type: ViewType,
     pub view_id: String,
     pub id: String,
     pub bindings: HashMap<String, UiTemplateInstanceBinding>,
