@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 /// A utility enum representing a field that can be missing, null, or have a value.
-/// 
+///
 /// This is useful for representing optional fields in partial updates, where a field may be intentionally omitted, explicitly set to null, or have a concrete value.
-/// 
+///
 /// This won't be translated to TypeScript directly, as the representing version of this would be Partial<T>.
-/// 
+///
 /// Example type:
-/// 
+///
 /// ```rust
 /// #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 /// #[ts(export, export_to = "file.ts")]
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 /// struct MyObject {
 ///     pub field: String,
 /// }
-/// 
+///
 /// #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 /// #[ts(export_to = "file.ts")]
 /// #[ts(type = "Partial<MyObject>")]
