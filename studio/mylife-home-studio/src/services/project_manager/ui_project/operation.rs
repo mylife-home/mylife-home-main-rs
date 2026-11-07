@@ -4,12 +4,12 @@ use studio_web_api::project_manager;
 
 use crate::services::project_manager::ProjectManagerActorError;
 
-pub struct UpdateContext {
+pub struct ProjectOperation {
     notifications: Vec<project_manager::UpdateProjectNotification>,
     data: Arc<project_manager::UiProject>,
 }
 
-impl UpdateContext {
+impl ProjectOperation {
     pub fn new(data: &Arc<project_manager::UiProject>) -> Self {
         Self {
             notifications: Vec::new(),
@@ -37,20 +37,20 @@ impl UpdateContext {
     pub fn set_data(&mut self, data: Arc<project_manager::UiProject>) {
         self.data = data;
     }
-}
 
-pub fn check_id(id: &str) -> Result<(), ProjectManagerActorError> {
-    if id.trim().is_empty() {
-        return Err(ProjectManagerActorError::DataProcessingError(String::from(
-            "Id is empty",
-        )));
-    }
+    pub fn check_id(&self, id: &str) -> Result<(), ProjectManagerActorError> {
+        if id.trim().is_empty() {
+            return Err(ProjectManagerActorError::DataProcessingError(String::from(
+                "Id is empty",
+            )));
+        }
 
-    if id.contains(':') {
-        return Err(ProjectManagerActorError::DataProcessingError(format!(
-            "Id '{}' contains forbidden character ':'",
-            id
-        )));
+        if id.contains(':') {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Id '{}' contains forbidden character ':'",
+                id
+            )));
+        }
+        Ok(())
     }
-    Ok(())
 }

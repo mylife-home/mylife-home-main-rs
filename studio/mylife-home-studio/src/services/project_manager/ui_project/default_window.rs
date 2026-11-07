@@ -3,42 +3,53 @@ use std::sync::Arc;
 use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
-    ProjectManagerActorError, ui_project::utils::UpdateContext,
+    ProjectManagerActorError, ui_project::operation::ProjectOperation,
 };
 
-/// Note: ctx.data() will not be modified by this function
-pub fn initial_notifications(ctx: &mut UpdateContext) {
-    ctx.push_notification(
-        project_manager::UpdateProjectNotification::SetUiDefaultWindow(
-            project_manager::SetUiDefaultWindowNotification {
-                default_window: ctx.data().default_window.clone(),
-            },
-        ),
-    );
+pub trait DefaultWindowOperation {
+    /// Note: ctx.data() will not be modified by this function
+    fn default_window_initial_notifications(&mut self);
+
+    fn default_window_set(
+        &mut self,
+        default_window: project_manager::UiDefaultWindowData,
+    ) -> Result<(), ProjectManagerActorError>;
 }
 
-pub fn set_default_window(
-    ctx: &mut UpdateContext,
-    default_window: project_manager::UiDefaultWindowData,
-) -> Result<(), ProjectManagerActorError> {
-    let mut new_map = ctx.data().default_window.0.clone();
-
-    for (key, value) in default_window.0 {
-        new_map.insert(key.clone(), value);
+impl DefaultWindowOperation for ProjectOperation {
+    fn default_window_initial_notifications(&mut self) {
+        self.push_notification(
+            project_manager::UpdateProjectNotification::SetUiDefaultWindow(
+                project_manager::SetUiDefaultWindowNotification {
+                    default_window: self.data().default_window.clone(),
+                },
+            ),
+        );
     }
 
-    ctx.set_data(Arc::new(project_manager::UiProject {
-        default_window: Arc::new(project_manager::UiDefaultWindowData(new_map)),
-        ..ctx.data().as_ref().clone()
-    }));
+    fn default_window_set(
+        &mut self,
+        default_window: project_manager::UiDefaultWindowData,
+    ) -> Result<(), ProjectManagerActorError> {
+        let mut new_map = self.data().default_window.0.clone();
 
-    ctx.push_notification(
-        project_manager::UpdateProjectNotification::SetUiDefaultWindow(
-            project_manager::SetUiDefaultWindowNotification {
-                default_window: ctx.data().default_window.clone(),
-            },
-        ),
-    );
+        for (key, value) in default_window.0 {
+            new_map.insert(key.clone(), value);
+        }
 
-    Ok(())
+        self.set_data(Arc::new(project_manager::UiProject {
+            default_window: Arc::new(project_manager::UiDefaultWindowData(new_map)),
+            ..self.data().as_ref().clone()
+        }));
+
+        self.push_notification(
+            project_manager::UpdateProjectNotification::SetUiDefaultWindow(
+                project_manager::SetUiDefaultWindowNotification {
+                    default_window: self.data().default_window.clone(),
+                },
+            ),
+        );
+
+        Ok(())
+    }
 }

@@ -6,23 +6,30 @@ use std::collections::HashMap;
 use studio_web_api::project_manager;
 
 use crate::{
-    services::project_manager::{
-        InitialEmitter, ProjectManagerActorError, ui_project::utils::UpdateContext,
-    },
+    services::project_manager::{InitialEmitter, ProjectManagerActorError},
     utils::fs_collection::{self, FsCollectionHandle, Update},
     web::{NotifierManager, SessionEvent, SessionHandle},
 };
 
 use kameo::{error::Infallible, message, prelude::*};
 
-mod components;
+mod component;
 mod default_window;
-mod resources;
-mod styles;
-mod templates;
-mod utils;
-mod views;
-mod windows;
+mod operation;
+mod resource;
+mod style;
+mod template;
+mod view;
+mod window;
+
+use component::ComponentOperation;
+use default_window::DefaultWindowOperation;
+use operation::ProjectOperation;
+use resource::ResourceOperation;
+use style::StyleOperation;
+use template::TemplateOperation;
+use view::ViewOperation;
+use window::WindowOperation;
 
 pub fn new_ui_project_data() -> Arc<project_manager::UiProject> {
     Arc::new(project_manager::UiProject {
@@ -175,14 +182,14 @@ impl message::Message<Open> for UiProject {
     async fn handle(&mut self, msg: Open, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
         let notifier = self.notifiers.create_notifier(msg.session);
 
-        let mut ctx = UpdateContext::new(&self.data);
-        default_window::initial_notifications(&mut ctx);
-        components::initial_notifications(&mut ctx);
-        resources::initial_notifications(&mut ctx);
-        styles::initial_notifications(&mut ctx);
-        windows::initial_notifications(&mut ctx);
-        templates::initial_notifications(&mut ctx);
-        let (notifications, _) = ctx.output();
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.default_window_initial_notifications();
+        operation.component_initial_notifications();
+        operation.resource_initial_notifications();
+        operation.style_initial_notifications();
+        operation.window_initial_notifications();
+        operation.template_initial_notifications();
+        let (notifications, _) = operation.output();
 
         let notifier_id = notifier.notifier_id().to_owned();
         let notification_emitter = InitialEmitter::new(notifier.clone(), notifications);
@@ -416,20 +423,20 @@ impl UiProject {
     fn reload(&mut self, value: Arc<project_manager::UiProject>) {
         self.data = value;
 
-        let mut ctx = UpdateContext::new(&self.data);
+        let mut operation = ProjectOperation::new(&self.data);
 
-        ctx.push_notification(project_manager::UpdateProjectNotification::Reset(
+        operation.push_notification(project_manager::UpdateProjectNotification::Reset(
             project_manager::ResetProjectNotification {},
         ));
 
-        default_window::initial_notifications(&mut ctx);
-        components::initial_notifications(&mut ctx);
-        resources::initial_notifications(&mut ctx);
-        styles::initial_notifications(&mut ctx);
-        windows::initial_notifications(&mut ctx);
-        templates::initial_notifications(&mut ctx);
+        operation.default_window_initial_notifications();
+        operation.component_initial_notifications();
+        operation.resource_initial_notifications();
+        operation.style_initial_notifications();
+        operation.window_initial_notifications();
+        operation.template_initial_notifications();
 
-        let (notifications, _) = ctx.output();
+        let (notifications, _) = operation.output();
         self.notify_all(&notifications);
     }
 
@@ -439,8 +446,11 @@ impl UiProject {
         }
     }
 
-    async fn apply_update(&mut self, ctx: UpdateContext) -> Result<(), ProjectManagerActorError> {
-        let (notifications, new_data) = ctx.output();
+    async fn apply_update(
+        &mut self,
+        operation: ProjectOperation,
+    ) -> Result<(), ProjectManagerActorError> {
+        let (notifications, new_data) = operation.output();
 
         if !Arc::ptr_eq(&self.data, &new_data) {
             self.data = new_data;
@@ -493,195 +503,194 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetDefaultWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        default_window::set_default_window(&mut ctx, call_data.default_window)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.default_window_set(call_data.default_window)?;
+
+        self.apply_update(operation).await
     }
 
     async fn set_resource(
         &mut self,
         call_data: project_manager::SetResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        resources::set_resource(&mut ctx, call_data.id, call_data.resource)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.resource_set(call_data.id, call_data.resource)?;
+        self.apply_update(operation).await
     }
 
     async fn clear_resource(
         &mut self,
         call_data: project_manager::ClearResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        resources::clear_resource(&mut ctx, call_data.id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.resource_clear(call_data.id)?;
+        self.apply_update(operation).await
     }
 
     async fn rename_resource(
         &mut self,
         call_data: project_manager::RenameResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        resources::rename_resource(&mut ctx, call_data.id, call_data.new_id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.resource_rename(call_data.id, call_data.new_id)?;
+        self.apply_update(operation).await
     }
 
     async fn set_style(
         &mut self,
         call_data: project_manager::SetStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        styles::set_style(&mut ctx, call_data.id, call_data.style)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.style_set(call_data.id, call_data.style)?;
+        self.apply_update(operation).await
     }
 
     async fn clear_style(
         &mut self,
         call_data: project_manager::ClearStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        styles::clear_style(&mut ctx, call_data.id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.style_clear(call_data.id)?;
+        self.apply_update(operation).await
     }
 
     async fn rename_style(
         &mut self,
         call_data: project_manager::RenameStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        styles::rename_style(&mut ctx, call_data.id, call_data.new_id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.style_rename(call_data.id, call_data.new_id)?;
+        self.apply_update(operation).await
     }
 
     async fn new_window(
         &mut self,
         call_data: project_manager::NewWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        windows::new_window(&mut ctx, call_data.id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.window_new(call_data.id)?;
+        self.apply_update(operation).await
     }
 
     async fn clear_window(
         &mut self,
         call_data: project_manager::ClearWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        windows::clear_window(&mut ctx, call_data.id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.window_clear(call_data.id)?;
+        self.apply_update(operation).await
     }
 
     async fn rename_window(
         &mut self,
         call_data: project_manager::RenameWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        windows::rename_window(&mut ctx, call_data.id, call_data.new_id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.window_rename(call_data.id, call_data.new_id)?;
+        self.apply_update(operation).await
     }
 
     async fn clone_window(
         &mut self,
         call_data: project_manager::CloneWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        windows::clone_window(&mut ctx, call_data.id, call_data.new_id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.window_clone(call_data.id, call_data.new_id)?;
+        self.apply_update(operation).await
     }
 
     async fn set_window_properties(
         &mut self,
         call_data: project_manager::SetWindowPropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        windows::set_window_properties(&mut ctx, call_data.id, call_data.properties)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.window_set_properties(call_data.id, call_data.properties)?;
+        self.apply_update(operation).await
     }
 
     async fn new_template(
         &mut self,
         call_data: project_manager::NewTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        templates::new_template(&mut ctx, call_data.id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.template_new(call_data.id)?;
+        self.apply_update(operation).await
     }
 
     async fn clear_template(
         &mut self,
         call_data: project_manager::ClearTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        templates::clear_template(&mut ctx, call_data.id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.template_clear(call_data.id)?;
+        self.apply_update(operation).await
     }
 
     async fn rename_template(
         &mut self,
         call_data: project_manager::RenameTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        templates::rename_template(&mut ctx, call_data.id, call_data.new_id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.template_rename(call_data.id, call_data.new_id)?;
+        self.apply_update(operation).await
     }
 
     async fn clone_template(
         &mut self,
         call_data: project_manager::CloneTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        templates::clone_template(&mut ctx, call_data.id, call_data.new_id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.template_clone(call_data.id, call_data.new_id)?;
+        self.apply_update(operation).await
     }
 
     async fn set_template_properties(
         &mut self,
         call_data: project_manager::SetTemplatePropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        templates::set_template_properties(&mut ctx, call_data.id, call_data.properties)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.template_set_properties(call_data.id, call_data.properties)?;
+        self.apply_update(operation).await
     }
 
     async fn set_template_export(
         &mut self,
         call_data: project_manager::SetTemplateExportUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        templates::set_template_export(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.template_set_export(
             call_data.id,
             call_data.export_id,
             call_data.member_type,
             call_data.value_type,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 
     async fn clear_template_export(
         &mut self,
         call_data: project_manager::ClearTemplateExportUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        templates::clear_template_export(&mut ctx, call_data.id, call_data.export_id)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.template_clear_export(call_data.id, call_data.export_id)?;
+        self.apply_update(operation).await
     }
 
     async fn set_template_bulk_patterns(
         &mut self,
         call_data: project_manager::SetTemplateBulkPatternsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        templates::set_template_bulk_patterns(&mut ctx, call_data.id, call_data.patterns)?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.template_set_bulk_patterns(call_data.id, call_data.patterns)?;
+        self.apply_update(operation).await
     }
 
     async fn new_control(
         &mut self,
         call_data: project_manager::NewControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::new_control(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_new_control(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -689,45 +698,38 @@ impl UiProject {
             call_data.y,
             call_data.r#type,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 
     async fn clear_control(
         &mut self,
         call_data: project_manager::ClearControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::clear_control(
-            &mut ctx,
-            call_data.view_type,
-            call_data.view_id,
-            call_data.id,
-        )?;
-        self.apply_update(ctx).await
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_clear_control(call_data.view_type, call_data.view_id, call_data.id)?;
+        self.apply_update(operation).await
     }
 
     async fn rename_control(
         &mut self,
         call_data: project_manager::RenameControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::rename_control(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_rename_control(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
             call_data.new_id,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 
     async fn clone_control(
         &mut self,
         call_data: project_manager::CloneControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::clone_control(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_clone_control(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -735,31 +737,29 @@ impl UiProject {
             call_data.target_view_type,
             call_data.target_view_id,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 
     async fn set_control_properties(
         &mut self,
         call_data: project_manager::SetControlPropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::set_control_properties(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_set_control_properties(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
             call_data.properties,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 
     async fn new_template_instance(
         &mut self,
         call_data: project_manager::NewTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::new_template_instance(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_new_template_instance(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -767,96 +767,90 @@ impl UiProject {
             call_data.x,
             call_data.y,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 
     async fn clear_template_instance(
         &mut self,
         call_data: project_manager::ClearTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::clear_template_instance(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_clear_template_instance(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 
     async fn rename_template_instance(
         &mut self,
         call_data: project_manager::RenameTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::rename_template_instance(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_rename_template_instance(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
             call_data.new_id,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 
     async fn clone_template_instance(
         &mut self,
         call_data: project_manager::CloneTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::clone_template_instance(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_clone_template_instance(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
             call_data.new_id,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 
     async fn move_template_instance(
         &mut self,
         call_data: project_manager::MoveTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::move_template_instance(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_move_template_instance(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
             call_data.x,
             call_data.y,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 
     async fn set_template_instance_template(
         &mut self,
         call_data: project_manager::SetTemplateInstanceTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::set_template_instance_template(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_set_template_instance_template(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
             call_data.template_id,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 
     async fn set_template_instance_bindings(
         &mut self,
         call_data: project_manager::SetTemplateInstanceBindingsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = UpdateContext::new(&self.data);
-        views::set_template_instance_bindings(
-            &mut ctx,
+        let mut operation = ProjectOperation::new(&self.data);
+        operation.view_set_template_instance_bindings(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
             call_data.bindings,
         )?;
-        self.apply_update(ctx).await
+        self.apply_update(operation).await
     }
 }
