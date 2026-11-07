@@ -2,7 +2,13 @@ use std::{collections::HashMap, sync::Arc};
 
 use studio_web_api::{project_manager, utils::PartialField};
 
-use crate::services::project_manager::{ProjectManagerActorError, ui_project::{components, utils::{UpdateContext, check_id}}};
+use crate::services::project_manager::{
+    ProjectManagerActorError,
+    ui_project::{
+        components,
+        utils::{UpdateContext, check_id},
+    },
+};
 
 /// Note: ctx.data() will not be modified by this function
 pub fn initial_notifications(ctx: &mut UpdateContext) {

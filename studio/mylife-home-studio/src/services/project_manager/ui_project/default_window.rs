@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use studio_web_api::project_manager;
 
-use crate::services::project_manager::{ProjectManagerActorError, ui_project::utils::UpdateContext};
+use crate::services::project_manager::{
+    ProjectManagerActorError, ui_project::utils::UpdateContext,
+};
 
 /// Note: ctx.data() will not be modified by this function
 pub fn initial_notifications(ctx: &mut UpdateContext) {

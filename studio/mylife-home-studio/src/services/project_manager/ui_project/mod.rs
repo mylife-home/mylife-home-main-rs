@@ -6,7 +6,11 @@ use std::collections::HashMap;
 use studio_web_api::project_manager;
 
 use crate::{
-    services::project_manager::{InitialEmitter, ProjectManagerActorError, ui_project::utils::UpdateContext}, utils::fs_collection::{self, FsCollectionHandle, Update}, web::{NotifierManager, SessionEvent, SessionHandle},
+    services::project_manager::{
+        InitialEmitter, ProjectManagerActorError, ui_project::utils::UpdateContext,
+    },
+    utils::fs_collection::{self, FsCollectionHandle, Update},
+    web::{NotifierManager, SessionEvent, SessionHandle},
 };
 
 use kameo::{error::Infallible, message, prelude::*};
@@ -14,6 +18,7 @@ use kameo::{error::Infallible, message, prelude::*};
 mod components;
 mod default_window;
 mod resources;
+mod styles;
 mod utils;
 mod views;
 
@@ -172,6 +177,7 @@ impl message::Message<Open> for UiProject {
         default_window::initial_notifications(&mut ctx);
         components::initial_notifications(&mut ctx);
         resources::initial_notifications(&mut ctx);
+        styles::initial_notifications(&mut ctx);
         views::initial_notifications(&mut ctx);
         let (notifications, _) = ctx.output();
 
@@ -416,6 +422,7 @@ impl UiProject {
         default_window::initial_notifications(&mut ctx);
         components::initial_notifications(&mut ctx);
         resources::initial_notifications(&mut ctx);
+        styles::initial_notifications(&mut ctx);
         views::initial_notifications(&mut ctx);
 
         let (notifications, _) = ctx.output();
@@ -428,10 +435,7 @@ impl UiProject {
         }
     }
 
-    async fn apply_update(
-        &mut self,
-        ctx: UpdateContext,
-    ) -> Result<(), ProjectManagerActorError> {
+    async fn apply_update(&mut self, ctx: UpdateContext) -> Result<(), ProjectManagerActorError> {
         let (notifications, new_data) = ctx.output();
 
         if !Arc::ptr_eq(&self.data, &new_data) {
@@ -522,7 +526,7 @@ impl UiProject {
         call_data: project_manager::SetStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        resources::set_style(&mut ctx, call_data.id, call_data.style)?;
+        styles::set_style(&mut ctx, call_data.id, call_data.style)?;
         self.apply_update(ctx).await
     }
 
@@ -531,7 +535,7 @@ impl UiProject {
         call_data: project_manager::ClearStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        resources::clear_style(&mut ctx, call_data.id)?;
+        styles::clear_style(&mut ctx, call_data.id)?;
         self.apply_update(ctx).await
     }
 
@@ -540,7 +544,7 @@ impl UiProject {
         call_data: project_manager::RenameStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        resources::rename_style(&mut ctx, call_data.id, call_data.new_id)?;
+        styles::rename_style(&mut ctx, call_data.id, call_data.new_id)?;
         self.apply_update(ctx).await
     }
 
