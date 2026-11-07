@@ -19,8 +19,10 @@ mod components;
 mod default_window;
 mod resources;
 mod styles;
+mod templates;
 mod utils;
 mod views;
+mod windows;
 
 pub fn new_ui_project_data() -> Arc<project_manager::UiProject> {
     Arc::new(project_manager::UiProject {
@@ -178,7 +180,8 @@ impl message::Message<Open> for UiProject {
         components::initial_notifications(&mut ctx);
         resources::initial_notifications(&mut ctx);
         styles::initial_notifications(&mut ctx);
-        views::initial_notifications(&mut ctx);
+        windows::initial_notifications(&mut ctx);
+        templates::initial_notifications(&mut ctx);
         let (notifications, _) = ctx.output();
 
         let notifier_id = notifier.notifier_id().to_owned();
@@ -423,7 +426,8 @@ impl UiProject {
         components::initial_notifications(&mut ctx);
         resources::initial_notifications(&mut ctx);
         styles::initial_notifications(&mut ctx);
-        views::initial_notifications(&mut ctx);
+        windows::initial_notifications(&mut ctx);
+        templates::initial_notifications(&mut ctx);
 
         let (notifications, _) = ctx.output();
         self.notify_all(&notifications);
@@ -553,7 +557,7 @@ impl UiProject {
         call_data: project_manager::NewWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::new_window(&mut ctx, call_data.id)?;
+        windows::new_window(&mut ctx, call_data.id)?;
         self.apply_update(ctx).await
     }
 
@@ -562,7 +566,7 @@ impl UiProject {
         call_data: project_manager::ClearWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::clear_window(&mut ctx, call_data.id)?;
+        windows::clear_window(&mut ctx, call_data.id)?;
         self.apply_update(ctx).await
     }
 
@@ -571,7 +575,7 @@ impl UiProject {
         call_data: project_manager::RenameWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::rename_window(&mut ctx, call_data.id, call_data.new_id)?;
+        windows::rename_window(&mut ctx, call_data.id, call_data.new_id)?;
         self.apply_update(ctx).await
     }
 
@@ -580,7 +584,7 @@ impl UiProject {
         call_data: project_manager::CloneWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::clone_window(&mut ctx, call_data.id, call_data.new_id)?;
+        windows::clone_window(&mut ctx, call_data.id, call_data.new_id)?;
         self.apply_update(ctx).await
     }
 
@@ -589,7 +593,7 @@ impl UiProject {
         call_data: project_manager::SetWindowPropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::set_window_properties(&mut ctx, call_data.id, call_data.properties)?;
+        windows::set_window_properties(&mut ctx, call_data.id, call_data.properties)?;
         self.apply_update(ctx).await
     }
 
@@ -598,7 +602,7 @@ impl UiProject {
         call_data: project_manager::NewTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::new_template(&mut ctx, call_data.id)?;
+        templates::new_template(&mut ctx, call_data.id)?;
         self.apply_update(ctx).await
     }
 
@@ -607,7 +611,7 @@ impl UiProject {
         call_data: project_manager::ClearTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::clear_template(&mut ctx, call_data.id)?;
+        templates::clear_template(&mut ctx, call_data.id)?;
         self.apply_update(ctx).await
     }
 
@@ -616,7 +620,7 @@ impl UiProject {
         call_data: project_manager::RenameTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::rename_template(&mut ctx, call_data.id, call_data.new_id)?;
+        templates::rename_template(&mut ctx, call_data.id, call_data.new_id)?;
         self.apply_update(ctx).await
     }
 
@@ -625,7 +629,7 @@ impl UiProject {
         call_data: project_manager::CloneTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::clone_template(&mut ctx, call_data.id, call_data.new_id)?;
+        templates::clone_template(&mut ctx, call_data.id, call_data.new_id)?;
         self.apply_update(ctx).await
     }
 
@@ -634,7 +638,7 @@ impl UiProject {
         call_data: project_manager::SetTemplatePropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::set_template_properties(&mut ctx, call_data.id, call_data.properties)?;
+        templates::set_template_properties(&mut ctx, call_data.id, call_data.properties)?;
         self.apply_update(ctx).await
     }
 
@@ -643,7 +647,7 @@ impl UiProject {
         call_data: project_manager::SetTemplateExportUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::set_template_export(
+        templates::set_template_export(
             &mut ctx,
             call_data.id,
             call_data.export_id,
@@ -658,7 +662,7 @@ impl UiProject {
         call_data: project_manager::ClearTemplateExportUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::clear_template_export(&mut ctx, call_data.id, call_data.export_id)?;
+        templates::clear_template_export(&mut ctx, call_data.id, call_data.export_id)?;
         self.apply_update(ctx).await
     }
 
@@ -667,7 +671,7 @@ impl UiProject {
         call_data: project_manager::SetTemplateBulkPatternsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut ctx = UpdateContext::new(&self.data);
-        views::set_template_bulk_patterns(&mut ctx, call_data.id, call_data.patterns)?;
+        templates::set_template_bulk_patterns(&mut ctx, call_data.id, call_data.patterns)?;
         self.apply_update(ctx).await
     }
 
