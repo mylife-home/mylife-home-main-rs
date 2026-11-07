@@ -6,14 +6,16 @@ use std::collections::HashMap;
 use studio_web_api::project_manager;
 
 use crate::{
-    services::project_manager::{InitialEmitter, ProjectManagerActorError},
-    utils::fs_collection::{self, FsCollectionHandle, Update},
-    web::{NotifierManager, SessionEvent, SessionHandle},
+    services::project_manager::{InitialEmitter, ProjectManagerActorError, ui_project::utils::UpdateContext}, utils::fs_collection::{self, FsCollectionHandle, Update}, web::{NotifierManager, SessionEvent, SessionHandle},
 };
 
 use kameo::{error::Infallible, message, prelude::*};
 
-mod update;
+mod components;
+mod default_window;
+mod resources;
+mod utils;
+mod views;
 
 pub fn new_ui_project_data() -> Arc<project_manager::UiProject> {
     Arc::new(project_manager::UiProject {
@@ -166,8 +168,11 @@ impl message::Message<Open> for UiProject {
     async fn handle(&mut self, msg: Open, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
         let notifier = self.notifiers.create_notifier(msg.session);
 
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::initial_notifications(&mut ctx);
+        let mut ctx = UpdateContext::new(&self.data);
+        default_window::initial_notifications(&mut ctx);
+        components::initial_notifications(&mut ctx);
+        resources::initial_notifications(&mut ctx);
+        views::initial_notifications(&mut ctx);
         let (notifications, _) = ctx.output();
 
         let notifier_id = notifier.notifier_id().to_owned();
@@ -402,13 +407,16 @@ impl UiProject {
     fn reload(&mut self, value: Arc<project_manager::UiProject>) {
         self.data = value;
 
-        let mut ctx = update::UpdateContext::new(&self.data);
+        let mut ctx = UpdateContext::new(&self.data);
 
         ctx.push_notification(project_manager::UpdateProjectNotification::Reset(
             project_manager::ResetProjectNotification {},
         ));
 
-        update::initial_notifications(&mut ctx);
+        default_window::initial_notifications(&mut ctx);
+        components::initial_notifications(&mut ctx);
+        resources::initial_notifications(&mut ctx);
+        views::initial_notifications(&mut ctx);
 
         let (notifications, _) = ctx.output();
         self.notify_all(&notifications);
@@ -422,7 +430,7 @@ impl UiProject {
 
     async fn apply_update(
         &mut self,
-        ctx: update::UpdateContext,
+        ctx: UpdateContext,
     ) -> Result<(), ProjectManagerActorError> {
         let (notifications, new_data) = ctx.output();
 
@@ -477,8 +485,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetDefaultWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::set_default_window(&mut ctx, call_data.default_window)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        default_window::set_default_window(&mut ctx, call_data.default_window)?;
         self.apply_update(ctx).await
     }
 
@@ -486,8 +494,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::set_resource(&mut ctx, call_data.id, call_data.resource)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        resources::set_resource(&mut ctx, call_data.id, call_data.resource)?;
         self.apply_update(ctx).await
     }
 
@@ -495,8 +503,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::ClearResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::clear_resource(&mut ctx, call_data.id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        resources::clear_resource(&mut ctx, call_data.id)?;
         self.apply_update(ctx).await
     }
 
@@ -504,8 +512,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::RenameResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::rename_resource(&mut ctx, call_data.id, call_data.new_id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        resources::rename_resource(&mut ctx, call_data.id, call_data.new_id)?;
         self.apply_update(ctx).await
     }
 
@@ -513,8 +521,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::set_style(&mut ctx, call_data.id, call_data.style)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        resources::set_style(&mut ctx, call_data.id, call_data.style)?;
         self.apply_update(ctx).await
     }
 
@@ -522,8 +530,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::ClearStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::clear_style(&mut ctx, call_data.id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        resources::clear_style(&mut ctx, call_data.id)?;
         self.apply_update(ctx).await
     }
 
@@ -531,8 +539,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::RenameStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::rename_style(&mut ctx, call_data.id, call_data.new_id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        resources::rename_style(&mut ctx, call_data.id, call_data.new_id)?;
         self.apply_update(ctx).await
     }
 
@@ -540,8 +548,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::NewWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::new_window(&mut ctx, call_data.id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::new_window(&mut ctx, call_data.id)?;
         self.apply_update(ctx).await
     }
 
@@ -549,8 +557,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::ClearWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::clear_window(&mut ctx, call_data.id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::clear_window(&mut ctx, call_data.id)?;
         self.apply_update(ctx).await
     }
 
@@ -558,8 +566,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::RenameWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::rename_window(&mut ctx, call_data.id, call_data.new_id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::rename_window(&mut ctx, call_data.id, call_data.new_id)?;
         self.apply_update(ctx).await
     }
 
@@ -567,8 +575,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::CloneWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::clone_window(&mut ctx, call_data.id, call_data.new_id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::clone_window(&mut ctx, call_data.id, call_data.new_id)?;
         self.apply_update(ctx).await
     }
 
@@ -576,8 +584,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetWindowPropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::set_window_properties(&mut ctx, call_data.id, call_data.properties)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::set_window_properties(&mut ctx, call_data.id, call_data.properties)?;
         self.apply_update(ctx).await
     }
 
@@ -585,8 +593,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::NewTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::new_template(&mut ctx, call_data.id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::new_template(&mut ctx, call_data.id)?;
         self.apply_update(ctx).await
     }
 
@@ -594,8 +602,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::ClearTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::clear_template(&mut ctx, call_data.id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::clear_template(&mut ctx, call_data.id)?;
         self.apply_update(ctx).await
     }
 
@@ -603,8 +611,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::RenameTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::rename_template(&mut ctx, call_data.id, call_data.new_id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::rename_template(&mut ctx, call_data.id, call_data.new_id)?;
         self.apply_update(ctx).await
     }
 
@@ -612,8 +620,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::CloneTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::clone_template(&mut ctx, call_data.id, call_data.new_id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::clone_template(&mut ctx, call_data.id, call_data.new_id)?;
         self.apply_update(ctx).await
     }
 
@@ -621,8 +629,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetTemplatePropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::set_template_properties(&mut ctx, call_data.id, call_data.properties)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::set_template_properties(&mut ctx, call_data.id, call_data.properties)?;
         self.apply_update(ctx).await
     }
 
@@ -630,8 +638,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetTemplateExportUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::set_template_export(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::set_template_export(
             &mut ctx,
             call_data.id,
             call_data.export_id,
@@ -645,8 +653,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::ClearTemplateExportUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::clear_template_export(&mut ctx, call_data.id, call_data.export_id)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::clear_template_export(&mut ctx, call_data.id, call_data.export_id)?;
         self.apply_update(ctx).await
     }
 
@@ -654,8 +662,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetTemplateBulkPatternsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::set_template_bulk_patterns(&mut ctx, call_data.id, call_data.patterns)?;
+        let mut ctx = UpdateContext::new(&self.data);
+        views::set_template_bulk_patterns(&mut ctx, call_data.id, call_data.patterns)?;
         self.apply_update(ctx).await
     }
 
@@ -663,8 +671,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::NewControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::new_control(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::new_control(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,
@@ -680,8 +688,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::ClearControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::clear_control(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::clear_control(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,
@@ -694,8 +702,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::RenameControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::rename_control(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::rename_control(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,
@@ -709,8 +717,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::CloneControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::clone_control(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::clone_control(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,
@@ -726,8 +734,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetControlPropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::set_control_properties(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::set_control_properties(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,
@@ -741,8 +749,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::NewTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::new_template_instance(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::new_template_instance(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,
@@ -758,8 +766,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::ClearTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::clear_template_instance(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::clear_template_instance(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,
@@ -772,8 +780,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::RenameTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::rename_template_instance(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::rename_template_instance(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,
@@ -787,8 +795,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::CloneTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::clone_template_instance(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::clone_template_instance(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,
@@ -802,8 +810,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::MoveTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::move_template_instance(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::move_template_instance(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,
@@ -818,8 +826,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetTemplateInstanceTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::set_template_instance_template(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::set_template_instance_template(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,
@@ -833,8 +841,8 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetTemplateInstanceBindingsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut ctx = update::UpdateContext::new(&self.data);
-        update::set_template_instance_bindings(
+        let mut ctx = UpdateContext::new(&self.data);
+        views::set_template_instance_bindings(
             &mut ctx,
             call_data.view_type,
             call_data.view_id,

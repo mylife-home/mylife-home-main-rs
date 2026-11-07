@@ -2,80 +2,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use studio_web_api::{project_manager, utils::PartialField};
 
-use crate::services::project_manager::ProjectManagerActorError;
-
-pub struct UpdateContext {
-    notifications: Vec<project_manager::UpdateProjectNotification>,
-    data: Arc<project_manager::UiProject>,
-}
-
-impl UpdateContext {
-    pub fn new(data: &Arc<project_manager::UiProject>) -> Self {
-        Self {
-            notifications: Vec::new(),
-            data: data.clone(),
-        }
-    }
-
-    pub fn output(
-        self,
-    ) -> (
-        Vec<project_manager::UpdateProjectNotification>,
-        Arc<project_manager::UiProject>,
-    ) {
-        (self.notifications, self.data)
-    }
-
-    pub fn push_notification(&mut self, notification: project_manager::UpdateProjectNotification) {
-        self.notifications.push(notification);
-    }
-
-    pub fn data(&self) -> &Arc<project_manager::UiProject> {
-        &self.data
-    }
-
-    pub fn set_data(&mut self, data: Arc<project_manager::UiProject>) {
-        self.data = data;
-    }
-}
+use crate::services::project_manager::{ProjectManagerActorError, ui_project::{components, utils::{UpdateContext, check_id}}};
 
 /// Note: ctx.data() will not be modified by this function
 pub fn initial_notifications(ctx: &mut UpdateContext) {
-    ctx.push_notification(
-        project_manager::UpdateProjectNotification::SetUiDefaultWindow(
-            project_manager::SetUiDefaultWindowNotification {
-                default_window: ctx.data().default_window.clone(),
-            },
-        ),
-    );
-
-    ctx.push_notification(
-        project_manager::UpdateProjectNotification::SetUiComponentData(
-            project_manager::SetUiComponentDataNotification {
-                components: ctx.data().components.clone(),
-                plugins: ctx.data().plugins.clone(),
-            },
-        ),
-    );
-
-    for (id, resource) in ctx.data().resources.clone().iter() {
-        ctx.push_notification(project_manager::UpdateProjectNotification::SetUiResource(
-            project_manager::SetUiResourceNotification {
-                id: id.clone(),
-                resource: resource.clone(),
-            },
-        ));
-    }
-
-    for (id, style) in ctx.data().styles.clone().iter() {
-        ctx.push_notification(project_manager::UpdateProjectNotification::SetUiStyle(
-            project_manager::SetUiStyleNotification {
-                id: id.clone(),
-                style: style.clone(),
-            },
-        ));
-    }
-
     for (id, window) in ctx.data().windows.clone().iter() {
         ctx.push_notification(project_manager::UpdateProjectNotification::SetUiWindow(
             project_manager::SetUiWindowNotification {
@@ -93,198 +23,6 @@ pub fn initial_notifications(ctx: &mut UpdateContext) {
             },
         ));
     }
-}
-
-pub fn set_default_window(
-    ctx: &mut UpdateContext,
-    default_window: project_manager::UiDefaultWindowData,
-) -> Result<(), ProjectManagerActorError> {
-    let mut new_map = ctx.data().default_window.0.clone();
-
-    for (key, value) in default_window.0 {
-        new_map.insert(key.clone(), value);
-    }
-
-    ctx.set_data(Arc::new(project_manager::UiProject {
-        default_window: Arc::new(project_manager::UiDefaultWindowData(new_map)),
-        ..ctx.data().as_ref().clone()
-    }));
-
-    ctx.push_notification(
-        project_manager::UpdateProjectNotification::SetUiDefaultWindow(
-            project_manager::SetUiDefaultWindowNotification {
-                default_window: ctx.data().default_window.clone(),
-            },
-        ),
-    );
-
-    Ok(())
-}
-
-pub fn set_resource(
-    ctx: &mut UpdateContext,
-    id: String,
-    resource: project_manager::UiResourceData,
-) -> Result<(), ProjectManagerActorError> {
-    check_id(&id)?;
-
-    let resource = Arc::new(resource);
-    let mut new_resources = ctx.data().resources.as_ref().clone();
-    new_resources.insert(id.clone(), resource.clone());
-
-    ctx.set_data(Arc::new(project_manager::UiProject {
-        resources: Arc::new(new_resources),
-        ..ctx.data().as_ref().clone()
-    }));
-
-    ctx.push_notification(project_manager::UpdateProjectNotification::SetUiResource(
-        project_manager::SetUiResourceNotification { id, resource },
-    ));
-
-    Ok(())
-}
-
-pub fn clear_resource(ctx: &mut UpdateContext, id: String) -> Result<(), ProjectManagerActorError> {
-    let mut new_resources = ctx.data().resources.as_ref().clone();
-    if new_resources.remove(&id).is_none() {
-        return Ok(());
-    }
-
-    ctx.set_data(Arc::new(project_manager::UiProject {
-        resources: Arc::new(new_resources),
-        ..ctx.data().as_ref().clone()
-    }));
-
-    ctx.push_notification(project_manager::UpdateProjectNotification::ClearUiResource(
-        project_manager::ClearUiResourceNotification { id },
-    ));
-
-    Ok(())
-}
-
-pub fn rename_resource(
-    ctx: &mut UpdateContext,
-    id: String,
-    new_id: String,
-) -> Result<(), ProjectManagerActorError> {
-    check_id(&new_id)?;
-
-    if id == new_id {
-        return Ok(());
-    }
-
-    if ctx.data().resources.contains_key(&new_id) {
-        return Err(ProjectManagerActorError::DataProcessingError(format!(
-            "Resource with id '{}' already exists",
-            new_id
-        )));
-    }
-
-    let mut new_resources = ctx.data().resources.as_ref().clone();
-
-    let Some(resource) = new_resources.remove(&id) else {
-        return Err(ProjectManagerActorError::DataProcessingError(format!(
-            "Resource with id '{}' not found",
-            id
-        )));
-    };
-
-    new_resources.insert(new_id.clone(), resource);
-
-    ctx.set_data(Arc::new(project_manager::UiProject {
-        resources: Arc::new(new_resources),
-        ..ctx.data().as_ref().clone()
-    }));
-
-    ctx.push_notification(
-        project_manager::UpdateProjectNotification::RenameUiResource(
-            project_manager::RenameUiResourceNotification { id, new_id },
-        ),
-    );
-
-    Ok(())
-}
-
-pub fn set_style(
-    ctx: &mut UpdateContext,
-    id: String,
-    style: project_manager::UiStyleData,
-) -> Result<(), ProjectManagerActorError> {
-    check_id(&id)?;
-
-    let style = Arc::new(style);
-    let mut new_styles = ctx.data().styles.as_ref().clone();
-    new_styles.insert(id.clone(), style.clone());
-
-    ctx.set_data(Arc::new(project_manager::UiProject {
-        styles: Arc::new(new_styles),
-        ..ctx.data().as_ref().clone()
-    }));
-
-    ctx.push_notification(project_manager::UpdateProjectNotification::SetUiStyle(
-        project_manager::SetUiStyleNotification { id, style },
-    ));
-
-    Ok(())
-}
-
-pub fn clear_style(ctx: &mut UpdateContext, id: String) -> Result<(), ProjectManagerActorError> {
-    let mut new_styles = ctx.data().styles.as_ref().clone();
-    if new_styles.remove(&id).is_none() {
-        return Ok(());
-    }
-
-    ctx.set_data(Arc::new(project_manager::UiProject {
-        styles: Arc::new(new_styles),
-        ..ctx.data().as_ref().clone()
-    }));
-
-    ctx.push_notification(project_manager::UpdateProjectNotification::ClearUiStyle(
-        project_manager::ClearUiStyleNotification { id },
-    ));
-
-    Ok(())
-}
-
-pub fn rename_style(
-    ctx: &mut UpdateContext,
-    id: String,
-    new_id: String,
-) -> Result<(), ProjectManagerActorError> {
-    check_id(&new_id)?;
-
-    if id == new_id {
-        return Ok(());
-    }
-
-    if ctx.data().styles.contains_key(&new_id) {
-        return Err(ProjectManagerActorError::DataProcessingError(format!(
-            "Style with id '{}' already exists",
-            new_id
-        )));
-    }
-
-    let mut new_styles = ctx.data().styles.as_ref().clone();
-
-    let Some(style) = new_styles.remove(&id) else {
-        return Err(ProjectManagerActorError::DataProcessingError(format!(
-            "Style with id '{}' not found",
-            id
-        )));
-    };
-
-    new_styles.insert(new_id.clone(), style);
-
-    ctx.set_data(Arc::new(project_manager::UiProject {
-        styles: Arc::new(new_styles),
-        ..ctx.data().as_ref().clone()
-    }));
-
-    ctx.push_notification(project_manager::UpdateProjectNotification::RenameUiStyle(
-        project_manager::RenameUiStyleNotification { id, new_id },
-    ));
-
-    Ok(())
 }
 
 pub fn new_window(ctx: &mut UpdateContext, id: String) -> Result<(), ProjectManagerActorError> {
@@ -422,7 +160,10 @@ pub fn clone_window(
 fn update_window(
     ctx: &mut UpdateContext,
     id: String,
-    mutator: impl FnOnce(&UpdateContext, &mut project_manager::UiWindowData) -> Result<bool, ProjectManagerActorError>,
+    mutator: impl FnOnce(
+        &UpdateContext,
+        &mut project_manager::UiWindowData,
+    ) -> Result<bool, ProjectManagerActorError>,
 ) -> Result<(), ProjectManagerActorError> {
     let mut new_windows = ctx.data().windows.as_ref().clone();
     let Some(window) = new_windows.get(&id).cloned() else {
@@ -622,7 +363,10 @@ pub fn clone_template(
 fn update_template(
     ctx: &mut UpdateContext,
     id: String,
-    mutator: impl FnOnce(&UpdateContext, &mut project_manager::UiTemplateData) -> Result<bool, ProjectManagerActorError>,
+    mutator: impl FnOnce(
+        &UpdateContext,
+        &mut project_manager::UiTemplateData,
+    ) -> Result<bool, ProjectManagerActorError>,
 ) -> Result<(), ProjectManagerActorError> {
     let mut new_templates = ctx.data().templates.as_ref().clone();
     let Some(template) = new_templates.get(&id).cloned() else {
@@ -750,7 +494,13 @@ pub fn set_template_bulk_patterns(
     })
 }
 
-fn prepare_template_bindings(ctx: &UpdateContext, id: &str) -> Result<Arc<HashMap<String, Arc<project_manager::UiTemplateInstanceBinding>>>, ProjectManagerActorError> {
+fn prepare_template_bindings(
+    ctx: &UpdateContext,
+    id: &str,
+) -> Result<
+    Arc<HashMap<String, Arc<project_manager::UiTemplateInstanceBinding>>>,
+    ProjectManagerActorError,
+> {
     let template = get_template(ctx, id)?;
 
     let mut bindings = HashMap::new();
@@ -766,7 +516,12 @@ fn prepare_template_bindings(ctx: &UpdateContext, id: &str) -> Result<Arc<HashMa
     Ok(Arc::new(bindings))
 }
 
-fn get_template_export_value_type(ctx: &UpdateContext, id: &str, member_name: &str, member_type: project_manager::MemberType) -> Result<Option<String>, ProjectManagerActorError> {
+fn get_template_export_value_type(
+    ctx: &UpdateContext,
+    id: &str,
+    member_name: &str,
+    member_type: project_manager::MemberType,
+) -> Result<Option<String>, ProjectManagerActorError> {
     let template = get_template(ctx, id)?;
 
     let Some(export) = template.exports.get(member_name) else {
@@ -1027,14 +782,16 @@ fn update_view_template_instances(
             }
             Ok(changed)
         }),
-        project_manager::ViewType::Template { .. } => update_template(ctx, view_id, |ctx, template| {
-            let mut new_templates = template.templates.as_ref().clone();
-            let changed = mutator(ctx, &mut new_templates)?;
-            if changed {
-                template.templates = Arc::new(new_templates);
-            }
-            Ok(changed)
-        }),
+        project_manager::ViewType::Template { .. } => {
+            update_template(ctx, view_id, |ctx, template| {
+                let mut new_templates = template.templates.as_ref().clone();
+                let changed = mutator(ctx, &mut new_templates)?;
+                if changed {
+                    template.templates = Arc::new(new_templates);
+                }
+                Ok(changed)
+            })
+        }
     }
 }
 
@@ -1238,12 +995,18 @@ pub fn set_template_instance_bindings(
 
         let template = get_template(ctx, &template_instance.template_id)?.clone();
 
-        for (export_id, project_manager::UiTemplateInstanceBinding { component_id, member_name }) in bindings {
+        for (
+            export_id,
+            project_manager::UiTemplateInstanceBinding {
+                component_id,
+                member_name,
+            },
+        ) in bindings
+        {
             let Some(binding) = new_bindings.get_mut(&export_id) else {
                 return Err(ProjectManagerActorError::DataProcessingError(format!(
                     "Binding from export '{}' not found on template '{}'",
-                    export_id,
-                    id
+                    export_id, id
                 )));
             };
 
@@ -1259,15 +1022,24 @@ pub fn set_template_instance_bindings(
             let Some(export_data) = template.exports.get(&export_id) else {
                 return Err(ProjectManagerActorError::DataProcessingError(format!(
                     "Export '{}' does not exist on template '{}'",
-                    export_id,
-                    template_instance.template_id
+                    export_id, template_instance.template_id
                 )));
             };
 
             let value_type = if let Some(component_id) = &component_id {
-                find_component_member_value_type(ctx, component_id, &member_name, export_data.member_type)
+                components::find_component_member_value_type(
+                    ctx,
+                    component_id,
+                    &member_name,
+                    export_data.member_type,
+                )
             } else if view_type == project_manager::ViewType::Template {
-                get_template_export_value_type(ctx, &view_id, &member_name, export_data.member_type)?
+                get_template_export_value_type(
+                    ctx,
+                    &view_id,
+                    &member_name,
+                    export_data.member_type,
+                )?
             } else {
                 None
             };
@@ -1293,47 +1065,6 @@ pub fn set_template_instance_bindings(
     })?;
 
     Ok(())
-}
-
-fn check_id(id: &str) -> Result<(), ProjectManagerActorError> {
-    if id.trim().is_empty() {
-        return Err(ProjectManagerActorError::DataProcessingError(String::from(
-            "Id is empty",
-        )));
-    }
-
-    if id.contains(':') {
-        return Err(ProjectManagerActorError::DataProcessingError(format!(
-            "Id '{}' contains forbidden character ':'",
-            id
-        )));
-    }
-    Ok(())
-}
-
-fn find_component_member_value_type(
-    ctx: &UpdateContext,
-    component_id: &str,
-    member_name: &str,
-    member_type: project_manager::MemberType,
-) -> Option<String> {
-    let Some(component) = ctx.data.components.get(component_id) else {
-        return None;
-    };
-
-    let Some(plugin) = ctx.data.plugins.get(&component.plugin) else {
-        return None;
-    };
-
-    let Some(member) = plugin.members.get(member_name) else {
-        return None;
-    };
-
-    if member.member_type != member_type {
-        return None;
-    }
-
-    Some(member.value_type.clone())
 }
 
 fn get_window<'a>(
