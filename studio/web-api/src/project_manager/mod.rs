@@ -8,7 +8,7 @@ use crate::register_ts;
 
 // Adjust these paths to your actual module layout.
 pub use crate::component_model::{ConfigItem, Member, MemberType, PluginUsage};
-pub use crate::ui_model::{ActionWindow, ControlDisplay, ControlDisplayMapItem, Resource, Style};
+pub use crate::ui_model::{ControlDisplay, ControlDisplayMapItem, Resource, Style};
 use crate::utils::PartialField;
 use core_import_data::ObjectChange;
 use core_validation::Item;
@@ -380,7 +380,7 @@ register_ts!(UiControlData);
 #[serde(rename_all = "camelCase")]
 pub struct UiActionData {
     pub component: Option<UiActionComponentData>,
-    pub window: Option<ActionWindow>,
+    pub window: Option<UiActionWindow>,
 }
 
 register_ts!(UiActionData);
@@ -394,6 +394,16 @@ pub struct UiActionComponentData {
 }
 
 register_ts!(UiActionComponentData);
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export_to = "model.ts")]
+#[serde(rename_all = "camelCase")]
+pub struct UiActionWindow {
+    pub id: Option<String>, // can be null after window deletion
+    pub popup: bool,
+}
+
+register_ts!(UiActionWindow);
 
 /// Aliases of the shared ui/model types, re-exported under UI-project names.
 pub type UiControlDisplayData = ControlDisplay;
