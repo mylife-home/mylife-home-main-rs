@@ -3,7 +3,8 @@ use std::sync::Arc;
 use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
-    ProjectManagerActorError, ui_project::operation::ProjectOperation,
+    ProjectManagerActorError,
+    ui_project::{operation::ProjectOperation, window::WindowOperation},
 };
 
 pub trait StyleOperation {
@@ -66,8 +67,10 @@ impl StyleOperation for ProjectOperation {
         }));
 
         self.push_notification(project_manager::UpdateProjectNotification::ClearUiStyle(
-            project_manager::ClearUiStyleNotification { id },
+            project_manager::ClearUiStyleNotification { id: id.clone() },
         ));
+
+        self.window_on_change_style(&id, None)?;
 
         Ok(())
     }
@@ -103,8 +106,13 @@ impl StyleOperation for ProjectOperation {
         }));
 
         self.push_notification(project_manager::UpdateProjectNotification::RenameUiStyle(
-            project_manager::RenameUiStyleNotification { id, new_id },
+            project_manager::RenameUiStyleNotification {
+                id: id.clone(),
+                new_id: new_id.clone(),
+            },
         ));
+
+        self.window_on_change_style(&id, Some(&new_id))?;
 
         Ok(())
     }

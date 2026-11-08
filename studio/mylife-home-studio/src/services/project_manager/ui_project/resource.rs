@@ -3,7 +3,8 @@ use std::sync::Arc;
 use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
-    ProjectManagerActorError, ui_project::operation::ProjectOperation,
+    ProjectManagerActorError,
+    ui_project::{operation::ProjectOperation, window::WindowOperation},
 };
 
 pub trait ResourceOperation {
@@ -70,8 +71,10 @@ impl ResourceOperation for ProjectOperation {
         }));
 
         self.push_notification(project_manager::UpdateProjectNotification::ClearUiResource(
-            project_manager::ClearUiResourceNotification { id },
+            project_manager::ClearUiResourceNotification { id: id.clone() },
         ));
+
+        self.window_on_change_resource(&id, None)?;
 
         Ok(())
     }
@@ -112,9 +115,14 @@ impl ResourceOperation for ProjectOperation {
 
         self.push_notification(
             project_manager::UpdateProjectNotification::RenameUiResource(
-                project_manager::RenameUiResourceNotification { id, new_id },
+                project_manager::RenameUiResourceNotification {
+                    id: id.clone(),
+                    new_id: new_id.clone(),
+                },
             ),
         );
+
+        self.window_on_change_resource(&id, Some(&new_id))?;
 
         Ok(())
     }
