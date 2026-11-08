@@ -316,7 +316,7 @@ impl ControlOperation for ProjectOperation {
     ) -> Result<bool, ProjectManagerActorError> {
         let list = &mut control.style.0;
 
-        let Some(index) = list.iter().position(|item| item.0 == style_id) else {
+        let Some(index) = list.iter().position(|item| item == style_id) else {
             return Ok(false);
         };
 
