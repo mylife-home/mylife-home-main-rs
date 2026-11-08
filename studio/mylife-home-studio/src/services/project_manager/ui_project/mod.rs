@@ -14,21 +14,24 @@ use crate::{
 use kameo::{error::Infallible, message, prelude::*};
 
 mod component;
+mod control;
 mod default_window;
 mod operation;
 mod resource;
 mod style;
 mod template;
+mod template_instance;
 mod view;
 mod window;
 
 use component::ComponentOperation;
+use control::ControlOperation;
 use default_window::DefaultWindowOperation;
 use operation::ProjectOperation;
 use resource::ResourceOperation;
 use style::StyleOperation;
 use template::TemplateOperation;
-use view::ViewOperation;
+use template_instance::TemplateInstanceOperation;
 use window::WindowOperation;
 
 pub fn new_ui_project_data() -> Arc<project_manager::UiProject> {
@@ -690,7 +693,7 @@ impl UiProject {
         call_data: project_manager::NewControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_new_control(
+        operation.control_new(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -706,7 +709,7 @@ impl UiProject {
         call_data: project_manager::ClearControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_clear_control(call_data.view_type, call_data.view_id, call_data.id)?;
+        operation.control_clear(call_data.view_type, call_data.view_id, call_data.id)?;
         self.apply_update(operation).await
     }
 
@@ -715,7 +718,7 @@ impl UiProject {
         call_data: project_manager::RenameControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_rename_control(
+        operation.control_rename(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -729,7 +732,7 @@ impl UiProject {
         call_data: project_manager::CloneControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_clone_control(
+        operation.control_clone(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -745,7 +748,7 @@ impl UiProject {
         call_data: project_manager::SetControlPropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_set_control_properties(
+        operation.control_set_properties(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -759,7 +762,7 @@ impl UiProject {
         call_data: project_manager::NewTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_new_template_instance(
+        operation.template_instance_new(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -775,11 +778,7 @@ impl UiProject {
         call_data: project_manager::ClearTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_clear_template_instance(
-            call_data.view_type,
-            call_data.view_id,
-            call_data.id,
-        )?;
+        operation.template_instance_clear(call_data.view_type, call_data.view_id, call_data.id)?;
         self.apply_update(operation).await
     }
 
@@ -788,7 +787,7 @@ impl UiProject {
         call_data: project_manager::RenameTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_rename_template_instance(
+        operation.template_instance_rename(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -802,7 +801,7 @@ impl UiProject {
         call_data: project_manager::CloneTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_clone_template_instance(
+        operation.template_instance_clone(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -816,7 +815,7 @@ impl UiProject {
         call_data: project_manager::MoveTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_move_template_instance(
+        operation.template_instance_move(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -831,7 +830,7 @@ impl UiProject {
         call_data: project_manager::SetTemplateInstanceTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_set_template_instance_template(
+        operation.template_instance_set_template(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
@@ -845,7 +844,7 @@ impl UiProject {
         call_data: project_manager::SetTemplateInstanceBindingsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut operation = ProjectOperation::new(&self.data);
-        operation.view_set_template_instance_bindings(
+        operation.template_instance_set_bindings(
             call_data.view_type,
             call_data.view_id,
             call_data.id,
