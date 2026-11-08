@@ -336,8 +336,8 @@ register_ts!(UiTemplateInstanceData);
 #[serde(rename_all = "camelCase")]
 pub struct UiControlTextContextItemData {
     pub id: String,
-    pub component_id: Option<String>, // Can be null for templates
-    pub component_state: String,
+    pub component_id: Option<String>,    // Can be null for templates
+    pub component_state: Option<String>, // can be null after template export deletion
     /// used only for designer render, not deployed
     #[ts(type = "any")]
     pub test_value: serde_json::Value,
@@ -389,8 +389,8 @@ register_ts!(UiActionData);
 #[ts(export_to = "model.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiActionComponentData {
-    pub id: Option<String>, // Can be null for templates
-    pub action: String,
+    pub id: Option<String>,     // Can be null for templates
+    pub action: Option<String>, // can be null after template export deletion
 }
 
 register_ts!(UiActionComponentData);

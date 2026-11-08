@@ -46,6 +46,30 @@ pub trait ControlOperation {
         id: String,
         properties: project_manager::UiControlProperties,
     ) -> Result<(), ProjectManagerActorError>;
+
+    fn control_on_change_resource(
+        &self,
+        control: &mut project_manager::UiControlData,
+        resource_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<bool, ProjectManagerActorError>;
+    fn control_on_change_style(
+        &self,
+        control: &mut project_manager::UiControlData,
+        style_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<bool, ProjectManagerActorError>;
+    fn control_on_change_window(
+        &self,
+        control: &mut project_manager::UiControlData,
+        window_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<bool, ProjectManagerActorError>;
+    fn control_on_clear_template_export(
+        &self,
+        control: &mut project_manager::UiControlData,
+        member_name: &str,
+    ) -> Result<bool, ProjectManagerActorError>;
 }
 
 impl ControlOperation for ProjectOperation {
@@ -247,5 +271,168 @@ impl ControlOperation for ProjectOperation {
             controls.insert(id, Arc::new(control));
             Ok(true)
         })
+    }
+
+    fn control_on_change_resource(
+        &self,
+        control: &mut project_manager::UiControlData,
+        resource_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<bool, ProjectManagerActorError> {
+        let Some(mut display) = control.display.as_ref().clone() else {
+            return Ok(false);
+        };
+
+        let mut changed = false;
+
+        if let Some(res) = &display.default_resource
+            && res.0 == resource_id
+        {
+            display.default_resource = new_id.map(|id| project_manager::Resource(String::from(id)));
+            changed = true;
+        }
+
+        for item in &mut display.map {
+            if let Some(res) = &item.resource
+                && res.0 == resource_id
+            {
+                item.resource = new_id.map(|id| project_manager::Resource(String::from(id)));
+                changed = true;
+            }
+        }
+
+        if changed {
+            control.display = Arc::new(Some(display));
+        }
+
+        Ok(changed)
+    }
+
+    fn control_on_change_style(
+        &self,
+        control: &mut project_manager::UiControlData,
+        style_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<bool, ProjectManagerActorError> {
+        let list = &mut control.style.0;
+
+        let Some(index) = list.iter().position(|item| item.0 == style_id) else {
+            return Ok(false);
+        };
+
+        if let Some(new_id) = new_id {
+            list[index] = String::from(new_id);
+        } else {
+            list.remove(index);
+        }
+
+        Ok(true)
+    }
+
+    fn control_on_change_window(
+        &self,
+        control: &mut project_manager::UiControlData,
+        window_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<bool, ProjectManagerActorError> {
+        let update = |action: &mut project_manager::UiActionData| -> bool {
+            if let Some(window) = &mut action.window
+                && let Some(id) = &window.id
+                && id == window_id
+            {
+                window.id = new_id.map(String::from);
+                true
+            } else {
+                false
+            }
+        };
+
+        let mut changed = false;
+
+        if let Some(mut action) = control.primary_action.as_ref().clone() {
+            let changed_primary = update(&mut action);
+            if changed_primary {
+                control.primary_action = Arc::new(Some(action));
+            }
+            changed |= changed_primary;
+        }
+
+        if let Some(mut action) = control.secondary_action.as_ref().clone() {
+            let changed_sec = update(&mut action);
+            if changed_sec {
+                control.secondary_action = Arc::new(Some(action));
+            }
+            changed |= changed_sec;
+        }
+
+        Ok(changed)
+    }
+
+    fn control_on_clear_template_export(
+        &self,
+        control: &mut project_manager::UiControlData,
+        member_name: &str,
+    ) -> Result<bool, ProjectManagerActorError> {
+        let mut changed = false;
+
+        if let Some(mut display) = control.display.as_ref().clone() {
+            if display.component_id.is_none()
+                && let Some(component_state) = &display.component_state
+                && component_state == member_name
+            {
+                display.component_state = None;
+                control.display = Arc::new(Some(display));
+                changed = true;
+            }
+        }
+
+        if let Some(mut text) = control.text.as_ref().clone() {
+            let mut change_text = false;
+            for item in &mut text.context {
+                if item.component_id.is_none()
+                    && let Some(component_state) = &item.component_state
+                    && component_state == member_name
+                {
+                    item.component_state = None;
+                    change_text = true;
+                }
+            }
+
+            if change_text {
+                control.text = Arc::new(Some(text));
+            }
+            changed |= change_text;
+        }
+
+        let update = |action: &mut project_manager::UiActionData| -> bool {
+            if let Some(component) = &mut action.component
+                && component.id.is_none()
+                && let Some(action) = &component.action
+                && action == member_name
+            {
+                component.action = None;
+                true
+            } else {
+                false
+            }
+        };
+
+        if let Some(mut action) = control.primary_action.as_ref().clone() {
+            let changed_primary = update(&mut action);
+            if changed_primary {
+                control.primary_action = Arc::new(Some(action));
+            }
+            changed |= changed_primary;
+        }
+
+        if let Some(mut action) = control.secondary_action.as_ref().clone() {
+            let changed_sec = update(&mut action);
+            if changed_sec {
+                control.secondary_action = Arc::new(Some(action));
+            }
+            changed |= changed_sec;
+        }
+
+        Ok(changed)
     }
 }
