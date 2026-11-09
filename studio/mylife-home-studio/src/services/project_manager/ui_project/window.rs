@@ -56,15 +56,6 @@ impl WindowOperation for ProjectOperation {
                 },
             ));
         }
-
-        for (id, template) in self.data().templates.clone().iter() {
-            self.push_notification(project_manager::UpdateProjectNotification::SetUiTemplate(
-                project_manager::SetUiTemplateNotification {
-                    id: id.clone(),
-                    template: template.clone(),
-                },
-            ));
-        }
     }
 
     fn window_new(&mut self, id: String) -> Result<(), ProjectManagerActorError> {

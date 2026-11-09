@@ -148,6 +148,10 @@ impl ControlOperation for ProjectOperation {
     ) -> Result<(), ProjectManagerActorError> {
         self.check_id(&new_id)?;
 
+        if id == new_id {
+            return Ok(());
+        }
+
         self.view_update_controls(view_type, view_id, |_, controls| {
             if controls.contains_key(&new_id) {
                 return Err(ProjectManagerActorError::DataProcessingError(format!(

@@ -75,14 +75,7 @@ impl TemplateInstanceOperation for ProjectOperation {
     ) -> Result<(), ProjectManagerActorError> {
         self.check_id(&id)?;
 
-        if !self.data().templates.contains_key(&template_id) {
-            return Err(ProjectManagerActorError::DataProcessingError(format!(
-                "Template '{}' does not exist",
-                template_id
-            )));
-        }
-
-        let bindings = self.template_prepare_bindings(&id)?;
+        let bindings = self.template_prepare_bindings(&template_id)?;
 
         self.view_update_template_instances(view_type, view_id, |_, templates| {
             if templates.contains_key(&id) {
@@ -128,6 +121,10 @@ impl TemplateInstanceOperation for ProjectOperation {
         new_id: String,
     ) -> Result<(), ProjectManagerActorError> {
         self.check_id(&new_id)?;
+
+        if id == new_id {
+            return Ok(());
+        }
 
         self.view_update_template_instances(view_type, view_id, |_, templates| {
             if templates.contains_key(&new_id) {
