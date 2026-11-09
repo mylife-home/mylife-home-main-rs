@@ -485,9 +485,9 @@ impl UiProject {
     async fn validate(
         &mut self,
     ) -> Result<project_manager::ValidateUiProjectCallResult, ProjectManagerActorError> {
-        Ok(project_manager::ValidateUiProjectCallResult {
-            errors: validation::validate(&self.data),
-        })
+        let errors = validation::validate(&self.data);
+
+        Ok(project_manager::ValidateUiProjectCallResult { errors })
     }
 
     async fn refresh_components_from_online(
