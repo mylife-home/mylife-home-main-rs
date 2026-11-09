@@ -17,10 +17,12 @@ mod component;
 mod control;
 mod default_window;
 mod operation;
+mod path;
 mod resource;
 mod style;
 mod template;
 mod template_instance;
+mod validation;
 mod view;
 mod window;
 
@@ -483,7 +485,9 @@ impl UiProject {
     async fn validate(
         &mut self,
     ) -> Result<project_manager::ValidateUiProjectCallResult, ProjectManagerActorError> {
-        todo!()
+        Ok(project_manager::ValidateUiProjectCallResult {
+            errors: validation::validate(&self.data),
+        })
     }
 
     async fn refresh_components_from_online(

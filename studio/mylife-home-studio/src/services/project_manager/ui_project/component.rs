@@ -4,7 +4,10 @@ use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
-    ui_project::{control::ControlOperation, operation::ProjectOperation, view::ViewOperation},
+    ui_project::{
+        control::ControlOperation, operation::ProjectOperation, path::path_node,
+        view::ViewOperation,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -50,23 +53,7 @@ impl ComponentOperation for ProjectOperation {
         member_name: &str,
         member_type: project_manager::MemberType,
     ) -> Option<String> {
-        let Some(component) = self.data().components.get(component_id) else {
-            return None;
-        };
-
-        let Some(plugin) = self.data().plugins.get(&component.plugin) else {
-            return None;
-        };
-
-        let Some(member) = plugin.members.get(member_name) else {
-            return None;
-        };
-
-        if member.member_type != member_type {
-            return None;
-        }
-
-        Some(member.value_type.clone())
+        component_find_member_value_type(self.data(), component_id, member_name, member_type)
     }
 
     fn component_collect_usage(&self) -> Vec<ComponentUsage> {
@@ -272,9 +259,28 @@ impl ComponentOperation for ProjectOperation {
     }
 }
 
-fn path_node(node_type: &str, id: &str) -> project_manager::UiElementPathNode {
-    project_manager::UiElementPathNode {
-        r#type: node_type.to_owned(),
-        id: id.to_owned(),
+/// Also used by validation
+pub fn component_find_member_value_type(
+    data: &project_manager::UiProject,
+    component_id: &str,
+    member_name: &str,
+    member_type: project_manager::MemberType,
+) -> Option<String> {
+    let Some(component) = data.components.get(component_id) else {
+        return None;
+    };
+
+    let Some(plugin) = data.plugins.get(&component.plugin) else {
+        return None;
+    };
+
+    let Some(member) = plugin.members.get(member_name) else {
+        return None;
+    };
+
+    if member.member_type != member_type {
+        return None;
     }
+
+    Some(member.value_type.clone())
 }
