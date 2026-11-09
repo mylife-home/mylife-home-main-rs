@@ -232,7 +232,19 @@ struct Call {
 impl message::Message<Call> for UiProject {
     type Reply = Result<project_manager::ProjectCallResult, ProjectManagerActorError>;
 
-    async fn handle(&mut self, msg: Call, ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
+    async fn handle(&mut self, msg: Call, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
+        let Some(notifier) = self.notifiers.get_notifier(&msg.session, &msg.notifier_id) else {
+            return Err(ProjectManagerActorError::NotifierNotFound(
+                msg.notifier_id.clone(),
+            ));
+        };
+
+        if notifier.session_id() != msg.session.id() {
+            return Err(ProjectManagerActorError::NotifierNotFound(
+                msg.notifier_id.clone(),
+            ));
+        }
+
         let call_data = serde_json::from_value::<project_manager::UiProjectCall>(msg.call_data.0)?;
 
         fn map_call_result<T: Serialize>(
