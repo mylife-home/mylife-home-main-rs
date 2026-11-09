@@ -4,7 +4,9 @@ use studio_web_api::{project_manager, utils::PartialField};
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
-    ui_project::{control::ControlOperation, operation::ProjectOperation},
+    ui_project::{
+        default_window::DefaultWindowOperation, operation::ProjectOperation, view::ViewOperation,
+    },
 };
 
 pub trait WindowOperation {
@@ -33,17 +35,6 @@ pub trait WindowOperation {
         &self,
         id: &str,
     ) -> Result<&Arc<project_manager::UiWindowData>, ProjectManagerActorError>;
-
-    fn window_on_change_resource(
-        &mut self,
-        resource_id: &str,
-        new_id: Option<&str>,
-    ) -> Result<(), ProjectManagerActorError>;
-    fn window_on_change_style(
-        &mut self,
-        style_id: &str,
-        new_id: Option<&str>,
-    ) -> Result<(), ProjectManagerActorError>;
 }
 
 impl WindowOperation for ProjectOperation {
@@ -104,10 +95,11 @@ impl WindowOperation for ProjectOperation {
         }));
 
         self.push_notification(project_manager::UpdateProjectNotification::ClearUiWindow(
-            project_manager::ClearUiWindowNotification { id },
+            project_manager::ClearUiWindowNotification { id: id.clone() },
         ));
 
-        // TODO: impacts
+        self.view_on_change_window(&id, None)?;
+        self.default_window_on_change_window(&id, None)?;
 
         Ok(())
     }
@@ -146,10 +138,14 @@ impl WindowOperation for ProjectOperation {
         }));
 
         self.push_notification(project_manager::UpdateProjectNotification::RenameUiWindow(
-            project_manager::RenameUiWindowNotification { id, new_id },
+            project_manager::RenameUiWindowNotification {
+                id: id.clone(),
+                new_id: new_id.clone(),
+            },
         ));
 
-        // TODO: impacts
+        self.view_on_change_window(&id, Some(&new_id))?;
+        self.default_window_on_change_window(&id, Some(&new_id))?;
 
         Ok(())
     }
@@ -203,6 +199,8 @@ impl WindowOperation for ProjectOperation {
                 changed = true;
             }
             if let PartialField::Value(style) = properties.style {
+                let mut style = style;
+                style.0.sort();
                 window.style = style;
                 changed = true;
             }
@@ -265,86 +263,5 @@ impl WindowOperation for ProjectOperation {
         };
 
         Ok(window)
-    }
-
-    fn window_on_change_resource(
-        &mut self,
-        resource_id: &str,
-        new_id: Option<&str>,
-    ) -> Result<(), ProjectManagerActorError> {
-        for window_id in self.data().windows.keys().cloned().collect::<Vec<_>>() {
-            self.window_update(window_id, |self_, window| {
-                let mut changed = false;
-
-                if let Some(background_resource) = &window.background_resource
-                    && background_resource.0 == resource_id
-                {
-                    window.background_resource =
-                        new_id.map(|id| project_manager::Resource(String::from(id)));
-                    changed = true;
-                }
-
-                let mut new_controls = window.controls.as_ref().clone();
-                let mut changed_controls = false;
-                for (_, control) in &mut new_controls.iter_mut() {
-                    let mut new_control = control.as_ref().clone();
-                    if self_.control_on_change_resource(&mut new_control, resource_id, new_id)? {
-                        *control = Arc::new(new_control);
-                        changed_controls = true;
-                    }
-                }
-
-                if changed_controls {
-                    window.controls = Arc::new(new_controls);
-                }
-                changed |= changed_controls;
-
-                Ok(changed)
-            })?;
-        }
-
-        Ok(())
-    }
-
-    fn window_on_change_style(
-        &mut self,
-        style_id: &str,
-        new_id: Option<&str>,
-    ) -> Result<(), ProjectManagerActorError> {
-        for window_id in self.data().windows.keys().cloned().collect::<Vec<_>>() {
-            self.window_update(window_id, |self_, window| {
-                let mut changed = false;
-
-                let list = &mut window.style.0;
-                if let Some(index) = list.iter().position(|item| item == style_id) {
-                    if let Some(new_id) = new_id {
-                        list[index] = String::from(new_id);
-                    } else {
-                        list.remove(index);
-                    }
-
-                    changed = true;
-                }
-
-                let mut new_controls = window.controls.as_ref().clone();
-                let mut changed_controls = false;
-                for (_, control) in &mut new_controls.iter_mut() {
-                    let mut new_control = control.as_ref().clone();
-                    if self_.control_on_change_style(&mut new_control, style_id, new_id)? {
-                        *control = Arc::new(new_control);
-                        changed_controls = true;
-                    }
-                }
-
-                if changed_controls {
-                    window.controls = Arc::new(new_controls);
-                }
-                changed |= changed_controls;
-
-                Ok(changed)
-            })?;
-        }
-
-        Ok(())
     }
 }

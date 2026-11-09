@@ -4,7 +4,7 @@ use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
-    ui_project::{operation::ProjectOperation, window::WindowOperation},
+    ui_project::{operation::ProjectOperation, view::ViewOperation},
 };
 
 pub trait StyleOperation {
@@ -70,7 +70,7 @@ impl StyleOperation for ProjectOperation {
             project_manager::ClearUiStyleNotification { id: id.clone() },
         ));
 
-        self.window_on_change_style(&id, None)?;
+        self.view_on_change_style(&id, None)?;
 
         Ok(())
     }
@@ -112,7 +112,7 @@ impl StyleOperation for ProjectOperation {
             },
         ));
 
-        self.window_on_change_style(&id, Some(&new_id))?;
+        self.view_on_change_style(&id, Some(&new_id))?;
 
         Ok(())
     }

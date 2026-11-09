@@ -4,7 +4,7 @@ use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
-    ui_project::{operation::ProjectOperation, window::WindowOperation},
+    ui_project::{operation::ProjectOperation, view::ViewOperation},
 };
 
 pub trait ResourceOperation {
@@ -74,7 +74,7 @@ impl ResourceOperation for ProjectOperation {
             project_manager::ClearUiResourceNotification { id: id.clone() },
         ));
 
-        self.window_on_change_resource(&id, None)?;
+        self.view_on_change_resource(&id, None)?;
 
         Ok(())
     }
@@ -122,7 +122,7 @@ impl ResourceOperation for ProjectOperation {
             ),
         );
 
-        self.window_on_change_resource(&id, Some(&new_id))?;
+        self.view_on_change_resource(&id, Some(&new_id))?;
 
         Ok(())
     }

@@ -70,6 +70,12 @@ pub trait ControlOperation {
         control: &mut project_manager::UiControlData,
         member_name: &str,
     ) -> Result<bool, ProjectManagerActorError>;
+    fn control_clear_component_usage(
+        &self,
+        control: &mut project_manager::UiControlData,
+        component_id: &str,
+        member_name: &str,
+    ) -> bool;
 }
 
 impl ControlOperation for ProjectOperation {
@@ -290,7 +296,7 @@ impl ControlOperation for ProjectOperation {
         let mut changed = false;
 
         if let Some(res) = &display.default_resource
-            && res.0 == resource_id
+            && res.0.as_str() == resource_id
         {
             display.default_resource = new_id.map(|id| project_manager::Resource(String::from(id)));
             changed = true;
@@ -298,7 +304,7 @@ impl ControlOperation for ProjectOperation {
 
         for item in &mut display.map {
             if let Some(res) = &item.resource
-                && res.0 == resource_id
+                && res.0.as_str() == resource_id
             {
                 item.resource = new_id.map(|id| project_manager::Resource(String::from(id)));
                 changed = true;
@@ -320,7 +326,7 @@ impl ControlOperation for ProjectOperation {
     ) -> Result<bool, ProjectManagerActorError> {
         let list = &mut control.style.0;
 
-        let Some(index) = list.iter().position(|item| item == style_id) else {
+        let Some(index) = list.iter().position(|item| item.as_str() == style_id) else {
             return Ok(false);
         };
 
@@ -341,8 +347,7 @@ impl ControlOperation for ProjectOperation {
     ) -> Result<bool, ProjectManagerActorError> {
         let update = |action: &mut project_manager::UiActionData| -> bool {
             if let Some(window) = &mut action.window
-                && let Some(id) = &window.id
-                && id == window_id
+                && window.id.as_deref() == Some(window_id)
             {
                 window.id = new_id.map(String::from);
                 true
@@ -438,5 +443,62 @@ impl ControlOperation for ProjectOperation {
         }
 
         Ok(changed)
+    }
+
+    fn control_clear_component_usage(
+        &self,
+        control: &mut project_manager::UiControlData,
+        component_id: &str,
+        member_name: &str,
+    ) -> bool {
+        let mut changed = false;
+
+        if let Some(mut display) = control.display.as_ref().clone()
+            && display.component_id.as_deref() == Some(component_id)
+            && display.component_state.as_deref() == Some(member_name)
+        {
+            display.component_id = None;
+            display.component_state = None;
+            control.display = Arc::new(Some(display));
+            changed = true;
+        }
+
+        if let Some(mut text) = control.text.as_ref().clone() {
+            let mut text_changed = false;
+            for item in &mut text.context {
+                if item.component_id.as_deref() == Some(component_id)
+                    && item.component_state.as_deref() == Some(member_name)
+                {
+                    item.component_id = None;
+                    item.component_state = None;
+                    text_changed = true;
+                }
+            }
+
+            if text_changed {
+                control.text = Arc::new(Some(text));
+                changed = true;
+            }
+        }
+
+        for action in [&mut control.primary_action, &mut control.secondary_action] {
+            let Some(mut action_data) = action.as_ref().clone() else {
+                continue;
+            };
+            let Some(component) = &mut action_data.component else {
+                continue;
+            };
+
+            if component.id.as_deref() == Some(component_id)
+                && component.action.as_deref() == Some(member_name)
+            {
+                component.id = None;
+                component.action = None;
+                *action = Arc::new(Some(action_data));
+                changed = true;
+            }
+        }
+
+        changed
     }
 }

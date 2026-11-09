@@ -5,7 +5,8 @@ use studio_web_api::project_manager;
 use crate::services::project_manager::{
     ProjectManagerActorError,
     ui_project::{
-        operation::ProjectOperation, template::TemplateOperation, window::WindowOperation,
+        control::ControlOperation, operation::ProjectOperation, template::TemplateOperation,
+        window::WindowOperation,
     },
 };
 pub trait ViewOperation {
@@ -33,6 +34,32 @@ pub trait ViewOperation {
             &ProjectOperation,
             &mut HashMap<String, Arc<project_manager::UiTemplateInstanceData>>,
         ) -> Result<bool, ProjectManagerActorError>,
+    ) -> Result<(), ProjectManagerActorError>;
+    fn view_on_change_template(
+        &mut self,
+        template_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<(), ProjectManagerActorError>;
+    fn view_on_change_template_export(
+        &mut self,
+        template_id: &str,
+        export_id: &str,
+        set: bool,
+    ) -> Result<(), ProjectManagerActorError>;
+    fn view_on_change_resource(
+        &mut self,
+        resource_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<(), ProjectManagerActorError>;
+    fn view_on_change_style(
+        &mut self,
+        style_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<(), ProjectManagerActorError>;
+    fn view_on_change_window(
+        &mut self,
+        window_id: &str,
+        new_id: Option<&str>,
     ) -> Result<(), ProjectManagerActorError>;
     fn view_get_template_instance(
         &self,
@@ -135,6 +162,250 @@ impl ViewOperation for ProjectOperation {
                 })
             }
         }
+    }
+
+    fn view_on_change_template(
+        &mut self,
+        template_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<(), ProjectManagerActorError> {
+        let window_ids = self.data().windows.keys().cloned().collect::<Vec<_>>();
+        let template_ids = self.data().templates.keys().cloned().collect::<Vec<_>>();
+
+        for (view_type, view_ids) in [
+            (project_manager::ViewType::Window, window_ids),
+            (project_manager::ViewType::Template, template_ids),
+        ] {
+            for view_id in view_ids {
+                self.view_update_template_instances(view_type, view_id, |_, instances| {
+                    let mut changed = false;
+                    let mut removed = Vec::new();
+
+                    for (id, instance) in instances.iter_mut() {
+                        if instance.template_id.as_str() != template_id {
+                            continue;
+                        }
+
+                        if let Some(new_id) = new_id {
+                            let mut updated = instance.as_ref().clone();
+                            updated.template_id = new_id.to_owned();
+                            *instance = Arc::new(updated);
+                        } else {
+                            removed.push(id.clone());
+                        }
+                        changed = true;
+                    }
+
+                    for id in removed {
+                        instances.remove(&id);
+                    }
+
+                    Ok(changed)
+                })?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn view_on_change_template_export(
+        &mut self,
+        template_id: &str,
+        export_id: &str,
+        set: bool,
+    ) -> Result<(), ProjectManagerActorError> {
+        let window_ids = self.data().windows.keys().cloned().collect::<Vec<_>>();
+        let template_ids = self.data().templates.keys().cloned().collect::<Vec<_>>();
+
+        for (view_type, view_ids) in [
+            (project_manager::ViewType::Window, window_ids),
+            (project_manager::ViewType::Template, template_ids),
+        ] {
+            for view_id in view_ids {
+                self.view_update_template_instances(view_type, view_id, |_, instances| {
+                    let mut changed = false;
+
+                    for instance in instances.values_mut() {
+                        if instance.template_id.as_str() != template_id {
+                            continue;
+                        }
+
+                        let mut updated = instance.as_ref().clone();
+                        let mut bindings = updated.bindings.as_ref().clone();
+                        let binding = if set {
+                            bindings.insert(
+                                export_id.to_owned(),
+                                Arc::new(project_manager::UiTemplateInstanceBinding {
+                                    component_id: None,
+                                    member_name: None,
+                                }),
+                            );
+                            true
+                        } else {
+                            bindings.remove(export_id).is_some()
+                        };
+
+                        if binding {
+                            updated.bindings = Arc::new(bindings);
+                            *instance = Arc::new(updated);
+                            changed = true;
+                        }
+                    }
+
+                    Ok(changed)
+                })?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn view_on_change_resource(
+        &mut self,
+        resource_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<(), ProjectManagerActorError> {
+        let window_ids = self.data().windows.keys().cloned().collect::<Vec<_>>();
+        for window_id in window_ids {
+            self.window_update(window_id, |operation, window| {
+                let mut changed = false;
+
+                if window
+                    .background_resource
+                    .as_ref()
+                    .is_some_and(|resource| resource.0.as_str() == resource_id)
+                {
+                    window.background_resource =
+                        new_id.map(|id| project_manager::Resource(id.to_owned()));
+                    changed = true;
+                }
+
+                let mut controls = window.controls.as_ref().clone();
+                for control in controls.values_mut() {
+                    let mut updated = control.as_ref().clone();
+                    if operation.control_on_change_resource(&mut updated, resource_id, new_id)? {
+                        *control = Arc::new(updated);
+                        changed = true;
+                    }
+                }
+
+                if changed {
+                    window.controls = Arc::new(controls);
+                }
+                Ok(changed)
+            })?;
+        }
+
+        let template_ids = self.data().templates.keys().cloned().collect::<Vec<_>>();
+        for template_id in template_ids {
+            self.template_update(template_id, |operation, template| {
+                let mut controls = template.controls.as_ref().clone();
+                let mut changed = false;
+                for control in controls.values_mut() {
+                    let mut updated = control.as_ref().clone();
+                    if operation.control_on_change_resource(&mut updated, resource_id, new_id)? {
+                        *control = Arc::new(updated);
+                        changed = true;
+                    }
+                }
+
+                if changed {
+                    template.controls = Arc::new(controls);
+                }
+                Ok(changed)
+            })?;
+        }
+
+        Ok(())
+    }
+
+    fn view_on_change_style(
+        &mut self,
+        style_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<(), ProjectManagerActorError> {
+        let window_ids = self.data().windows.keys().cloned().collect::<Vec<_>>();
+        for window_id in window_ids {
+            self.window_update(window_id, |operation, window| {
+                let mut changed = false;
+                let styles = &mut window.style.0;
+                if let Some(index) = styles.iter().position(|style| style.as_str() == style_id) {
+                    if let Some(new_id) = new_id {
+                        styles[index] = new_id.to_owned();
+                        styles.sort();
+                    } else {
+                        styles.remove(index);
+                    }
+                    changed = true;
+                }
+
+                let mut controls = window.controls.as_ref().clone();
+                for control in controls.values_mut() {
+                    let mut updated = control.as_ref().clone();
+                    if operation.control_on_change_style(&mut updated, style_id, new_id)? {
+                        *control = Arc::new(updated);
+                        changed = true;
+                    }
+                }
+
+                if changed {
+                    window.controls = Arc::new(controls);
+                }
+                Ok(changed)
+            })?;
+        }
+
+        let template_ids = self.data().templates.keys().cloned().collect::<Vec<_>>();
+        for template_id in template_ids {
+            self.template_update(template_id, |operation, template| {
+                let mut controls = template.controls.as_ref().clone();
+                let mut changed = false;
+                for control in controls.values_mut() {
+                    let mut updated = control.as_ref().clone();
+                    if operation.control_on_change_style(&mut updated, style_id, new_id)? {
+                        *control = Arc::new(updated);
+                        changed = true;
+                    }
+                }
+
+                if changed {
+                    template.controls = Arc::new(controls);
+                }
+                Ok(changed)
+            })?;
+        }
+
+        Ok(())
+    }
+
+    fn view_on_change_window(
+        &mut self,
+        window_id: &str,
+        new_id: Option<&str>,
+    ) -> Result<(), ProjectManagerActorError> {
+        let window_ids = self.data().windows.keys().cloned().collect::<Vec<_>>();
+        let template_ids = self.data().templates.keys().cloned().collect::<Vec<_>>();
+
+        for (view_type, view_ids) in [
+            (project_manager::ViewType::Window, window_ids),
+            (project_manager::ViewType::Template, template_ids),
+        ] {
+            for view_id in view_ids {
+                self.view_update_controls(view_type, view_id, |operation, controls| {
+                    let mut changed = false;
+                    for control in controls.values_mut() {
+                        let mut updated = control.as_ref().clone();
+                        if operation.control_on_change_window(&mut updated, window_id, new_id)? {
+                            *control = Arc::new(updated);
+                            changed = true;
+                        }
+                    }
+                    Ok(changed)
+                })?;
+            }
+        }
+
+        Ok(())
     }
 
     fn view_get_template_instance(

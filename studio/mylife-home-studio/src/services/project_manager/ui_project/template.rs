@@ -3,7 +3,8 @@ use std::{collections::HashMap, sync::Arc};
 use studio_web_api::{project_manager, utils::PartialField};
 
 use crate::services::project_manager::{
-    ProjectManagerActorError, ui_project::operation::ProjectOperation,
+    ProjectManagerActorError,
+    ui_project::{control::ControlOperation, operation::ProjectOperation, view::ViewOperation},
 };
 
 pub trait TemplateOperation {
@@ -128,10 +129,10 @@ impl TemplateOperation for ProjectOperation {
         }));
 
         self.push_notification(project_manager::UpdateProjectNotification::ClearUiTemplate(
-            project_manager::ClearUiTemplateNotification { id },
+            project_manager::ClearUiTemplateNotification { id: id.clone() },
         ));
 
-        // TODO: impacts
+        self.view_on_change_template(&id, None)?;
 
         Ok(())
     }
@@ -171,11 +172,14 @@ impl TemplateOperation for ProjectOperation {
 
         self.push_notification(
             project_manager::UpdateProjectNotification::RenameUiTemplate(
-                project_manager::RenameUiTemplateNotification { id, new_id },
+                project_manager::RenameUiTemplateNotification {
+                    id: id.clone(),
+                    new_id: new_id.clone(),
+                },
             ),
         );
 
-        // TODO: impacts
+        self.view_on_change_template(&id, Some(&new_id))?;
 
         Ok(())
     }
@@ -247,7 +251,7 @@ impl TemplateOperation for ProjectOperation {
         member_type: project_manager::MemberType,
         value_type: String,
     ) -> Result<(), ProjectManagerActorError> {
-        self.template_update(id, |_, template| {
+        self.template_update(id.clone(), |_, template| {
             let mut new_exports = template.exports.as_ref().clone();
             let export = Arc::new(project_manager::UiTemplateExport {
                 bulk_pattern: None,
@@ -262,7 +266,7 @@ impl TemplateOperation for ProjectOperation {
             Ok(true)
         })?;
 
-        // TODO: impacts
+        self.view_on_change_template_export(&id, &export_id, true)?;
 
         Ok(())
     }
@@ -272,17 +276,43 @@ impl TemplateOperation for ProjectOperation {
         id: String,
         export_id: String,
     ) -> Result<(), ProjectManagerActorError> {
-        self.template_update(id, |_, template| {
+        self.template_update(id.clone(), |self_, template| {
             let mut new_exports = template.exports.as_ref().clone();
             new_exports.remove(&export_id);
             template.exports = Arc::new(new_exports);
 
-            // TODO: inner controls + template_instances
+            let mut controls = template.controls.as_ref().clone();
+            let mut controls_changed = false;
+            for control in controls.values_mut() {
+                let mut updated = control.as_ref().clone();
+                if self_.control_on_clear_template_export(&mut updated, &export_id)? {
+                    *control = Arc::new(updated);
+                    controls_changed = true;
+                }
+            }
+            if controls_changed {
+                template.controls = Arc::new(controls);
+            }
+
+            let mut instances = template.templates.as_ref().clone();
+            let mut instances_changed = false;
+            for instance in instances.values_mut() {
+                let mut updated = instance.as_ref().clone();
+                let mut bindings = updated.bindings.as_ref().clone();
+                if bindings.remove(&export_id).is_some() {
+                    updated.bindings = Arc::new(bindings);
+                    *instance = Arc::new(updated);
+                    instances_changed = true;
+                }
+            }
+            if instances_changed {
+                template.templates = Arc::new(instances);
+            }
 
             Ok(true)
         })?;
 
-        // TODO: impacts
+        self.view_on_change_template_export(&id, &export_id, false)?;
 
         Ok(())
     }
