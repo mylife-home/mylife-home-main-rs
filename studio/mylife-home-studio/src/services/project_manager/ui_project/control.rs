@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use studio_web_api::{project_manager, utils::PartialField};
 
-use crate::services::project_manager::{
-    ProjectManagerActorError,
-    ui_project::{resource::ResourceOps, style::StyleOps},
-};
+use crate::services::project_manager::ui_project::{resource::ResourceOps, style::StyleOps};
 
 pub trait ControlOps {
     fn new(x: i32, y: i32, r#type: project_manager::UiControlType) -> Self;

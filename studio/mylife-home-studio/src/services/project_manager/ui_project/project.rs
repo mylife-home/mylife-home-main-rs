@@ -5,7 +5,6 @@ use studio_web_api::project_manager;
 use crate::services::project_manager::{
     ProjectManagerActorError,
     ui_project::{
-        control::ControlOps,
         template::TemplateOps,
         utils::{ArcMapOps, check_id},
         view::View,
@@ -528,27 +527,6 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         let mut project = self.as_ref().clone();
         project.templates = templates;
         Arc::new(project)
-    }
-
-    fn set_control_properties(
-        &self,
-        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
-        view_type: project_manager::ViewType,
-        view_id: String,
-        id: String,
-        properties: project_manager::UiControlProperties,
-    ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError> {
-        let view = self.get_view(view_type, &view_id)?;
-        let controls = view.get_controls();
-        let control = controls.get_required(&id)?;
-        let Some(control) = control.set_properties(properties) else {
-            return Ok(None);
-        };
-        let controls = controls.with_updated(id, control)?;
-        let view = view.set_controls(controls);
-        let project = self.update_view(notifications, view_id, view)?;
-
-        Ok(Some(project))
     }
 
     fn get_view(

@@ -595,6 +595,10 @@ impl UiProject {
     ) -> Result<(), ProjectManagerActorError> {
         let mut notifications = Vec::new();
         let new_data = self.data.clear_style(&mut notifications, call_data.id)?;
+        let Some(new_data) = new_data else {
+            return Ok(());
+        };
+
         self.apply_update_new(new_data, notifications).await
     }
 
