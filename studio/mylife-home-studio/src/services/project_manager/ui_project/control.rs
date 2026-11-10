@@ -100,17 +100,17 @@ impl ControlOperation for ProjectOperation {
 
             let (display, text) = match r#type {
                 project_manager::UiControlType::Display => (
-                    Arc::new(Some(project_manager::ControlDisplay {
+                    Some(Arc::new(project_manager::ControlDisplay {
                         component_id: None,
                         component_state: None,
                         default_resource: None,
                         map: Vec::new(),
                     })),
-                    Arc::new(None),
+                    None,
                 ),
                 project_manager::UiControlType::Text => (
-                    Arc::new(None),
-                    Arc::new(Some(project_manager::UiControlTextData {
+                    None,
+                    Some(Arc::new(project_manager::UiControlTextData {
                         context: Vec::new(),
                         format: String::from("return '';"),
                     })),
@@ -125,8 +125,8 @@ impl ControlOperation for ProjectOperation {
                 width: 50,
                 display,
                 text,
-                primary_action: Arc::new(None),
-                secondary_action: Arc::new(None),
+                primary_action: None,
+                secondary_action: None,
             };
 
             controls.insert(id, Arc::new(control));
@@ -258,19 +258,19 @@ impl ControlOperation for ProjectOperation {
                 changed = true;
             }
             if let PartialField::Value(display) = properties.display {
-                control.display = Arc::new(display);
+                control.display = display.map(Arc::new);
                 changed = true;
             }
             if let PartialField::Value(text) = properties.text {
-                control.text = Arc::new(text);
+                control.text = text.map(Arc::new);
                 changed = true;
             }
             if let PartialField::Value(primary_action) = properties.primary_action {
-                control.primary_action = Arc::new(primary_action);
+                control.primary_action = primary_action.map(Arc::new);
                 changed = true;
             }
             if let PartialField::Value(secondary_action) = properties.secondary_action {
-                control.secondary_action = Arc::new(secondary_action);
+                control.secondary_action = secondary_action.map(Arc::new);
                 changed = true;
             }
 
@@ -289,10 +289,11 @@ impl ControlOperation for ProjectOperation {
         resource_id: &str,
         new_id: Option<&str>,
     ) -> Result<bool, ProjectManagerActorError> {
-        let Some(mut display) = control.display.as_ref().clone() else {
+        let Some(display) = &control.display else {
             return Ok(false);
         };
 
+        let mut display = display.as_ref().clone();
         let mut changed = false;
 
         if let Some(res) = &display.default_resource
@@ -312,7 +313,7 @@ impl ControlOperation for ProjectOperation {
         }
 
         if changed {
-            control.display = Arc::new(Some(display));
+            control.display = Some(Arc::new(display));
         }
 
         Ok(changed)
@@ -358,18 +359,20 @@ impl ControlOperation for ProjectOperation {
 
         let mut changed = false;
 
-        if let Some(mut action) = control.primary_action.as_ref().clone() {
+        if let Some(action) = &control.primary_action {
+            let mut action = action.as_ref().clone();
             let changed_primary = update(&mut action);
             if changed_primary {
-                control.primary_action = Arc::new(Some(action));
+                control.primary_action = Some(Arc::new(action));
             }
             changed |= changed_primary;
         }
 
-        if let Some(mut action) = control.secondary_action.as_ref().clone() {
+        if let Some(action) = &control.secondary_action {
+            let mut action = action.as_ref().clone();
             let changed_sec = update(&mut action);
             if changed_sec {
-                control.secondary_action = Arc::new(Some(action));
+                control.secondary_action = Some(Arc::new(action));
             }
             changed |= changed_sec;
         }
@@ -384,18 +387,20 @@ impl ControlOperation for ProjectOperation {
     ) -> Result<bool, ProjectManagerActorError> {
         let mut changed = false;
 
-        if let Some(mut display) = control.display.as_ref().clone() {
+        if let Some(display) = &control.display {
+            let mut display = display.as_ref().clone();
             if display.component_id.is_none()
                 && let Some(component_state) = &display.component_state
                 && component_state == member_name
             {
                 display.component_state = None;
-                control.display = Arc::new(Some(display));
+                control.display = Some(Arc::new(display));
                 changed = true;
             }
         }
 
-        if let Some(mut text) = control.text.as_ref().clone() {
+        if let Some(text) = &control.text {
+            let mut text = text.as_ref().clone();
             let mut change_text = false;
             for item in &mut text.context {
                 if item.component_id.is_none()
@@ -408,7 +413,7 @@ impl ControlOperation for ProjectOperation {
             }
 
             if change_text {
-                control.text = Arc::new(Some(text));
+                control.text = Some(Arc::new(text));
             }
             changed |= change_text;
         }
@@ -426,18 +431,20 @@ impl ControlOperation for ProjectOperation {
             }
         };
 
-        if let Some(mut action) = control.primary_action.as_ref().clone() {
+        if let Some(action) = &control.primary_action {
+            let mut action = action.as_ref().clone();
             let changed_primary = update(&mut action);
             if changed_primary {
-                control.primary_action = Arc::new(Some(action));
+                control.primary_action = Some(Arc::new(action));
             }
             changed |= changed_primary;
         }
 
-        if let Some(mut action) = control.secondary_action.as_ref().clone() {
+        if let Some(action) = &control.secondary_action {
+            let mut action = action.as_ref().clone();
             let changed_sec = update(&mut action);
             if changed_sec {
-                control.secondary_action = Arc::new(Some(action));
+                control.secondary_action = Some(Arc::new(action));
             }
             changed |= changed_sec;
         }
@@ -453,17 +460,20 @@ impl ControlOperation for ProjectOperation {
     ) -> bool {
         let mut changed = false;
 
-        if let Some(mut display) = control.display.as_ref().clone()
-            && display.component_id.as_deref() == Some(component_id)
-            && display.component_state.as_deref() == Some(member_name)
-        {
-            display.component_id = None;
-            display.component_state = None;
-            control.display = Arc::new(Some(display));
-            changed = true;
+        if let Some(display) = &control.display {
+            let mut display = display.as_ref().clone();
+            if display.component_id.as_deref() == Some(component_id)
+                && display.component_state.as_deref() == Some(member_name)
+            {
+                display.component_id = None;
+                display.component_state = None;
+                control.display = Some(Arc::new(display));
+                changed = true;
+            }
         }
 
-        if let Some(mut text) = control.text.as_ref().clone() {
+        if let Some(text) = &control.text {
+            let mut text = text.as_ref().clone();
             let mut text_changed = false;
             for item in &mut text.context {
                 if item.component_id.as_deref() == Some(component_id)
@@ -476,15 +486,16 @@ impl ControlOperation for ProjectOperation {
             }
 
             if text_changed {
-                control.text = Arc::new(Some(text));
+                control.text = Some(Arc::new(text));
                 changed = true;
             }
         }
 
         for action in [&mut control.primary_action, &mut control.secondary_action] {
-            let Some(mut action_data) = action.as_ref().clone() else {
+            let Some(action_data) = &action else {
                 continue;
             };
+            let mut action_data = action_data.as_ref().clone();
             let Some(component) = &mut action_data.component else {
                 continue;
             };
@@ -494,7 +505,7 @@ impl ControlOperation for ProjectOperation {
             {
                 component.id = None;
                 component.action = None;
-                *action = Arc::new(Some(action_data));
+                *action = Some(Arc::new(action_data));
                 changed = true;
             }
         }

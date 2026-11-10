@@ -365,12 +365,12 @@ pub struct UiControlData {
     pub x: i32,
     pub y: i32,
     /// null when the control has no display
-    pub display: Arc<Option<ControlDisplay>>,
-    pub text: Arc<Option<UiControlTextData>>,
+    pub display: Option<Arc<ControlDisplay>>,
+    pub text: Option<Arc<UiControlTextData>>,
     /// null when there is no primary action
-    pub primary_action: Arc<Option<UiActionData>>,
+    pub primary_action: Option<Arc<UiActionData>>,
     /// null when there is no secondary action
-    pub secondary_action: Arc<Option<UiActionData>>,
+    pub secondary_action: Option<Arc<UiActionData>>,
 }
 
 register_ts!(UiControlData);
