@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use common::components::metadata::Type;
 use studio_web_api::project_manager;
@@ -181,7 +181,7 @@ impl<'a> Validator<'a> {
             }
 
             self.validate_action(
-                control.primary_action.as_ref().as_ref(),
+                &control.primary_action,
                 "primaryAction",
                 view_type,
                 view_id,
@@ -189,7 +189,7 @@ impl<'a> Validator<'a> {
                 owner_template,
             );
             self.validate_action(
-                control.secondary_action.as_ref().as_ref(),
+                &control.secondary_action,
                 "secondaryAction",
                 view_type,
                 view_id,
@@ -297,7 +297,7 @@ impl<'a> Validator<'a> {
 
     fn validate_action(
         &mut self,
-        action: Option<&project_manager::UiActionData>,
+        action: &Option<Arc<project_manager::UiActionData>>,
         action_type: &str,
         view_type: &str,
         view_id: &str,
