@@ -5,6 +5,7 @@ use studio_web_api::project_manager;
 use crate::services::project_manager::{
     ProjectManagerActorError,
     ui_project::{
+        control::ControlOps,
         utils::{ArcMapOps, check_id},
         view::View,
         window::WindowOps,
@@ -99,6 +100,54 @@ pub trait ProjectOps {
         &self,
         windows: Arc<HashMap<String, Arc<project_manager::UiWindowData>>>,
     ) -> Arc<project_manager::UiProject>;
+
+    fn new_control(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_type: project_manager::ViewType,
+        view_id: String,
+        id: String,
+        x: i32,
+        y: i32,
+        r#type: project_manager::UiControlType,
+    ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError>;
+
+    fn clear_control(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_type: project_manager::ViewType,
+        view_id: String,
+        id: String,
+    ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError>;
+
+    fn rename_control(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_type: project_manager::ViewType,
+        view_id: String,
+        id: &str,
+        new_id: String,
+    ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError>;
+
+    fn clone_control(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_type: project_manager::ViewType,
+        view_id: &str,
+        id: &str,
+        new_id: String,
+        target_view_type: project_manager::ViewType,
+        target_view_id: String,
+    ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError>;
+
+    fn set_control_properties(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_type: project_manager::ViewType,
+        view_id: String,
+        id: String,
+        properties: project_manager::UiControlProperties,
+    ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError>;
 
     fn get_view(
         &self,
@@ -378,6 +427,108 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         let mut project = self.as_ref().clone();
         project.windows = windows;
         Arc::new(project)
+    }
+
+    fn new_control(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_type: project_manager::ViewType,
+        view_id: String,
+        id: String,
+        x: i32,
+        y: i32,
+        r#type: project_manager::UiControlType,
+    ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError> {
+        let view = self.get_view(view_type, &view_id)?;
+        let control = <Arc<project_manager::UiControlData> as ControlOps>::new(x, y, r#type);
+        let controls = view.get_controls();
+        let controls = controls.with_inserted(id, control)?;
+        let view = view.set_controls(controls);
+        let project = self.update_view(notifications, view_id, view)?;
+
+        Ok(project)
+    }
+
+    fn clear_control(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_type: project_manager::ViewType,
+        view_id: String,
+        id: String,
+    ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError> {
+        let view = self.get_view(view_type, &view_id)?;
+        let controls = view.get_controls();
+        let Some(controls) = controls.with_cleared(&id)? else {
+            return Ok(None);
+        };
+        let view = view.set_controls(controls);
+        let project = self.update_view(notifications, view_id, view)?;
+
+        Ok(Some(project))
+    }
+
+    fn rename_control(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_type: project_manager::ViewType,
+        view_id: String,
+        id: &str,
+        new_id: String,
+    ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError> {
+        let view = self.get_view(view_type, &view_id)?;
+        let controls = view.get_controls();
+        let Some(controls) = controls.with_renamed(id, &new_id)? else {
+            return Ok(None);
+        };
+        let view = view.set_controls(controls);
+        let project = self.update_view(notifications, view_id, view)?;
+
+        Ok(Some(project))
+    }
+
+    fn clone_control(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_type: project_manager::ViewType,
+        view_id: &str,
+        id: &str,
+        new_id: String,
+        target_view_type: project_manager::ViewType,
+        target_view_id: String,
+    ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError> {
+        let source_view = self.get_view(view_type, view_id)?;
+        let source_controls = source_view.get_controls();
+        let source = source_controls.get_required(&id)?;
+        let control = source.clone();
+
+        let view = self.get_view(target_view_type, &target_view_id)?;
+        let controls = view.get_controls();
+        let controls = controls.with_inserted(new_id, control)?;
+        let view = view.set_controls(controls);
+        let project = self.update_view(notifications, target_view_id, view)?;
+
+        Ok(project)
+    }
+
+    fn set_control_properties(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_type: project_manager::ViewType,
+        view_id: String,
+        id: String,
+        properties: project_manager::UiControlProperties,
+    ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError> {
+        let view = self.get_view(view_type, &view_id)?;
+        let controls = view.get_controls();
+        let control = controls.get_required(&id)?;
+        let Some(control) = control.set_properties(properties) else {
+            return Ok(None);
+        };
+        let controls = controls.with_updated(id, control)?;
+        let view = view.set_controls(controls);
+        let project = self.update_view(notifications, view_id, view)?;
+
+        Ok(Some(project))
     }
 
     fn get_view(

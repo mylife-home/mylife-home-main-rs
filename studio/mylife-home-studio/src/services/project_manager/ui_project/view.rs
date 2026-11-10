@@ -23,7 +23,7 @@ impl View {
         }
     }
 
-    pub fn get_controls(&self) -> &HashMap<String, Arc<project_manager::UiControlData>> {
+    pub fn get_controls(&self) -> &Arc<HashMap<String, Arc<project_manager::UiControlData>>> {
         match self {
             View::Window(window) => &window.controls,
             View::Template(template) => &template.controls,

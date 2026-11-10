@@ -18,6 +18,7 @@ use kameo::{error::Infallible, message, prelude::*};
 mod control;
 mod old;
 mod project;
+mod resource;
 mod style;
 mod utils;
 mod view;
