@@ -554,7 +554,9 @@ impl UiProject {
         call_data: project_manager::RenameResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
         let mut notifications = Vec::new();
-        let new_data = self.data.rename_resource(&mut notifications, call_data.id, call_data.new_id)?;
+        let new_data =
+            self.data
+                .rename_resource(&mut notifications, call_data.id, call_data.new_id)?;
         self.apply_update_new(new_data, notifications).await
     }
 
@@ -562,27 +564,31 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.style_set(call_data.id, call_data.style)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let new_data = self
+            .data
+            .set_style(&mut notifications, call_data.id, call_data.style)?;
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn clear_style(
         &mut self,
         call_data: project_manager::ClearStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.style_clear(call_data.id)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let new_data = self.data.clear_style(&mut notifications, call_data.id)?;
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn rename_style(
         &mut self,
         call_data: project_manager::RenameStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.style_rename(call_data.id, call_data.new_id)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let new_data =
+            self.data
+                .rename_style(&mut notifications, call_data.id, call_data.new_id)?;
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn new_window(
