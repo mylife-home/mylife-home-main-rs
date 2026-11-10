@@ -3,7 +3,7 @@ use std::sync::Arc;
 use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
-    ProjectManagerActorError, ui_project::operation::ProjectOperation,
+    ProjectManagerActorError, ui_project::old::operation::ProjectOperation,
 };
 
 pub trait DefaultWindowOperation {

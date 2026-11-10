@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use common::components::metadata::Type;
 use studio_web_api::project_manager;
 
-use crate::services::project_manager::ui_project::{
+use crate::services::project_manager::ui_project::old::{
     component::component_find_member_value_type,
     path::{path_node, with_node},
 };

@@ -4,7 +4,7 @@ use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
-    ui_project::{
+    ui_project::old::{
         control::ControlOperation, operation::ProjectOperation, path::path_node,
         view::ViewOperation,
     },

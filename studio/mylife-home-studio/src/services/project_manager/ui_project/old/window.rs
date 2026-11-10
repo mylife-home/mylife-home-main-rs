@@ -4,7 +4,7 @@ use studio_web_api::{project_manager, utils::PartialField};
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
-    ui_project::{
+    ui_project::old::{
         default_window::DefaultWindowOperation, operation::ProjectOperation, view::ViewOperation,
     },
 };

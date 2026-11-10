@@ -4,7 +4,9 @@ use studio_web_api::{project_manager, utils::PartialField};
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
-    ui_project::{control::ControlOperation, operation::ProjectOperation, view::ViewOperation},
+    ui_project::old::{
+        control::ControlOperation, operation::ProjectOperation, view::ViewOperation,
+    },
 };
 
 pub trait TemplateOperation {

@@ -15,30 +15,19 @@ use crate::{
 
 use kameo::{error::Infallible, message, prelude::*};
 
-mod component;
-mod control;
-mod default_window;
-mod operation;
-mod path;
+mod old;
 mod project;
-mod resource;
-mod style;
-mod template;
-mod template_instance;
 mod utils;
-mod validation;
-mod view;
-mod window;
 
-use component::ComponentOperation;
-use control::ControlOperation;
-use default_window::DefaultWindowOperation;
-use operation::ProjectOperation;
-use resource::ResourceOperation;
-use style::StyleOperation;
-use template::TemplateOperation;
-use template_instance::TemplateInstanceOperation;
-use window::WindowOperation;
+use old::component::ComponentOperation;
+use old::control::ControlOperation;
+use old::default_window::DefaultWindowOperation;
+use old::operation::ProjectOperation;
+use old::resource::ResourceOperation;
+use old::style::StyleOperation;
+use old::template::TemplateOperation;
+use old::template_instance::TemplateInstanceOperation;
+use old::window::WindowOperation;
 
 pub fn new_ui_project_data() -> Arc<project_manager::UiProject> {
     Arc::new(project_manager::UiProject {
@@ -497,7 +486,7 @@ impl UiProject {
     async fn validate(
         &mut self,
     ) -> Result<project_manager::ValidateUiProjectCallResult, ProjectManagerActorError> {
-        let errors = validation::validate(&self.data);
+        let errors = old::validation::validate(&self.data);
 
         Ok(project_manager::ValidateUiProjectCallResult { errors })
     }
