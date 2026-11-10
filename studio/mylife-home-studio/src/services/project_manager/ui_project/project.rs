@@ -6,6 +6,7 @@ use crate::services::project_manager::{
     ProjectManagerActorError,
     ui_project::{
         control::ControlOps,
+        template::TemplateOps,
         utils::{ArcMapOps, check_id},
         view::View,
         window::WindowOps,
@@ -89,11 +90,11 @@ pub trait ProjectOps {
         new_id: String,
     ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError>;
 
-    fn set_window_properties(
+    fn update_window(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: String,
-        properties: project_manager::UiWindowProperties,
+        window: Arc<project_manager::UiWindowData>,
     ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError>;
 
     fn set_windows(
@@ -101,53 +102,43 @@ pub trait ProjectOps {
         windows: Arc<HashMap<String, Arc<project_manager::UiWindowData>>>,
     ) -> Arc<project_manager::UiProject>;
 
-    fn new_control(
+    fn new_template(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
-        view_type: project_manager::ViewType,
-        view_id: String,
         id: String,
-        x: i32,
-        y: i32,
-        r#type: project_manager::UiControlType,
     ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError>;
 
-    fn clear_control(
+    fn clear_template(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
-        view_type: project_manager::ViewType,
-        view_id: String,
         id: String,
     ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError>;
 
-    fn rename_control(
+    fn rename_template(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
-        view_type: project_manager::ViewType,
-        view_id: String,
-        id: &str,
+        id: String,
         new_id: String,
     ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError>;
 
-    fn clone_control(
+    fn clone_template(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
-        view_type: project_manager::ViewType,
-        view_id: &str,
-        id: &str,
+        id: String,
         new_id: String,
-        target_view_type: project_manager::ViewType,
-        target_view_id: String,
     ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError>;
 
-    fn set_control_properties(
+    fn update_template(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
-        view_type: project_manager::ViewType,
-        view_id: String,
         id: String,
-        properties: project_manager::UiControlProperties,
+        template: Arc<project_manager::UiTemplateData>,
     ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError>;
+
+    fn set_templates(
+        &self,
+        templates: Arc<HashMap<String, Arc<project_manager::UiTemplateData>>>,
+    ) -> Arc<project_manager::UiProject>;
 
     fn get_view(
         &self,
@@ -167,21 +158,28 @@ pub trait ProjectOps {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    ) -> Result<(), ProjectManagerActorError>;
+    );
 
     fn on_change_style(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    ) -> Result<(), ProjectManagerActorError>;
+    );
 
     fn on_change_window(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    ) -> Result<(), ProjectManagerActorError>;
+    );
+
+    fn on_change_template(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        id: &str,
+        new_id: Option<&str>,
+    );
 }
 
 impl ProjectOps for Arc<project_manager::UiProject> {
@@ -217,7 +215,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             project_manager::ClearUiResourceNotification { id: id.clone() },
         ));
 
-        self.on_change_resource(notifications, &id, None)?;
+        self.on_change_resource(notifications, &id, None);
 
         Ok(Some(project))
     }
@@ -242,7 +240,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             ),
         );
 
-        self.on_change_resource(notifications, &id, Some(&new_id))?;
+        self.on_change_resource(notifications, &id, Some(&new_id));
 
         Ok(Some(project))
     }
@@ -288,7 +286,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             project_manager::ClearUiStyleNotification { id: id.clone() },
         ));
 
-        self.on_change_style(notifications, &id, None)?;
+        self.on_change_style(notifications, &id, None);
 
         Ok(Some(project))
     }
@@ -311,7 +309,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             },
         ));
 
-        self.on_change_style(notifications, &id, Some(&new_id))?;
+        self.on_change_style(notifications, &id, Some(&new_id));
 
         Ok(Some(project))
     }
@@ -355,7 +353,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             project_manager::ClearUiWindowNotification { id: id.clone() },
         ));
 
-        self.on_change_window(notifications, &id, None)?;
+        self.on_change_window(notifications, &id, None);
 
         Ok(Some(project))
     }
@@ -378,7 +376,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             },
         ));
 
-        self.on_change_window(notifications, &id, Some(&new_id))?;
+        self.on_change_window(notifications, &id, Some(&new_id));
 
         Ok(Some(project))
     }
@@ -400,16 +398,12 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         Ok(project)
     }
 
-    fn set_window_properties(
+    fn update_window(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: String,
-        properties: project_manager::UiWindowProperties,
+        window: Arc<project_manager::UiWindowData>,
     ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError> {
-        let window = self.windows.get_required(&id)?;
-        let Some(window) = window.set_properties(properties) else {
-            return Ok(None);
-        };
         let windows = self.windows.with_updated(id.clone(), window.clone())?;
         let project = self.set_windows(windows);
 
@@ -429,85 +423,111 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         Arc::new(project)
     }
 
-    fn new_control(
+    fn new_template(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
-        view_type: project_manager::ViewType,
-        view_id: String,
         id: String,
-        x: i32,
-        y: i32,
-        r#type: project_manager::UiControlType,
     ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError> {
-        let view = self.get_view(view_type, &view_id)?;
-        let control = <Arc<project_manager::UiControlData> as ControlOps>::new(x, y, r#type);
-        let controls = view.get_controls();
-        let controls = controls.with_inserted(id, control)?;
-        let view = view.set_controls(controls);
-        let project = self.update_view(notifications, view_id, view)?;
+        let template = <Arc<project_manager::UiTemplateData> as TemplateOps>::new();
+        let templates = self.templates.with_inserted(id.clone(), template.clone())?;
+        let project = self.set_templates(templates);
+
+        notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
+            project_manager::SetUiTemplateNotification { id, template },
+        ));
 
         Ok(project)
     }
 
-    fn clear_control(
+    fn clear_template(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
-        view_type: project_manager::ViewType,
-        view_id: String,
         id: String,
     ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError> {
-        let view = self.get_view(view_type, &view_id)?;
-        let controls = view.get_controls();
-        let Some(controls) = controls.with_cleared(&id)? else {
+        let Some(templates) = self.templates.with_cleared(&id)? else {
             return Ok(None);
         };
-        let view = view.set_controls(controls);
-        let project = self.update_view(notifications, view_id, view)?;
+        let project = self.set_templates(templates);
+
+        notifications.push(project_manager::UpdateProjectNotification::ClearUiTemplate(
+            project_manager::ClearUiTemplateNotification { id: id.clone() },
+        ));
+
+        self.on_change_template(notifications, &id, None);
 
         Ok(Some(project))
     }
 
-    fn rename_control(
+    fn rename_template(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
-        view_type: project_manager::ViewType,
-        view_id: String,
-        id: &str,
+        id: String,
         new_id: String,
     ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError> {
-        let view = self.get_view(view_type, &view_id)?;
-        let controls = view.get_controls();
-        let Some(controls) = controls.with_renamed(id, &new_id)? else {
+        let Some(templates) = self.templates.with_renamed(&id, &new_id)? else {
             return Ok(None);
         };
-        let view = view.set_controls(controls);
-        let project = self.update_view(notifications, view_id, view)?;
+        let project = self.set_templates(templates);
+
+        notifications.push(
+            project_manager::UpdateProjectNotification::RenameUiTemplate(
+                project_manager::RenameUiTemplateNotification {
+                    id: id.clone(),
+                    new_id: new_id.clone(),
+                },
+            ),
+        );
+
+        self.on_change_template(notifications, &id, Some(&new_id));
 
         Ok(Some(project))
     }
 
-    fn clone_control(
+    fn clone_template(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
-        view_type: project_manager::ViewType,
-        view_id: &str,
-        id: &str,
+        id: String,
         new_id: String,
-        target_view_type: project_manager::ViewType,
-        target_view_id: String,
     ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError> {
-        let source_view = self.get_view(view_type, view_id)?;
-        let source_controls = source_view.get_controls();
-        let source = source_controls.get_required(&id)?;
-        let control = source.clone();
+        let template = self.templates.get_required(&id)?.clone();
+        let templates = self
+            .templates
+            .with_inserted(new_id.clone(), template.clone())?;
+        let project = self.set_templates(templates);
 
-        let view = self.get_view(target_view_type, &target_view_id)?;
-        let controls = view.get_controls();
-        let controls = controls.with_inserted(new_id, control)?;
-        let view = view.set_controls(controls);
-        let project = self.update_view(notifications, target_view_id, view)?;
+        notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
+            project_manager::SetUiTemplateNotification {
+                id: new_id,
+                template,
+            },
+        ));
 
         Ok(project)
+    }
+
+    fn update_template(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        id: String,
+        template: Arc<project_manager::UiTemplateData>,
+    ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError> {
+        let templates = self.templates.with_updated(id.clone(), template.clone())?;
+        let project = self.set_templates(templates);
+
+        notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
+            project_manager::SetUiTemplateNotification { id, template },
+        ));
+
+        Ok(Some(project))
+    }
+
+    fn set_templates(
+        &self,
+        templates: Arc<HashMap<String, Arc<project_manager::UiTemplateData>>>,
+    ) -> Arc<project_manager::UiProject> {
+        let mut project = self.as_ref().clone();
+        project.templates = templates;
+        Arc::new(project)
     }
 
     fn set_control_properties(
@@ -595,7 +615,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    ) -> Result<(), ProjectManagerActorError> {
+    ) {
         todo!()
     }
 
@@ -604,7 +624,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    ) -> Result<(), ProjectManagerActorError> {
+    ) {
         todo!()
     }
 
@@ -613,7 +633,16 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    ) -> Result<(), ProjectManagerActorError> {
+    ) {
+        todo!()
+    }
+
+    fn on_change_template(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        id: &str,
+        new_id: Option<&str>,
+    ) {
         todo!()
     }
 }

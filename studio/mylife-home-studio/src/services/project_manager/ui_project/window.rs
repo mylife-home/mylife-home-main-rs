@@ -7,6 +7,7 @@ use crate::services::project_manager::ui_project::style::StyleOps;
 
 pub trait WindowOps {
     fn new() -> Arc<project_manager::UiWindowData>;
+
     fn set_properties(
         &self,
         properties: project_manager::UiWindowProperties,
