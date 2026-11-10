@@ -6,6 +6,7 @@ use crate::services::project_manager::{
     ProjectManagerActorError,
     ui_project::{
         utils::{ArcMapOps, check_id},
+        view::View,
         window::WindowOps,
     },
 };
@@ -82,6 +83,19 @@ pub trait ProjectOps {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: String,
         properties: project_manager::UiWindowProperties,
+    ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError>;
+
+    fn get_view(
+        &self,
+        view_type: project_manager::ViewType,
+        view_id: &str,
+    ) -> Result<View, ProjectManagerActorError>;
+
+    fn update_view(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_id: String,
+        view: View,
     ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError>;
 
     fn on_change_resource(
@@ -234,7 +248,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: String,
     ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError> {
-        let window = project_manager::UiWindowData::new();
+        let window = <Arc<project_manager::UiWindowData> as WindowOps>::new();
 
         let mut project = self.as_ref().clone();
         project.windows = project.windows.with_inserted(id.clone(), window.clone())?;
@@ -327,6 +341,65 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         Ok(project)
     }
 
+    fn get_view(
+        &self,
+        view_type: project_manager::ViewType,
+        view_id: &str,
+    ) -> Result<View, ProjectManagerActorError> {
+        match view_type {
+            project_manager::ViewType::Window => {
+                let window = self.windows.get_required(view_id)?;
+                Ok(View::Window(window.clone()))
+            }
+            project_manager::ViewType::Template => {
+                let template = self.templates.get_required(view_id)?;
+                Ok(View::Template(template.clone()))
+            }
+        }
+    }
+
+    fn update_view(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        view_id: String,
+        view: View,
+    ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError> {
+        match view {
+            View::Window(window) => {
+                let windows = self.windows.with_updated(view_id.clone(), window.clone())?;
+                let mut project = self.as_ref().clone();
+                project.windows = windows;
+                let project = Arc::new(project);
+
+                notifications.push(project_manager::UpdateProjectNotification::SetUiWindow(
+                    project_manager::SetUiWindowNotification {
+                        id: view_id,
+                        window,
+                    },
+                ));
+
+                Ok(project)
+            }
+            View::Template(template) => {
+                let templates = self
+                    .templates
+                    .with_updated(view_id.clone(), template.clone())?;
+                let mut project = self.as_ref().clone();
+                project.templates = templates;
+                let project = Arc::new(project);
+
+                notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
+                    project_manager::SetUiTemplateNotification {
+                        id: view_id,
+                        template,
+                    },
+                ));
+
+                Ok(project)
+            }
+        }
+    }
+
     fn on_change_resource(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
@@ -335,7 +408,6 @@ impl ProjectOps for Arc<project_manager::UiProject> {
     ) -> Result<(), ProjectManagerActorError> {
         todo!()
     }
-
 
     fn on_change_style(
         &self,

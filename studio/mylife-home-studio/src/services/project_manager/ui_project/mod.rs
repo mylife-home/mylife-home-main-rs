@@ -19,6 +19,7 @@ mod old;
 mod project;
 mod style;
 mod utils;
+mod view;
 mod window;
 
 use old::component::ComponentOperation;

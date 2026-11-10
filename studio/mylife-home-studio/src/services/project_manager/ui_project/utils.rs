@@ -28,7 +28,7 @@ pub trait ArcMapOps<Value: Clone> {
         new_id: &str,
     ) -> Result<Arc<HashMap<String, Value>>, ProjectManagerActorError>;
 
-    fn get_required(&self, id: &String) -> Result<&Value, ProjectManagerActorError>;
+    fn get_required(&self, id: &str) -> Result<&Value, ProjectManagerActorError>;
     fn check_new_id(&self, id: &str) -> Result<(), ProjectManagerActorError>;
 }
 
@@ -92,7 +92,7 @@ impl<Value: Clone> ArcMapOps<Value> for Arc<HashMap<String, Value>> {
         Ok(Arc::new(new_map))
     }
 
-    fn get_required(&self, id: &String) -> Result<&Value, ProjectManagerActorError> {
+    fn get_required(&self, id: &str) -> Result<&Value, ProjectManagerActorError> {
         self.get(id).ok_or_else(|| {
             ProjectManagerActorError::DataProcessingError(format!("Key not found '{}'", id))
         })
