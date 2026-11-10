@@ -17,7 +17,9 @@ use kameo::{error::Infallible, message, prelude::*};
 
 mod old;
 mod project;
+mod style;
 mod utils;
+mod window;
 
 use old::component::ComponentOperation;
 use old::control::ControlOperation;
@@ -595,45 +597,53 @@ impl UiProject {
         &mut self,
         call_data: project_manager::NewWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.window_new(call_data.id)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let new_data = self.data.new_window(&mut notifications, call_data.id)?;
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn clear_window(
         &mut self,
         call_data: project_manager::ClearWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.window_clear(call_data.id)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let new_data = self.data.clear_window(&mut notifications, call_data.id)?;
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn rename_window(
         &mut self,
         call_data: project_manager::RenameWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.window_rename(call_data.id, call_data.new_id)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let new_data =
+            self.data
+                .rename_window(&mut notifications, call_data.id, call_data.new_id)?;
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn clone_window(
         &mut self,
         call_data: project_manager::CloneWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.window_clone(call_data.id, call_data.new_id)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let new_data =
+            self.data
+                .clone_window(&mut notifications, call_data.id, call_data.new_id)?;
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn set_window_properties(
         &mut self,
         call_data: project_manager::SetWindowPropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.window_set_properties(call_data.id, call_data.properties)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let new_data = self.data.set_window_properties(
+            &mut notifications,
+            call_data.id,
+            call_data.properties,
+        )?;
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn new_template(

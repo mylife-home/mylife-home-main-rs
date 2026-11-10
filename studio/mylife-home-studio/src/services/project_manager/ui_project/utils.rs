@@ -11,7 +11,7 @@ pub trait ArcMapOps<Value: Clone> {
     fn with_updated(
         &self,
         id: String,
-        mutator: impl FnOnce(&Value) -> Value,
+        value: Value,
     ) -> Result<Arc<HashMap<String, Value>>, ProjectManagerActorError>;
     fn with_set(
         &self,
@@ -48,12 +48,13 @@ impl<Value: Clone> ArcMapOps<Value> for Arc<HashMap<String, Value>> {
     fn with_updated(
         &self,
         id: String,
-        mutator: impl FnOnce(&Value) -> Value,
+        value: Value,
     ) -> Result<Arc<HashMap<String, Value>>, ProjectManagerActorError> {
-        let value = self.get_required(&id)?;
+        // ensure update
+        self.get_required(&id)?;
 
         let mut new_map = self.as_ref().clone();
-        new_map.insert(id, mutator(value));
+        new_map.insert(id, value);
         Ok(Arc::new(new_map))
     }
 
