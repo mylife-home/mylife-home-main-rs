@@ -10,7 +10,7 @@ pub trait WindowOps {
     fn set_properties(
         &self,
         properties: project_manager::UiWindowProperties,
-    ) -> Arc<project_manager::UiWindowData>;
+    ) -> Option<Arc<project_manager::UiWindowData>>;
 }
 
 impl WindowOps for Arc<project_manager::UiWindowData> {
@@ -28,23 +28,35 @@ impl WindowOps for Arc<project_manager::UiWindowData> {
     fn set_properties(
         &self,
         properties: project_manager::UiWindowProperties,
-    ) -> Arc<project_manager::UiWindowData> {
+    ) -> Option<Arc<project_manager::UiWindowData>> {
         let mut window = self.as_ref().clone();
+        let mut changed = false;
 
         if let PartialField::Value(height) = properties.height {
             window.height = height;
+            changed = true;
         }
+
         if let PartialField::Value(width) = properties.width {
             window.width = width;
+            changed = true;
         }
+
         if let PartialField::Value(mut style) = properties.style {
             style.normalize();
             window.style = style;
-        }
-        if let PartialField::Value(background_resource) = properties.background_resource {
-            window.background_resource = background_resource;
+            changed = true;
         }
 
-        Arc::new(window)
+        if let PartialField::Value(background_resource) = properties.background_resource {
+            window.background_resource = background_resource;
+            changed = true;
+        }
+
+        if changed {
+            Some(Arc::new(window))
+        } else {
+            None
+        }
     }
 }

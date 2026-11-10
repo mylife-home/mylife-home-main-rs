@@ -21,12 +21,12 @@ pub trait ArcMapOps<Value: Clone> {
     fn with_cleared(
         &self,
         id: &str,
-    ) -> Result<Arc<HashMap<String, Value>>, ProjectManagerActorError>;
+    ) -> Result<Option<Arc<HashMap<String, Value>>>, ProjectManagerActorError>;
     fn with_renamed(
         &self,
         id: &str,
         new_id: &str,
-    ) -> Result<Arc<HashMap<String, Value>>, ProjectManagerActorError>;
+    ) -> Result<Option<Arc<HashMap<String, Value>>>, ProjectManagerActorError>;
 
     fn get_required(&self, id: &str) -> Result<&Value, ProjectManagerActorError>;
     fn check_new_id(&self, id: &str) -> Result<(), ProjectManagerActorError>;
@@ -71,17 +71,24 @@ impl<Value: Clone> ArcMapOps<Value> for Arc<HashMap<String, Value>> {
     fn with_cleared(
         &self,
         id: &str,
-    ) -> Result<Arc<HashMap<String, Value>>, ProjectManagerActorError> {
+    ) -> Result<Option<Arc<HashMap<String, Value>>>, ProjectManagerActorError> {
         let mut new_map = self.as_ref().clone();
-        new_map.remove(id);
-        Ok(Arc::new(new_map))
+        if new_map.remove(id).is_some() {
+            Ok(Some(Arc::new(new_map)))
+        } else {
+            Ok(None)
+        }
     }
 
     fn with_renamed(
         &self,
         id: &str,
         new_id: &str,
-    ) -> Result<Arc<HashMap<String, Value>>, ProjectManagerActorError> {
+    ) -> Result<Option<Arc<HashMap<String, Value>>>, ProjectManagerActorError> {
+        if id == new_id {
+            return Ok(None);
+        }
+
         self.check_new_id(new_id)?;
 
         let mut new_map = self.as_ref().clone();
@@ -89,7 +96,7 @@ impl<Value: Clone> ArcMapOps<Value> for Arc<HashMap<String, Value>> {
             ProjectManagerActorError::DataProcessingError(format!("Key not found '{}'", id))
         })?;
         new_map.insert(new_id.to_string(), value);
-        Ok(Arc::new(new_map))
+        Ok(Some(Arc::new(new_map)))
     }
 
     fn get_required(&self, id: &str) -> Result<&Value, ProjectManagerActorError> {

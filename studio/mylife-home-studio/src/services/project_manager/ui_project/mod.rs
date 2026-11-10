@@ -15,6 +15,7 @@ use crate::{
 
 use kameo::{error::Infallible, message, prelude::*};
 
+mod control;
 mod old;
 mod project;
 mod style;
@@ -461,16 +462,16 @@ impl UiProject {
 
     async fn apply_update_new(
         &mut self,
-        new_data: Arc<project_manager::UiProject>,
+        new_data: Option<Arc<project_manager::UiProject>>,
         notifications: Vec<project_manager::UpdateProjectNotification>,
     ) -> Result<(), ProjectManagerActorError> {
-        if !Arc::ptr_eq(&self.data, &new_data) {
+        if let Some(new_data) = new_data {
             self.data = new_data;
 
             self.fs_collection
                 .update(self.name.clone(), self.data.clone())
                 .await?;
-        }
+        };
 
         self.notify_all(&notifications);
 
@@ -482,8 +483,7 @@ impl UiProject {
         operation: ProjectOperation,
     ) -> Result<(), ProjectManagerActorError> {
         let (notifications, new_data) = operation.output();
-        self.apply_update_new(new_data.clone(), notifications.clone())
-            .await
+        self.apply_update_new(Some(new_data), notifications).await
     }
 
     async fn validate(
@@ -540,7 +540,7 @@ impl UiProject {
         let new_data =
             self.data
                 .set_resource(&mut notifications, call_data.id, call_data.resource)?;
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update_new(Some(new_data), notifications).await
     }
 
     async fn clear_resource(
@@ -571,7 +571,7 @@ impl UiProject {
         let new_data = self
             .data
             .set_style(&mut notifications, call_data.id, call_data.style)?;
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update_new(Some(new_data), notifications).await
     }
 
     async fn clear_style(
@@ -600,7 +600,7 @@ impl UiProject {
     ) -> Result<(), ProjectManagerActorError> {
         let mut notifications = Vec::new();
         let new_data = self.data.new_window(&mut notifications, call_data.id)?;
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update_new(Some(new_data), notifications).await
     }
 
     async fn clear_window(
@@ -631,7 +631,7 @@ impl UiProject {
         let new_data =
             self.data
                 .clone_window(&mut notifications, call_data.id, call_data.new_id)?;
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update_new(Some(new_data), notifications).await
     }
 
     async fn set_window_properties(
