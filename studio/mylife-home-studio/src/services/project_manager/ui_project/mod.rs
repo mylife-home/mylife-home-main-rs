@@ -6,7 +6,9 @@ use std::collections::HashMap;
 use studio_web_api::project_manager;
 
 use crate::{
-    services::project_manager::{InitialEmitter, ProjectManagerActorError},
+    services::project_manager::{
+        InitialEmitter, ProjectManagerActorError, ui_project::project::ProjectOps,
+    },
     utils::fs_collection::{self, FsCollectionHandle, Update},
     web::{NotifierManager, SessionEvent, SessionHandle},
 };
@@ -18,10 +20,12 @@ mod control;
 mod default_window;
 mod operation;
 mod path;
+mod project;
 mod resource;
 mod style;
 mod template;
 mod template_instance;
+mod utils;
 mod validation;
 mod view;
 mod window;
@@ -463,12 +467,11 @@ impl UiProject {
         }
     }
 
-    async fn apply_update(
+    async fn apply_update_new(
         &mut self,
-        operation: ProjectOperation,
+        new_data: Arc<project_manager::UiProject>,
+        notifications: Vec<project_manager::UpdateProjectNotification>,
     ) -> Result<(), ProjectManagerActorError> {
-        let (notifications, new_data) = operation.output();
-
         if !Arc::ptr_eq(&self.data, &new_data) {
             self.data = new_data;
 
@@ -480,6 +483,15 @@ impl UiProject {
         self.notify_all(&notifications);
 
         Ok(())
+    }
+
+    async fn apply_update(
+        &mut self,
+        operation: ProjectOperation,
+    ) -> Result<(), ProjectManagerActorError> {
+        let (notifications, new_data) = operation.output();
+        self.apply_update_new(new_data.clone(), notifications.clone())
+            .await
     }
 
     async fn validate(
@@ -532,27 +544,29 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.resource_set(call_data.id, call_data.resource)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let new_data =
+            self.data
+                .set_resource(&mut notifications, call_data.id, call_data.resource)?;
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn clear_resource(
         &mut self,
         call_data: project_manager::ClearResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.resource_clear(call_data.id)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let new_data = self.data.clear_resource(&mut notifications, call_data.id)?;
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn rename_resource(
         &mut self,
         call_data: project_manager::RenameResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.resource_rename(call_data.id, call_data.new_id)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let new_data = self.data.rename_resource(&mut notifications, call_data.id, call_data.new_id)?;
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn set_style(
