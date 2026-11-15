@@ -7,6 +7,8 @@ use crate::services::project_manager::ui_project::{resource::ResourceOps, style:
 pub trait ControlOps {
     fn new(x: i32, y: i32, r#type: project_manager::UiControlType) -> Self;
 
+    fn clone_new(&self, same_view: bool) -> Arc<project_manager::UiControlData>;
+
     fn set_properties(
         &self,
         properties: project_manager::UiControlProperties,
@@ -75,6 +77,18 @@ impl ControlOps for Arc<project_manager::UiControlData> {
             secondary_action: None,
         };
 
+        Arc::new(control)
+    }
+
+    fn clone_new(&self, same_view: bool) -> Arc<project_manager::UiControlData> {
+        let mut control = self.as_ref().clone();
+        if same_view {
+            control.x += 10;
+            control.y += 10;
+        } else {
+            control.x = 10;
+            control.y = 10;
+        }
         Arc::new(control)
     }
 

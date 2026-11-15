@@ -9,8 +9,8 @@ use crate::{
     services::project_manager::{
         InitialEmitter, ProjectManagerActorError,
         ui_project::{
-            control::ControlOps, project::ProjectOps, template::TemplateOps, utils::ArcMapOps,
-            window::WindowOps,
+            control::ControlOps, project::ProjectOps, template::TemplateOps,
+            template_instance::TemplateInstanceOps, utils::ArcMapOps, window::WindowOps,
         },
     },
     utils::fs_collection::{self, FsCollectionHandle, Update},
@@ -25,12 +25,12 @@ mod project;
 mod resource;
 mod style;
 mod template;
+mod template_instance;
 mod utils;
 mod view;
 mod window;
 
 use old::operation::ProjectOperation;
-use old::template_instance::TemplateInstanceOperation;
 
 pub fn new_ui_project_data() -> Arc<project_manager::UiProject> {
     Arc::new(project_manager::UiProject {
@@ -868,7 +868,9 @@ impl UiProject {
             .get_view(call_data.view_type, &call_data.view_id)?;
         let source_controls = source_view.get_controls();
         let source = source_controls.get_required(&call_data.id)?;
-        let control = source.clone();
+        let same_view = call_data.view_type == call_data.target_view_type
+            && call_data.view_id == call_data.target_view_id;
+        let control = source.clone_new(same_view);
 
         let view = self
             .data
@@ -909,95 +911,147 @@ impl UiProject {
         &mut self,
         call_data: project_manager::NewTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.template_instance_new(
-            call_data.view_type,
-            call_data.view_id,
-            call_data.id,
-            call_data.template_id,
-            call_data.x,
-            call_data.y,
-        )?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let template = self.data.templates.get_required(&call_data.template_id)?;
+        let view = self
+            .data
+            .get_view(call_data.view_type, &call_data.view_id)?;
+        let templates = view.get_templates();
+        let template_instance =
+            <Arc<project_manager::UiTemplateInstanceData> as TemplateInstanceOps>::new(
+                call_data.template_id,
+                &template,
+                call_data.x,
+                call_data.y,
+            )?;
+        let templates = templates.with_inserted(call_data.id, template_instance)?;
+        let view = view.set_templates(templates);
+        let new_data = self
+            .data
+            .update_view(&mut notifications, call_data.view_id, view)?;
+
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn clear_template_instance(
         &mut self,
         call_data: project_manager::ClearTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.template_instance_clear(call_data.view_type, call_data.view_id, call_data.id)?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let view = self
+            .data
+            .get_view(call_data.view_type, &call_data.view_id)?;
+        let templates = view.get_templates();
+        let Some(templates) = templates.with_cleared(&call_data.id)? else {
+            return Ok(());
+        };
+        let view = view.set_templates(templates);
+        let new_data = self
+            .data
+            .update_view(&mut notifications, call_data.view_id, view)?;
+
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn rename_template_instance(
         &mut self,
         call_data: project_manager::RenameTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.template_instance_rename(
-            call_data.view_type,
-            call_data.view_id,
-            call_data.id,
-            call_data.new_id,
-        )?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let view = self
+            .data
+            .get_view(call_data.view_type, &call_data.view_id)?;
+        let templates = view.get_templates();
+        let Some(templates) = templates.with_renamed(&call_data.id, &call_data.new_id)? else {
+            return Ok(());
+        };
+        let view = view.set_templates(templates);
+        let new_data = self
+            .data
+            .update_view(&mut notifications, call_data.view_id, view)?;
+
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn clone_template_instance(
         &mut self,
         call_data: project_manager::CloneTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.template_instance_clone(
-            call_data.view_type,
-            call_data.view_id,
-            call_data.id,
-            call_data.new_id,
-        )?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let view = self
+            .data
+            .get_view(call_data.view_type, &call_data.view_id)?;
+        let templates = view.get_templates();
+        let source = templates.get_required(&call_data.id)?;
+        let template = source.clone_new();
+
+        let templates = templates.with_inserted(call_data.new_id, template)?;
+        let view = view.set_templates(templates);
+        let new_data = self
+            .data
+            .update_view(&mut notifications, call_data.view_id, view)?;
+
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn move_template_instance(
         &mut self,
         call_data: project_manager::MoveTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.template_instance_move(
-            call_data.view_type,
-            call_data.view_id,
-            call_data.id,
-            call_data.x,
-            call_data.y,
-        )?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let view = self
+            .data
+            .get_view(call_data.view_type, &call_data.view_id)?;
+        let templates = view.get_templates();
+        let template = templates.get_required(&call_data.id)?;
+        let template = template.r#move(call_data.x, call_data.y);
+        let templates = templates.with_updated(call_data.id, template)?;
+        let view = view.set_templates(templates);
+        let new_data = self
+            .data
+            .update_view(&mut notifications, call_data.view_id, view)?;
+
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn set_template_instance_template(
         &mut self,
         call_data: project_manager::SetTemplateInstanceTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.template_instance_set_template(
-            call_data.view_type,
-            call_data.view_id,
-            call_data.id,
-            call_data.template_id,
-        )?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let target_template = self.data.templates.get_required(&call_data.template_id)?;
+        let view = self
+            .data
+            .get_view(call_data.view_type, &call_data.view_id)?;
+        let templates = view.get_templates();
+        let template = templates.get_required(&call_data.id)?;
+        let template = template.set_template(call_data.template_id, target_template);
+        let templates = templates.with_updated(call_data.id, template)?;
+        let view = view.set_templates(templates);
+        let new_data = self
+            .data
+            .update_view(&mut notifications, call_data.view_id, view)?;
+
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn set_template_instance_bindings(
         &mut self,
         call_data: project_manager::SetTemplateInstanceBindingsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.template_instance_set_bindings(
-            call_data.view_type,
-            call_data.view_id,
-            call_data.id,
-            call_data.bindings,
-        )?;
-        self.apply_update(operation).await
+        let mut notifications = Vec::new();
+        let view = self
+            .data
+            .get_view(call_data.view_type, &call_data.view_id)?;
+        let templates = view.get_templates();
+        let template = templates.get_required(&call_data.id)?;
+        let template = template.set_bindings(&self.data, view.as_template(), call_data.bindings)?;
+        let templates = templates.with_updated(call_data.id, template)?;
+        let view = view.set_templates(templates);
+        let new_data = self
+            .data
+            .update_view(&mut notifications, call_data.view_id, view)?;
+
+        self.apply_update_new(new_data, notifications).await
     }
 }

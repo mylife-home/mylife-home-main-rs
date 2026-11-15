@@ -34,7 +34,7 @@ pub trait TemplateOps {
         &self,
         member_name: &str,
         member_type: project_manager::MemberType,
-    ) -> Option<String>;
+    ) -> Result<&String, ProjectManagerActorError>;
 
     fn set_exports(
         &self,
@@ -172,16 +172,22 @@ impl TemplateOps for Arc<project_manager::UiTemplateData> {
         &self,
         member_name: &str,
         member_type: project_manager::MemberType,
-    ) -> Option<String> {
+    ) -> Result<&String, ProjectManagerActorError> {
         let Some(export) = self.exports.get(member_name) else {
-            return None;
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Export '{}' does not exist on template",
+                member_name
+            )));
         };
 
         if export.member_type != member_type {
-            return None;
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Export '{}' has mismatched member type",
+                member_name
+            )));
         }
 
-        Some(export.value_type.clone())
+        Ok(&export.value_type)
     }
 
     fn set_exports(

@@ -23,6 +23,13 @@ impl View {
         }
     }
 
+    pub fn as_template(&self) -> Option<&Arc<project_manager::UiTemplateData>> {
+        match self {
+            View::Template(template) => Some(template),
+            _ => None,
+        }
+    }
+
     pub fn get_controls(&self) -> &Arc<HashMap<String, Arc<project_manager::UiControlData>>> {
         match self {
             View::Window(window) => &window.controls,
@@ -43,6 +50,33 @@ impl View {
             View::Template(template) => {
                 let mut template = template.as_ref().clone();
                 template.controls = controls;
+                Self::template(Arc::new(template))
+            }
+        }
+    }
+
+    pub fn get_templates(
+        &self,
+    ) -> &Arc<HashMap<String, Arc<project_manager::UiTemplateInstanceData>>> {
+        match self {
+            View::Window(window) => &window.templates,
+            View::Template(template) => &template.templates,
+        }
+    }
+
+    pub fn set_templates(
+        &self,
+        templates: Arc<HashMap<String, Arc<project_manager::UiTemplateInstanceData>>>,
+    ) -> View {
+        match self {
+            View::Window(window) => {
+                let mut window = window.as_ref().clone();
+                window.templates = templates;
+                Self::window(Arc::new(window))
+            }
+            View::Template(template) => {
+                let mut template = template.as_ref().clone();
+                template.templates = templates;
                 Self::template(Arc::new(template))
             }
         }

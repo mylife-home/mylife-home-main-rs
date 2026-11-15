@@ -163,6 +163,13 @@ pub trait ProjectOps {
         view: View,
     ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError>;
 
+    fn find_component_member_value_type(
+        &self,
+        component_id: &str,
+        member_name: &str,
+        member_type: project_manager::MemberType,
+    ) -> Result<&String, ProjectManagerActorError>;
+
     fn on_change_resource(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
@@ -681,6 +688,43 @@ impl ProjectOps for Arc<project_manager::UiProject> {
                 Ok(project)
             }
         }
+    }
+
+    fn find_component_member_value_type(
+        &self,
+        component_id: &str,
+        member_name: &str,
+        member_type: project_manager::MemberType,
+    ) -> Result<&String, ProjectManagerActorError> {
+        let Some(component) = self.components.get(component_id) else {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Component '{}' not found",
+                component_id
+            )));
+        };
+
+        let Some(plugin) = self.plugins.get(&component.plugin) else {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Plugin '{}' not found for component '{}'",
+                component.plugin, component_id
+            )));
+        };
+
+        let Some(member) = plugin.members.get(member_name) else {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Member '{}' not found in plugin '{}' for component '{}'",
+                member_name, component.plugin, component_id
+            )));
+        };
+
+        if member.member_type != member_type {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Member '{}' has incorrect type in plugin '{}' for component '{}'",
+                member_name, component.plugin, component_id
+            )));
+        }
+
+        Ok(&member.value_type)
     }
 
     fn on_change_resource(
