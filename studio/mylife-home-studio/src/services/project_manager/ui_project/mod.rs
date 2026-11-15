@@ -30,8 +30,6 @@ mod utils;
 mod view;
 mod window;
 
-use old::operation::ProjectOperation;
-
 pub fn new_ui_project_data() -> Arc<project_manager::UiProject> {
     Arc::new(project_manager::UiProject {
         resources: Arc::new(HashMap::new()),
@@ -445,7 +443,7 @@ impl UiProject {
         }
     }
 
-    async fn apply_update_new(
+    async fn apply_update(
         &mut self,
         new_data: Arc<project_manager::UiProject>,
         notifications: Vec<project_manager::UpdateProjectNotification>,
@@ -459,15 +457,6 @@ impl UiProject {
         self.notify_all(&notifications);
 
         Ok(())
-    }
-
-    async fn apply_update(
-        &mut self,
-        operation: ProjectOperation,
-    ) -> Result<(), ProjectManagerActorError> {
-        let (notifications, new_data) = operation.output();
-        // FIXME: Arc::eq
-        self.apply_update_new(new_data, notifications).await
     }
 
     async fn validate(
@@ -515,7 +504,7 @@ impl UiProject {
             .data
             .set_default_window(&mut notifications, call_data.default_window)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn set_resource(
@@ -527,7 +516,7 @@ impl UiProject {
             self.data
                 .set_resource(&mut notifications, call_data.id, call_data.resource)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn clear_resource(
@@ -540,7 +529,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn rename_resource(
@@ -555,7 +544,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn set_style(
@@ -567,7 +556,7 @@ impl UiProject {
             .data
             .set_style(&mut notifications, call_data.id, call_data.style)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn clear_style(
@@ -580,7 +569,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn rename_style(
@@ -595,7 +584,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn new_window(
@@ -605,7 +594,7 @@ impl UiProject {
         let mut notifications = Vec::new();
         let new_data = self.data.new_window(&mut notifications, call_data.id)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn clear_window(
@@ -618,7 +607,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn rename_window(
@@ -633,7 +622,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn clone_window(
@@ -645,7 +634,7 @@ impl UiProject {
             self.data
                 .clone_window(&mut notifications, call_data.id, call_data.new_id)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn set_window_properties(
@@ -664,7 +653,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn new_template(
@@ -674,7 +663,7 @@ impl UiProject {
         let mut notifications = Vec::new();
         let new_data = self.data.new_template(&mut notifications, call_data.id)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn clear_template(
@@ -687,7 +676,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn rename_template(
@@ -702,7 +691,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn clone_template(
@@ -714,7 +703,7 @@ impl UiProject {
             self.data
                 .clone_template(&mut notifications, call_data.id, call_data.new_id)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn set_template_properties(
@@ -733,7 +722,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn set_template_export(
@@ -754,7 +743,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn clear_template_export(
@@ -773,7 +762,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn set_template_bulk_patterns(
@@ -792,7 +781,7 @@ impl UiProject {
             return Ok(());
         };
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn new_control(
@@ -815,7 +804,7 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn clear_control(
@@ -835,7 +824,7 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn rename_control(
@@ -855,7 +844,7 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn clone_control(
@@ -882,7 +871,7 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.target_view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn set_control_properties(
@@ -904,7 +893,7 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn new_template_instance(
@@ -930,7 +919,7 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn clear_template_instance(
@@ -950,7 +939,7 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn rename_template_instance(
@@ -970,7 +959,7 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn clone_template_instance(
@@ -991,7 +980,7 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn move_template_instance(
@@ -1011,7 +1000,7 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn set_template_instance_template(
@@ -1032,7 +1021,7 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 
     async fn set_template_instance_bindings(
@@ -1052,6 +1041,6 @@ impl UiProject {
             .data
             .update_view(&mut notifications, call_data.view_id, view)?;
 
-        self.apply_update_new(new_data, notifications).await
+        self.apply_update(new_data, notifications).await
     }
 }
