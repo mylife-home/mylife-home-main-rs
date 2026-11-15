@@ -20,6 +20,7 @@ impl StyleOps for project_manager::Style {
 
         if let Some(new_id) = new_id {
             list[index] = String::from(new_id);
+            list.sort();
         } else {
             list.remove(index);
         }
