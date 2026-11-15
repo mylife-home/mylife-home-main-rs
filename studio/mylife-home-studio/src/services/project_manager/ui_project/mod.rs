@@ -29,15 +29,8 @@ mod utils;
 mod view;
 mod window;
 
-use old::component::ComponentOperation;
-use old::control::ControlOperation;
-use old::default_window::DefaultWindowOperation;
 use old::operation::ProjectOperation;
-use old::resource::ResourceOperation;
-use old::style::StyleOperation;
-use old::template::TemplateOperation;
 use old::template_instance::TemplateInstanceOperation;
-use old::window::WindowOperation;
 
 pub fn new_ui_project_data() -> Arc<project_manager::UiProject> {
     Arc::new(project_manager::UiProject {
@@ -189,15 +182,8 @@ impl message::Message<Open> for UiProject {
 
     async fn handle(&mut self, msg: Open, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
         let notifier = self.notifiers.create_notifier(msg.session);
-
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.default_window_initial_notifications();
-        operation.component_initial_notifications();
-        operation.resource_initial_notifications();
-        operation.style_initial_notifications();
-        operation.window_initial_notifications();
-        operation.template_initial_notifications();
-        let (notifications, _) = operation.output();
+        let mut notifications = Vec::new();
+        self.data.initial_notifications(&mut notifications);
 
         let notifier_id = notifier.notifier_id().to_owned();
         let notification_emitter = InitialEmitter::new(notifier.clone(), notifications);
@@ -443,20 +429,13 @@ impl UiProject {
     fn reload(&mut self, value: Arc<project_manager::UiProject>) {
         self.data = value;
 
-        let mut operation = ProjectOperation::new(&self.data);
+        let mut notifications = Vec::new();
 
-        operation.push_notification(project_manager::UpdateProjectNotification::Reset(
+        notifications.push(project_manager::UpdateProjectNotification::Reset(
             project_manager::ResetProjectNotification {},
         ));
 
-        operation.default_window_initial_notifications();
-        operation.component_initial_notifications();
-        operation.resource_initial_notifications();
-        operation.style_initial_notifications();
-        operation.window_initial_notifications();
-        operation.template_initial_notifications();
-
-        let (notifications, _) = operation.output();
+        self.data.initial_notifications(&mut notifications);
         self.notify_all(&notifications);
     }
 
@@ -531,10 +510,12 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetDefaultWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut operation = ProjectOperation::new(&self.data);
-        operation.default_window_set(call_data.default_window)?;
+        let mut notifications = Vec::new();
+        let new_data = self
+            .data
+            .set_default_window(&mut notifications, call_data.default_window)?;
 
-        self.apply_update(operation).await
+        self.apply_update_new(new_data, notifications).await
     }
 
     async fn set_resource(

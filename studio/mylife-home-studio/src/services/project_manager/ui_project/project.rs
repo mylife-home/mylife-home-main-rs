@@ -13,6 +13,17 @@ use crate::services::project_manager::{
 };
 
 pub trait ProjectOps {
+    fn initial_notifications(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+    );
+
+    fn set_default_window(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        default_window: project_manager::UiDefaultWindowData,
+    ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError>;
+
     fn set_resource(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
@@ -182,6 +193,90 @@ pub trait ProjectOps {
 }
 
 impl ProjectOps for Arc<project_manager::UiProject> {
+    fn initial_notifications(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+    ) {
+        notifications.push(
+            project_manager::UpdateProjectNotification::SetUiDefaultWindow(
+                project_manager::SetUiDefaultWindowNotification {
+                    default_window: self.default_window.clone(),
+                },
+            ),
+        );
+
+        notifications.push(
+            project_manager::UpdateProjectNotification::SetUiComponentData(
+                project_manager::SetUiComponentDataNotification {
+                    components: self.components.clone(),
+                    plugins: self.plugins.clone(),
+                },
+            ),
+        );
+
+        for (id, resource) in self.resources.iter() {
+            notifications.push(project_manager::UpdateProjectNotification::SetUiResource(
+                project_manager::SetUiResourceNotification {
+                    id: id.clone(),
+                    resource: resource.clone(),
+                },
+            ));
+        }
+
+        for (id, style) in self.styles.iter() {
+            notifications.push(project_manager::UpdateProjectNotification::SetUiStyle(
+                project_manager::SetUiStyleNotification {
+                    id: id.clone(),
+                    style: style.clone(),
+                },
+            ));
+        }
+
+        for (id, window) in self.windows.iter() {
+            notifications.push(project_manager::UpdateProjectNotification::SetUiWindow(
+                project_manager::SetUiWindowNotification {
+                    id: id.clone(),
+                    window: window.clone(),
+                },
+            ));
+        }
+
+        for (id, template) in self.templates.iter() {
+            notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
+                project_manager::SetUiTemplateNotification {
+                    id: id.clone(),
+                    template: template.clone(),
+                },
+            ));
+        }
+    }
+
+    fn set_default_window(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        default_window: project_manager::UiDefaultWindowData,
+    ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError> {
+        let mut map = self.default_window.0.clone();
+
+        for (key, value) in default_window.0 {
+            map.insert(key, value);
+        }
+
+        let mut project = self.as_ref().clone();
+        project.default_window = Arc::new(project_manager::UiDefaultWindowData(map));
+        let project = Arc::new(project);
+
+        notifications.push(
+            project_manager::UpdateProjectNotification::SetUiDefaultWindow(
+                project_manager::SetUiDefaultWindowNotification {
+                    default_window: project.default_window.clone(),
+                },
+            ),
+        );
+
+        Ok(project)
+    }
+
     fn set_resource(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
