@@ -3,7 +3,11 @@ use std::sync::Arc;
 use studio_web_api::project_manager;
 use studio_web_api::utils::PartialField;
 
+use crate::services::project_manager::ui_project::control::ControlOps;
+use crate::services::project_manager::ui_project::resource::OptionResourceOps;
 use crate::services::project_manager::ui_project::style::StyleOps;
+use crate::services::project_manager::ui_project::template_instance::TemplateInstanceOps;
+use crate::services::project_manager::ui_project::utils::ArcMapOps;
 
 pub trait WindowOps {
     fn new() -> Arc<project_manager::UiWindowData>;
@@ -11,6 +15,30 @@ pub trait WindowOps {
     fn set_properties(
         &self,
         properties: project_manager::UiWindowProperties,
+    ) -> Option<Arc<project_manager::UiWindowData>>;
+
+    fn on_change_resource(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiWindowData>>;
+
+    fn on_change_style(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiWindowData>>;
+
+    fn on_change_window(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiWindowData>>;
+
+    fn on_change_template(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiWindowData>>;
 }
 
@@ -54,10 +82,104 @@ impl WindowOps for Arc<project_manager::UiWindowData> {
             changed = true;
         }
 
-        if changed {
-            Some(Arc::new(window))
-        } else {
-            None
+        changed.then(|| Arc::new(window))
+    }
+
+    fn on_change_resource(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiWindowData>> {
+        let new_controls = self
+            .controls
+            .with_values_updated(|_, control| control.on_change_resource(id, new_id));
+
+        let new_background_resource = self.background_resource.on_change_resource(id, new_id);
+
+        if new_controls.is_none() && new_background_resource.is_none() {
+            return None;
         }
+
+        let mut window = self.as_ref().clone();
+        if let Some(new_controls) = new_controls {
+            window.controls = new_controls;
+        }
+        if let Some(background_resource) = new_background_resource {
+            window.background_resource = background_resource;
+        }
+
+        Some(Arc::new(window))
+    }
+
+    fn on_change_style(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiWindowData>> {
+        let new_controls = self
+            .controls
+            .with_values_updated(|_, control| control.on_change_style(id, new_id));
+
+        let new_style = self.style.on_change(id, new_id);
+
+        if new_controls.is_none() && new_style.is_none() {
+            return None;
+        }
+
+        let mut window = self.as_ref().clone();
+        if let Some(new_controls) = new_controls {
+            window.controls = new_controls;
+        }
+        if let Some(new_style) = new_style {
+            window.style = new_style;
+        }
+
+        Some(Arc::new(window))
+    }
+
+    fn on_change_window(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiWindowData>> {
+        let Some(new_controls) = self
+            .controls
+            .with_values_updated(|_, control| control.on_change_window(id, new_id))
+        else {
+            return None;
+        };
+
+        let mut window = self.as_ref().clone();
+        window.controls = new_controls;
+        Some(Arc::new(window))
+    }
+
+    fn on_change_template(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiWindowData>> {
+        let new_templates = if let Some(new_id) = new_id {
+            // template rename: update all instances that use this template
+            self.templates
+                .with_values_updated(|_, template| template.on_rename_template(id, new_id))
+        } else {
+            // template remove: remove all instances that were using it
+            let mut new_templates = self.templates.as_ref().clone();
+            new_templates.retain(|_, template| template.template_id != id);
+            if new_templates.len() < self.templates.len() {
+                Some(Arc::new(new_templates))
+            } else {
+                None
+            }
+        };
+
+        if new_templates.is_none() {
+            return None;
+        }
+
+        let mut window = self.as_ref().clone();
+        window.templates = new_templates.unwrap();
+        Some(Arc::new(window))
     }
 }

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use studio_web_api::{project_manager, utils::PartialField};
 
@@ -498,6 +498,149 @@ impl ActionOps for Arc<project_manager::UiActionData> {
             component.id = None;
             component.action = None;
             Some(Arc::new(action))
+        } else {
+            None
+        }
+    }
+}
+
+pub trait ControlsMapOps {
+    fn on_change_resources(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<HashMap<String, Arc<project_manager::UiControlData>>>>;
+
+    fn on_change_style(
+        &self,
+        style_id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<HashMap<String, Arc<project_manager::UiControlData>>>>;
+
+    fn on_change_window(
+        &self,
+        window_id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<HashMap<String, Arc<project_manager::UiControlData>>>>;
+
+    fn on_clear_template_export(
+        &self,
+        member_name: &str,
+    ) -> Option<Arc<HashMap<String, Arc<project_manager::UiControlData>>>>;
+
+    fn clear_component_usage(
+        &self,
+        component_id: &str,
+        member_name: &str,
+    ) -> Option<Arc<HashMap<String, Arc<project_manager::UiControlData>>>>;
+}
+
+impl ControlsMapOps for Arc<HashMap<String, Arc<project_manager::UiControlData>>> {
+    fn on_change_resources(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<HashMap<String, Arc<project_manager::UiControlData>>>> {
+        let mut changed = false;
+        let mut new_map = self.as_ref().clone();
+
+        for (key, control) in self.as_ref().iter() {
+            if let Some(updated_control) = control.on_change_resource(id, new_id) {
+                new_map.insert(key.clone(), updated_control);
+                changed = true;
+            }
+        }
+
+        if changed {
+            Some(Arc::new(new_map))
+        } else {
+            None
+        }
+    }
+
+    fn on_change_style(
+        &self,
+        style_id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<HashMap<String, Arc<project_manager::UiControlData>>>> {
+        let mut changed = false;
+        let mut new_map = self.as_ref().clone();
+
+        for (key, control) in self.as_ref().iter() {
+            if let Some(updated_control) = control.on_change_style(style_id, new_id) {
+                new_map.insert(key.clone(), updated_control);
+                changed = true;
+            }
+        }
+
+        if changed {
+            Some(Arc::new(new_map))
+        } else {
+            None
+        }
+    }
+
+    fn on_change_window(
+        &self,
+        window_id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<HashMap<String, Arc<project_manager::UiControlData>>>> {
+        let mut changed = false;
+        let mut new_map = self.as_ref().clone();
+
+        for (key, control) in self.as_ref().iter() {
+            if let Some(updated_control) = control.on_change_window(window_id, new_id) {
+                new_map.insert(key.clone(), updated_control);
+                changed = true;
+            }
+        }
+
+        if changed {
+            Some(Arc::new(new_map))
+        } else {
+            None
+        }
+    }
+
+    fn on_clear_template_export(
+        &self,
+        member_name: &str,
+    ) -> Option<Arc<HashMap<String, Arc<project_manager::UiControlData>>>> {
+        let mut changed = false;
+        let mut new_map = self.as_ref().clone();
+
+        for (key, control) in self.as_ref().iter() {
+            if let Some(updated_control) = control.on_clear_template_export(member_name) {
+                new_map.insert(key.clone(), updated_control);
+                changed = true;
+            }
+        }
+
+        if changed {
+            Some(Arc::new(new_map))
+        } else {
+            None
+        }
+    }
+
+    fn clear_component_usage(
+        &self,
+        component_id: &str,
+        member_name: &str,
+    ) -> Option<Arc<HashMap<String, Arc<project_manager::UiControlData>>>> {
+        let mut changed = false;
+        let mut new_map = self.as_ref().clone();
+
+        for (key, control) in self.as_ref().iter() {
+            if let Some(updated_control) = control.clear_component_usage(component_id, member_name)
+            {
+                new_map.insert(key.clone(), updated_control);
+                changed = true;
+            }
+        }
+
+        if changed {
+            Some(Arc::new(new_map))
         } else {
             None
         }

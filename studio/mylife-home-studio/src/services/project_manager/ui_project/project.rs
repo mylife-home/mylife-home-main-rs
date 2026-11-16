@@ -1,11 +1,13 @@
-use std::{collections::HashMap, sync::Arc, todo};
+use std::{collections::HashMap, sync::Arc};
 
 use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
     ui_project::{
+        control::ControlOps,
         default_window::DefaultWindowOps,
+        resource::{OptionResourceOps, ResourceOps},
         template::TemplateOps,
         utils::{ArcMapOps, check_id},
         view::View,
@@ -176,28 +178,28 @@ pub trait ProjectOps {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    );
+    ) -> Option<Arc<project_manager::UiProject>>;
 
     fn on_change_style(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    );
+    ) -> Option<Arc<project_manager::UiProject>>;
 
     fn on_change_window(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    );
+    ) -> Option<Arc<project_manager::UiProject>>;
 
     fn on_change_template(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    );
+    ) -> Option<Arc<project_manager::UiProject>>;
 }
 
 impl ProjectOps for Arc<project_manager::UiProject> {
@@ -311,7 +313,9 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             project_manager::ClearUiResourceNotification { id: id.clone() },
         ));
 
-        self.on_change_resource(notifications, &id, None);
+        let project = project
+            .on_change_resource(notifications, &id, None)
+            .unwrap_or(project);
 
         Ok(Some(project))
     }
@@ -336,7 +340,9 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             ),
         );
 
-        self.on_change_resource(notifications, &id, Some(&new_id));
+        let project = project
+            .on_change_resource(notifications, &id, Some(&new_id))
+            .unwrap_or(project);
 
         Ok(Some(project))
     }
@@ -382,7 +388,9 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             project_manager::ClearUiStyleNotification { id: id.clone() },
         ));
 
-        self.on_change_style(notifications, &id, None);
+        let project = project
+            .on_change_style(notifications, &id, None)
+            .unwrap_or(project);
 
         Ok(Some(project))
     }
@@ -405,7 +413,9 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             },
         ));
 
-        self.on_change_style(notifications, &id, Some(&new_id));
+        let project = project
+            .on_change_style(notifications, &id, Some(&new_id))
+            .unwrap_or(project);
 
         Ok(Some(project))
     }
@@ -449,7 +459,9 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             project_manager::ClearUiWindowNotification { id: id.clone() },
         ));
 
-        self.on_change_window(notifications, &id, None);
+        let project = project
+            .on_change_window(notifications, &id, None)
+            .unwrap_or(project);
 
         Ok(Some(project))
     }
@@ -472,7 +484,9 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             },
         ));
 
-        self.on_change_window(notifications, &id, Some(&new_id));
+        let project = project
+            .on_change_window(notifications, &id, Some(&new_id))
+            .unwrap_or(project);
 
         Ok(Some(project))
     }
@@ -549,7 +563,9 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             project_manager::ClearUiTemplateNotification { id: id.clone() },
         ));
 
-        self.on_change_template(notifications, &id, None);
+        let project = project
+            .on_change_template(notifications, &id, None)
+            .unwrap_or(project);
 
         Ok(Some(project))
     }
@@ -574,7 +590,9 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             ),
         );
 
-        self.on_change_template(notifications, &id, Some(&new_id));
+        let project = project
+            .on_change_template(notifications, &id, Some(&new_id))
+            .unwrap_or(project);
 
         Ok(Some(project))
     }
@@ -727,8 +745,45 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    ) {
-        todo!()
+    ) -> Option<Arc<project_manager::UiProject>> {
+        let windows = self.windows.with_values_updated(|window_id, window| {
+            window.on_change_resource(id, new_id).map(|window| {
+                notifications.push(project_manager::UpdateProjectNotification::SetUiWindow(
+                    project_manager::SetUiWindowNotification {
+                        id: window_id.clone(),
+                        window: window.clone(),
+                    },
+                ));
+
+                window
+            })
+        });
+
+        let templates = self.templates.with_values_updated(|template_id, template| {
+            template.on_change_resource(id, new_id).map(|template| {
+                notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
+                    project_manager::SetUiTemplateNotification {
+                        id: template_id.clone(),
+                        template: template.clone(),
+                    },
+                ));
+
+                template
+            })
+        });
+
+        if windows.is_none() && templates.is_none() {
+            return None;
+        }
+
+        let mut project = self.clone();
+        if let Some(windows) = windows {
+            project = project.set_windows(windows);
+        }
+        if let Some(templates) = templates {
+            project = project.set_templates(templates);
+        }
+        Some(project)
     }
 
     fn on_change_style(
@@ -736,8 +791,45 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    ) {
-        todo!()
+    ) -> Option<Arc<project_manager::UiProject>> {
+        let windows = self.windows.with_values_updated(|window_id, window| {
+            window.on_change_style(id, new_id).map(|window| {
+                notifications.push(project_manager::UpdateProjectNotification::SetUiWindow(
+                    project_manager::SetUiWindowNotification {
+                        id: window_id.clone(),
+                        window: window.clone(),
+                    },
+                ));
+
+                window
+            })
+        });
+
+        let templates = self.templates.with_values_updated(|template_id, template| {
+            template.on_change_style(id, new_id).map(|template| {
+                notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
+                    project_manager::SetUiTemplateNotification {
+                        id: template_id.clone(),
+                        template: template.clone(),
+                    },
+                ));
+
+                template
+            })
+        });
+
+        if windows.is_none() && templates.is_none() {
+            return None;
+        }
+
+        let mut project = self.clone();
+        if let Some(windows) = windows {
+            project = project.set_windows(windows);
+        }
+        if let Some(templates) = templates {
+            project = project.set_templates(templates);
+        }
+        Some(project)
     }
 
     fn on_change_window(
@@ -745,8 +837,45 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    ) {
-        todo!()
+    ) -> Option<Arc<project_manager::UiProject>> {
+        let windows = self.windows.with_values_updated(|window_id, window| {
+            window.on_change_window(id, new_id).map(|window| {
+                notifications.push(project_manager::UpdateProjectNotification::SetUiWindow(
+                    project_manager::SetUiWindowNotification {
+                        id: window_id.clone(),
+                        window: window.clone(),
+                    },
+                ));
+
+                window
+            })
+        });
+
+        let templates = self.templates.with_values_updated(|template_id, template| {
+            template.on_change_window(id, new_id).map(|template| {
+                notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
+                    project_manager::SetUiTemplateNotification {
+                        id: template_id.clone(),
+                        template: template.clone(),
+                    },
+                ));
+
+                template
+            })
+        });
+
+        if windows.is_none() && templates.is_none() {
+            return None;
+        }
+
+        let mut project = self.clone();
+        if let Some(windows) = windows {
+            project = project.set_windows(windows);
+        }
+        if let Some(templates) = templates {
+            project = project.set_templates(templates);
+        }
+        Some(project)
     }
 
     fn on_change_template(
@@ -754,7 +883,44 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         id: &str,
         new_id: Option<&str>,
-    ) {
-        todo!()
+    ) -> Option<Arc<project_manager::UiProject>> {
+        let windows = self.windows.with_values_updated(|window_id, window| {
+            window.on_change_template(id, new_id).map(|window| {
+                notifications.push(project_manager::UpdateProjectNotification::SetUiWindow(
+                    project_manager::SetUiWindowNotification {
+                        id: window_id.clone(),
+                        window: window.clone(),
+                    },
+                ));
+
+                window
+            })
+        });
+
+        let templates = self.templates.with_values_updated(|template_id, template| {
+            template.on_change_template(id, new_id).map(|template| {
+                notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
+                    project_manager::SetUiTemplateNotification {
+                        id: template_id.clone(),
+                        template: template.clone(),
+                    },
+                ));
+
+                template
+            })
+        });
+
+        if windows.is_none() && templates.is_none() {
+            return None;
+        }
+
+        let mut project = self.clone();
+        if let Some(windows) = windows {
+            project = project.set_windows(windows);
+        }
+        if let Some(templates) = templates {
+            project = project.set_templates(templates);
+        }
+        Some(project)
     }
 }

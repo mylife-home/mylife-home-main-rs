@@ -2,7 +2,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use studio_web_api::{project_manager, utils::PartialField};
 
-use crate::services::project_manager::{ProjectManagerActorError, ui_project::control::ControlOps};
+use crate::services::project_manager::{
+    ProjectManagerActorError,
+    ui_project::{control::ControlOps, template_instance::TemplateInstanceOps, utils::ArcMapOps},
+};
 
 pub trait TemplateOps {
     fn new() -> Arc<project_manager::UiTemplateData>;
@@ -40,6 +43,30 @@ pub trait TemplateOps {
         &self,
         exports: HashMap<String, Arc<project_manager::UiTemplateExport>>,
     ) -> Arc<project_manager::UiTemplateData>;
+
+    fn on_change_resource(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiTemplateData>>;
+
+    fn on_change_style(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiTemplateData>>;
+
+    fn on_change_window(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiTemplateData>>;
+
+    fn on_change_template(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiTemplateData>>;
 }
 
 impl TemplateOps for Arc<project_manager::UiTemplateData> {
@@ -101,9 +128,9 @@ impl TemplateOps for Arc<project_manager::UiTemplateData> {
         }
 
         let mut controls = self.controls.as_ref().clone();
-        for (_, control) in controls.iter_mut() {
-            if let Some(ctrl) = control.on_clear_template_export(&export_id) {
-                *control = ctrl;
+        for (control_id, control) in self.controls.iter() {
+            if let Some(control) = control.on_clear_template_export(&export_id) {
+                controls.insert(control_id.clone(), control);
             }
         }
 
@@ -197,5 +224,85 @@ impl TemplateOps for Arc<project_manager::UiTemplateData> {
         let mut template = self.as_ref().clone();
         template.exports = Arc::new(exports);
         Arc::new(template)
+    }
+
+    fn on_change_resource(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiTemplateData>> {
+        let Some(new_controls) = self
+            .controls
+            .with_values_updated(|_, control| control.on_change_resource(id, new_id))
+        else {
+            return None;
+        };
+
+        let mut template = self.as_ref().clone();
+        template.controls = new_controls;
+        Some(Arc::new(template))
+    }
+
+    fn on_change_style(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiTemplateData>> {
+        let Some(new_controls) = self
+            .controls
+            .with_values_updated(|_, control| control.on_change_style(id, new_id))
+        else {
+            return None;
+        };
+
+        let mut template = self.as_ref().clone();
+        template.controls = new_controls;
+        Some(Arc::new(template))
+    }
+
+    fn on_change_window(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiTemplateData>> {
+        let Some(new_controls) = self
+            .controls
+            .with_values_updated(|_, control| control.on_change_window(id, new_id))
+        else {
+            return None;
+        };
+
+        let mut template = self.as_ref().clone();
+        template.controls = new_controls;
+        Some(Arc::new(template))
+    }
+
+    fn on_change_template(
+        &self,
+        id: &str,
+        new_id: Option<&str>,
+    ) -> Option<Arc<project_manager::UiTemplateData>> {
+        let new_templates = if let Some(new_id) = new_id {
+            // template rename: update all instances that use this template
+            self.templates
+                .with_values_updated(|_, template| template.on_rename_template(id, new_id))
+        } else {
+            // template remove: remove all instances that were using it
+            let mut new_templates = self.templates.as_ref().clone();
+            new_templates.retain(|_, template| template.template_id != id);
+            if new_templates.len() < self.templates.len() {
+                Some(Arc::new(new_templates))
+            } else {
+                None
+            }
+        };
+
+        if new_templates.is_none() {
+            return None;
+        }
+
+        let mut template = self.as_ref().clone();
+        template.templates = new_templates.unwrap();
+        Some(Arc::new(template))
     }
 }

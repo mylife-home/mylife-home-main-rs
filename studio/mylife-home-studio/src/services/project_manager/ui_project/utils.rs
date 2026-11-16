@@ -30,6 +30,11 @@ pub trait ArcMapOps<Value: Clone> {
 
     fn get_required(&self, id: &str) -> Result<&Value, ProjectManagerActorError>;
     fn check_new_id(&self, id: &str) -> Result<(), ProjectManagerActorError>;
+
+    fn with_values_updated(
+        &self,
+        update: impl FnMut(&String, &Value) -> Option<Value>,
+    ) -> Option<Arc<HashMap<String, Value>>>;
 }
 
 impl<Value: Clone> ArcMapOps<Value> for Arc<HashMap<String, Value>> {
@@ -63,6 +68,8 @@ impl<Value: Clone> ArcMapOps<Value> for Arc<HashMap<String, Value>> {
         id: String,
         value: Value,
     ) -> Result<Arc<HashMap<String, Value>>, ProjectManagerActorError> {
+        check_id(&id)?;
+
         let mut new_map = self.as_ref().clone();
         new_map.insert(id, value);
         Ok(Arc::new(new_map))
@@ -116,6 +123,27 @@ impl<Value: Clone> ArcMapOps<Value> for Arc<HashMap<String, Value>> {
         }
 
         Ok(())
+    }
+
+    fn with_values_updated(
+        &self,
+        mut update: impl FnMut(&String, &Value) -> Option<Value>,
+    ) -> Option<Arc<HashMap<String, Value>>> {
+        let mut new_map = self.as_ref().clone();
+        let mut changed = false;
+
+        for (key, value) in new_map.iter_mut() {
+            if let Some(updated_value) = update(key, &value) {
+                *value = updated_value;
+                changed = true;
+            }
+        }
+
+        if changed {
+            Some(Arc::new(new_map))
+        } else {
+            None
+        }
     }
 }
 

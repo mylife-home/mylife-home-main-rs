@@ -32,6 +32,12 @@ pub trait TemplateInstanceOps {
         owner_template: Option<&Arc<project_manager::UiTemplateData>>,
         bindings: HashMap<String, project_manager::UiTemplateInstanceBinding>,
     ) -> Result<Arc<project_manager::UiTemplateInstanceData>, ProjectManagerActorError>;
+
+    fn on_rename_template(
+        &self,
+        id: &str,
+        new_id: &str,
+    ) -> Option<Arc<project_manager::UiTemplateInstanceData>>;
 }
 
 impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
@@ -154,5 +160,20 @@ impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
             bindings: Arc::new(new_bindings),
             ..self.as_ref().clone()
         }))
+    }
+
+    fn on_rename_template(
+        &self,
+        id: &str,
+        new_id: &str,
+    ) -> Option<Arc<project_manager::UiTemplateInstanceData>> {
+        if self.template_id == id {
+            Some(Arc::new(project_manager::UiTemplateInstanceData {
+                template_id: new_id.to_string(),
+                ..self.as_ref().clone()
+            }))
+        } else {
+            None
+        }
     }
 }
