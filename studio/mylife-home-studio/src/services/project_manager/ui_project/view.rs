@@ -2,10 +2,6 @@ use std::{collections::HashMap, sync::Arc};
 
 use studio_web_api::project_manager;
 
-use crate::services::project_manager::ui_project::{
-    control::ControlOps, resource::ResourceOps, style::StyleOps,
-};
-
 pub enum View {
     Window(Arc<project_manager::UiWindowData>),
     Template(Arc<project_manager::UiTemplateData>),

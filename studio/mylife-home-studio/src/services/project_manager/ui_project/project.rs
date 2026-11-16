@@ -5,9 +5,7 @@ use studio_web_api::project_manager;
 use crate::services::project_manager::{
     ProjectManagerActorError,
     ui_project::{
-        control::ControlOps,
         default_window::DefaultWindowOps,
-        resource::{OptionResourceOps, ResourceOps},
         template::TemplateOps,
         utils::{ArcMapOps, check_id},
         view::View,
