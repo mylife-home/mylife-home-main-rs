@@ -20,6 +20,7 @@ use crate::{
 use kameo::{error::Infallible, message, prelude::*};
 
 mod control;
+mod default_window;
 mod old;
 mod project;
 mod resource;

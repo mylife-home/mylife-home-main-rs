@@ -5,6 +5,7 @@ use studio_web_api::project_manager;
 use crate::services::project_manager::{
     ProjectManagerActorError,
     ui_project::{
+        default_window::DefaultWindowOps,
         template::TemplateOps,
         utils::{ArcMapOps, check_id},
         view::View,
@@ -263,14 +264,8 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         default_window: project_manager::UiDefaultWindowData,
     ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError> {
-        let mut map = self.default_window.0.clone();
-
-        for (key, value) in default_window.0 {
-            map.insert(key, value);
-        }
-
         let mut project = self.as_ref().clone();
-        project.default_window = Arc::new(project_manager::UiDefaultWindowData(map));
+        project.default_window = self.default_window.set(default_window);
         let project = Arc::new(project);
 
         notifications.push(
