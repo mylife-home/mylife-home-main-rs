@@ -198,6 +198,12 @@ pub trait ProjectOps {
         id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiProject>>;
+
+    fn on_change_views(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        change: impl FnMut(View) -> Option<View>,
+    ) -> Option<Arc<project_manager::UiProject>>;
 }
 
 impl ProjectOps for Arc<project_manager::UiProject> {
@@ -744,44 +750,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiProject>> {
-        let windows = self.windows.with_values_updated(|window_id, window| {
-            window.on_change_resource(id, new_id).map(|window| {
-                notifications.push(project_manager::UpdateProjectNotification::SetUiWindow(
-                    project_manager::SetUiWindowNotification {
-                        id: window_id.clone(),
-                        window: window.clone(),
-                    },
-                ));
-
-                window
-            })
-        });
-
-        let templates = self.templates.with_values_updated(|template_id, template| {
-            template.on_change_resource(id, new_id).map(|template| {
-                notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
-                    project_manager::SetUiTemplateNotification {
-                        id: template_id.clone(),
-                        template: template.clone(),
-                    },
-                ));
-
-                template
-            })
-        });
-
-        if windows.is_none() && templates.is_none() {
-            return None;
-        }
-
-        let mut project = self.clone();
-        if let Some(windows) = windows {
-            project = project.set_windows(windows);
-        }
-        if let Some(templates) = templates {
-            project = project.set_templates(templates);
-        }
-        Some(project)
+        self.on_change_views(notifications, |view| view.on_change_resource(id, new_id))
     }
 
     fn on_change_style(
@@ -790,44 +759,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiProject>> {
-        let windows = self.windows.with_values_updated(|window_id, window| {
-            window.on_change_style(id, new_id).map(|window| {
-                notifications.push(project_manager::UpdateProjectNotification::SetUiWindow(
-                    project_manager::SetUiWindowNotification {
-                        id: window_id.clone(),
-                        window: window.clone(),
-                    },
-                ));
-
-                window
-            })
-        });
-
-        let templates = self.templates.with_values_updated(|template_id, template| {
-            template.on_change_style(id, new_id).map(|template| {
-                notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
-                    project_manager::SetUiTemplateNotification {
-                        id: template_id.clone(),
-                        template: template.clone(),
-                    },
-                ));
-
-                template
-            })
-        });
-
-        if windows.is_none() && templates.is_none() {
-            return None;
-        }
-
-        let mut project = self.clone();
-        if let Some(windows) = windows {
-            project = project.set_windows(windows);
-        }
-        if let Some(templates) = templates {
-            project = project.set_templates(templates);
-        }
-        Some(project)
+        self.on_change_views(notifications, |view| view.on_change_style(id, new_id))
     }
 
     fn on_change_window(
@@ -836,44 +768,29 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiProject>> {
-        let windows = self.windows.with_values_updated(|window_id, window| {
-            window.on_change_window(id, new_id).map(|window| {
-                notifications.push(project_manager::UpdateProjectNotification::SetUiWindow(
-                    project_manager::SetUiWindowNotification {
-                        id: window_id.clone(),
-                        window: window.clone(),
-                    },
-                ));
+        let updated_views =
+            self.on_change_views(notifications, |view| view.on_change_window(id, new_id));
+        let updated_default = self.default_window.on_change_window(id, new_id);
 
-                window
-            })
-        });
-
-        let templates = self.templates.with_values_updated(|template_id, template| {
-            template.on_change_window(id, new_id).map(|template| {
-                notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
-                    project_manager::SetUiTemplateNotification {
-                        id: template_id.clone(),
-                        template: template.clone(),
-                    },
-                ));
-
-                template
-            })
-        });
-
-        if windows.is_none() && templates.is_none() {
+        if updated_views.is_none() && updated_default.is_none() {
             return None;
         }
 
-        let mut project = self.clone();
-        if let Some(windows) = windows {
-            project = project.set_windows(windows);
+        let mut project = match updated_views {
+            Some(project) => project.as_ref().clone(),
+            None => self.as_ref().clone(),
+        };
+        if let Some(default_window) = updated_default {
+            project.default_window = default_window;
+            notifications.push(
+                project_manager::UpdateProjectNotification::SetUiDefaultWindow(
+                    project_manager::SetUiDefaultWindowNotification {
+                        default_window: project.default_window.clone(),
+                    },
+                ),
+            );
         }
-        if let Some(templates) = templates {
-            project = project.set_templates(templates);
-        }
-        Some(project)
+        Some(Arc::new(project))
     }
 
     fn on_change_template(
@@ -882,43 +799,59 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiProject>> {
-        let windows = self.windows.with_values_updated(|window_id, window| {
-            window.on_change_template(id, new_id).map(|window| {
-                notifications.push(project_manager::UpdateProjectNotification::SetUiWindow(
-                    project_manager::SetUiWindowNotification {
-                        id: window_id.clone(),
-                        window: window.clone(),
-                    },
-                ));
+        self.on_change_views(notifications, |view| view.on_change_template(id, new_id))
+    }
 
-                window
-            })
+    fn on_change_views(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        mut change: impl FnMut(View) -> Option<View>,
+    ) -> Option<Arc<project_manager::UiProject>> {
+        let windows = self.windows.with_values_updated(|id, window| {
+            let Some(view) = change(View::window(window.clone())) else {
+                return None;
+            };
+            let View::Window(window) = view else {
+                unreachable!("window transformation returned a template")
+            };
+
+            notifications.push(project_manager::UpdateProjectNotification::SetUiWindow(
+                project_manager::SetUiWindowNotification {
+                    id: id.clone(),
+                    window: window.clone(),
+                },
+            ));
+            Some(window)
         });
 
-        let templates = self.templates.with_values_updated(|template_id, template| {
-            template.on_change_template(id, new_id).map(|template| {
-                notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
-                    project_manager::SetUiTemplateNotification {
-                        id: template_id.clone(),
-                        template: template.clone(),
-                    },
-                ));
+        let templates = self.templates.with_values_updated(|id, template| {
+            let Some(view) = change(View::template(template.clone())) else {
+                return None;
+            };
+            let View::Template(template) = view else {
+                unreachable!("template transformation returned a window")
+            };
 
-                template
-            })
+            notifications.push(project_manager::UpdateProjectNotification::SetUiTemplate(
+                project_manager::SetUiTemplateNotification {
+                    id: id.clone(),
+                    template: template.clone(),
+                },
+            ));
+            Some(template)
         });
 
         if windows.is_none() && templates.is_none() {
             return None;
         }
 
-        let mut project = self.clone();
+        let mut project = self.as_ref().clone();
         if let Some(windows) = windows {
-            project = project.set_windows(windows);
+            project.windows = windows;
         }
         if let Some(templates) = templates {
-            project = project.set_templates(templates);
+            project.templates = templates;
         }
-        Some(project)
+        Some(Arc::new(project))
     }
 }
