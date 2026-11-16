@@ -38,6 +38,11 @@ pub trait TemplateInstanceOps {
         id: &str,
         new_id: &str,
     ) -> Option<Arc<project_manager::UiTemplateInstanceData>>;
+
+    fn on_clear_template_export(
+        &self,
+        export_id: &str,
+    ) -> Option<Arc<project_manager::UiTemplateInstanceData>>;
 }
 
 impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
@@ -175,5 +180,33 @@ impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
         } else {
             None
         }
+    }
+
+    fn on_clear_template_export(
+        &self,
+        export_id: &str,
+    ) -> Option<Arc<project_manager::UiTemplateInstanceData>> {
+        let mut bindings = self.bindings.as_ref().clone();
+        let mut changed = false;
+
+        for (binding_id, binding) in self.bindings.iter() {
+            if binding.component_id.is_none() && binding.member_name.as_deref() == Some(export_id) {
+                bindings.insert(
+                    binding_id.clone(),
+                    Arc::new(project_manager::UiTemplateInstanceBinding {
+                        member_name: None,
+                        ..binding.as_ref().clone()
+                    }),
+                );
+                changed = true;
+            }
+        }
+
+        changed.then(|| {
+            Arc::new(project_manager::UiTemplateInstanceData {
+                bindings: Arc::new(bindings),
+                ..self.as_ref().clone()
+            })
+        })
     }
 }

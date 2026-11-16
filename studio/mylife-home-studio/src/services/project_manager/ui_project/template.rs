@@ -127,27 +127,22 @@ impl TemplateOps for Arc<project_manager::UiTemplateData> {
             return None;
         }
 
-        let mut controls = self.controls.as_ref().clone();
-        for (control_id, control) in self.controls.iter() {
-            if let Some(control) = control.on_clear_template_export(&export_id) {
-                controls.insert(control_id.clone(), control);
-            }
-        }
-
-        // TODO: template instances
-        /*
-                let mut updated = instance.as_ref().clone();
-                let mut bindings = updated.bindings.as_ref().clone();
-                if bindings.remove(&export_id).is_some() {
-                    updated.bindings = Arc::new(bindings);
-                    *instance = Arc::new(updated);
-                    instances_changed = true;
-                }
-        */
-
         let mut template = self.as_ref().clone();
         template.exports = Arc::new(exports);
-        template.controls = Arc::new(controls);
+
+        if let Some(controls) = self
+            .controls
+            .with_values_updated(|_, control| control.on_clear_template_export(&export_id))
+        {
+            template.controls = controls;
+        }
+        if let Some(templates) = self
+            .templates
+            .with_values_updated(|_, instance| instance.on_clear_template_export(&export_id))
+        {
+            template.templates = templates;
+        }
+
         Some(Arc::new(template))
     }
 
