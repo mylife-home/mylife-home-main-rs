@@ -65,7 +65,7 @@ impl ControlOps for Arc<project_manager::UiControlData> {
             ),
         };
 
-        let control = project_manager::UiControlData {
+        Arc::new(project_manager::UiControlData {
             x,
             y,
             style: project_manager::Style(Vec::new()),
@@ -75,9 +75,7 @@ impl ControlOps for Arc<project_manager::UiControlData> {
             text,
             primary_action: None,
             secondary_action: None,
-        };
-
-        Arc::new(control)
+        })
     }
 
     fn clone_new(&self, same_view: bool) -> Arc<project_manager::UiControlData> {
@@ -104,52 +102,40 @@ impl ControlOps for Arc<project_manager::UiControlData> {
             control.style = style;
             changed = true;
         }
-
         if let PartialField::Value(height) = properties.height {
             control.height = height;
             changed = true;
         }
-
         if let PartialField::Value(width) = properties.width {
             control.width = width;
             changed = true;
         }
-
         if let PartialField::Value(x) = properties.x {
             control.x = x;
             changed = true;
         }
-
         if let PartialField::Value(y) = properties.y {
             control.y = y;
             changed = true;
         }
-
         if let PartialField::Value(display) = properties.display {
             control.display = display.map(Arc::new);
             changed = true;
         }
-
         if let PartialField::Value(text) = properties.text {
             control.text = text.map(Arc::new);
             changed = true;
         }
-
         if let PartialField::Value(primary_action) = properties.primary_action {
             control.primary_action = primary_action.map(Arc::new);
             changed = true;
         }
-
         if let PartialField::Value(secondary_action) = properties.secondary_action {
             control.secondary_action = secondary_action.map(Arc::new);
             changed = true;
         }
 
-        if changed {
-            Some(Arc::new(control))
-        } else {
-            None
-        }
+        changed.then(|| Arc::new(control))
     }
 
     fn on_change_resource(
@@ -157,14 +143,10 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         resource_id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiControlData>> {
-        let Some(display) = &self.display else {
-            return None;
-        };
-
-        let Some(display) = display.on_change_resource(resource_id, new_id) else {
-            return None;
-        };
-
+        let display = self
+            .display
+            .as_ref()?
+            .on_change_resource(resource_id, new_id)?;
         let mut control = self.as_ref().clone();
         control.display = Some(display);
         Some(Arc::new(control))
@@ -175,10 +157,7 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         style_id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiControlData>> {
-        let Some(style) = self.style.on_change(style_id, new_id) else {
-            return None;
-        };
-
+        let style = self.style.on_change(style_id, new_id)?;
         let mut control = self.as_ref().clone();
         control.style = style;
         Some(Arc::new(control))
@@ -189,15 +168,14 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         window_id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiControlData>> {
-        let mut primary_action = None;
-        if let Some(action) = &self.primary_action {
-            primary_action = action.on_change_window(window_id, new_id);
-        }
-
-        let mut secondary_action = None;
-        if let Some(action) = &self.secondary_action {
-            secondary_action = action.on_change_window(window_id, new_id);
-        }
+        let primary_action = self
+            .primary_action
+            .as_ref()
+            .and_then(|action| action.on_change_window(window_id, new_id));
+        let secondary_action = self
+            .secondary_action
+            .as_ref()
+            .and_then(|action| action.on_change_window(window_id, new_id));
 
         if primary_action.is_none() && secondary_action.is_none() {
             return None;
@@ -210,7 +188,6 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         if let Some(action) = secondary_action {
             control.secondary_action = Some(action);
         }
-
         Some(Arc::new(control))
     }
 
@@ -218,25 +195,22 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         &self,
         member_name: &str,
     ) -> Option<Arc<project_manager::UiControlData>> {
-        let mut display = None;
-        if let Some(disp) = &self.display {
-            display = disp.on_clear_template_export(member_name);
-        }
-
-        let mut text = None;
-        if let Some(txt) = &self.text {
-            text = txt.on_clear_template_export(member_name);
-        }
-
-        let mut primary_action = None;
-        if let Some(action) = &self.primary_action {
-            primary_action = action.on_clear_template_export(member_name);
-        }
-
-        let mut secondary_action = None;
-        if let Some(action) = &self.secondary_action {
-            secondary_action = action.on_clear_template_export(member_name);
-        }
+        let display = self
+            .display
+            .as_ref()
+            .and_then(|display| display.on_clear_template_export(member_name));
+        let text = self
+            .text
+            .as_ref()
+            .and_then(|text| text.on_clear_template_export(member_name));
+        let primary_action = self
+            .primary_action
+            .as_ref()
+            .and_then(|action| action.on_clear_template_export(member_name));
+        let secondary_action = self
+            .secondary_action
+            .as_ref()
+            .and_then(|action| action.on_clear_template_export(member_name));
 
         if display.is_none()
             && text.is_none()
@@ -247,11 +221,11 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         }
 
         let mut control = self.as_ref().clone();
-        if let Some(disp) = display {
-            control.display = Some(disp);
+        if let Some(display) = display {
+            control.display = Some(display);
         }
-        if let Some(txt) = text {
-            control.text = Some(txt);
+        if let Some(text) = text {
+            control.text = Some(text);
         }
         if let Some(action) = primary_action {
             control.primary_action = Some(action);
@@ -259,7 +233,6 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         if let Some(action) = secondary_action {
             control.secondary_action = Some(action);
         }
-
         Some(Arc::new(control))
     }
 
@@ -268,25 +241,22 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         component_id: &str,
         member_name: &str,
     ) -> Option<Arc<project_manager::UiControlData>> {
-        let mut display = None;
-        if let Some(disp) = &self.display {
-            display = disp.clear_component_usage(component_id, member_name);
-        }
-
-        let mut text = None;
-        if let Some(txt) = &self.text {
-            text = txt.clear_component_usage(component_id, member_name);
-        }
-
-        let mut primary_action = None;
-        if let Some(action) = &self.primary_action {
-            primary_action = action.clear_component_usage(component_id, member_name);
-        }
-
-        let mut secondary_action = None;
-        if let Some(action) = &self.secondary_action {
-            secondary_action = action.clear_component_usage(component_id, member_name);
-        }
+        let display = self
+            .display
+            .as_ref()
+            .and_then(|display| display.clear_component_usage(component_id, member_name));
+        let text = self
+            .text
+            .as_ref()
+            .and_then(|text| text.clear_component_usage(component_id, member_name));
+        let primary_action = self
+            .primary_action
+            .as_ref()
+            .and_then(|action| action.clear_component_usage(component_id, member_name));
+        let secondary_action = self
+            .secondary_action
+            .as_ref()
+            .and_then(|action| action.clear_component_usage(component_id, member_name));
 
         if display.is_none()
             && text.is_none()
@@ -297,11 +267,11 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         }
 
         let mut control = self.as_ref().clone();
-        if let Some(disp) = display {
-            control.display = Some(disp);
+        if let Some(display) = display {
+            control.display = Some(display);
         }
-        if let Some(txt) = text {
-            control.text = Some(txt);
+        if let Some(text) = text {
+            control.text = Some(text);
         }
         if let Some(action) = primary_action {
             control.primary_action = Some(action);
@@ -309,7 +279,6 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         if let Some(action) = secondary_action {
             control.secondary_action = Some(action);
         }
-
         Some(Arc::new(control))
     }
 }
