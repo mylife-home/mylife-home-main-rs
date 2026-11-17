@@ -505,13 +505,13 @@ pub struct UiElementPathNode {
 
 register_ts!(UiElementPathNode);
 
-pub type UiElementPath = Vec<UiElementPathNode>;
+pub type UiElementPath = Vec<Arc<UiElementPathNode>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiValidationError {
-    pub path: Vec<UiElementPathNode>,
+    pub path: UiElementPath,
     pub message: String,
 }
 
@@ -523,7 +523,7 @@ register_ts!(UiValidationError);
 pub struct UiBreakingOperation {
     pub operation: String,
     pub component_id: String,
-    pub usage: Vec<Vec<UiElementPathNode>>,
+    pub usage: Vec<UiElementPath>,
 }
 
 register_ts!(UiBreakingOperation);
