@@ -38,8 +38,11 @@ pub struct Validation {
     project: Arc<project_manager::UiProject>,
     errors: Rc<RefCell<Vec<project_manager::UiValidationError>>>,
     path: project_manager::UiElementPath,
+    /// The template that owns the current UI element, if any.
     owner_template: Option<Arc<project_manager::UiTemplateData>>,
+    /// The bindings available for the current UI element.
     bindings: Arc<HashMap<String, project_manager::UiTemplateInstanceBinding>>,
+    template_stack: Vec<String>,
 }
 
 impl Validation {
@@ -50,19 +53,12 @@ impl Validation {
             path: Vec::new(),
             owner_template: None,
             bindings: Arc::new(HashMap::new()),
+            template_stack: Vec::new(),
         }
     }
 
     pub fn project(&self) -> &Arc<project_manager::UiProject> {
         &self.project
-    }
-
-    pub fn owner_template(&self) -> Option<&Arc<project_manager::UiTemplateData>> {
-        self.owner_template.as_ref()
-    }
-
-    pub fn bindings(&self) -> &HashMap<String, project_manager::UiTemplateInstanceBinding> {
-        &self.bindings
     }
 
     pub fn add_error(&self, message: impl Into<String>) {
@@ -245,6 +241,17 @@ impl Validation {
             bindings: Arc::new(bindings),
             ..self.clone()
         }
+    }
+
+    pub fn enter_template(&self, id: &str) -> ValidationResult<Self> {
+        if self.template_stack.iter().any(|entry| entry == id) {
+            self.add_error(format!("Le template '{}' est récursif.", id));
+            return Err(InvalidForDeployment);
+        }
+
+        let mut validation = self.clone();
+        validation.template_stack.push(id.to_owned());
+        Ok(validation)
     }
 
     pub fn at(&self, node_type: &str, id: &str) -> Self {

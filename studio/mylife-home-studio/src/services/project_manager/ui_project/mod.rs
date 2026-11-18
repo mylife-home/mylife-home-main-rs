@@ -11,9 +11,8 @@ use crate::{
         project_manager::{
             InitialEmitter, ProjectManagerActorError,
             ui_project::{
-                control::ControlOps, deployment::DeploymentOps, project::ProjectOps,
-                template::TemplateOps, template_instance::TemplateInstanceOps, utils::ArcMapOps,
-                window::WindowOps,
+                control::ControlOps, project::ProjectOps, template::TemplateOps,
+                template_instance::TemplateInstanceOps, utils::ArcMapOps, window::WindowOps,
             },
         },
     },
@@ -25,7 +24,6 @@ use kameo::{error::Infallible, message, prelude::*};
 
 mod control;
 mod default_window;
-mod deployment;
 mod project;
 mod resource;
 mod style;
@@ -468,7 +466,7 @@ impl UiProject {
     async fn validate(
         &mut self,
     ) -> Result<project_manager::ValidateUiProjectCallResult, ProjectManagerActorError> {
-        let errors = self.data.prepare_deployment().err().unwrap_or_default();
+        let errors = self.data.deploy().err().unwrap_or_default();
 
         Ok(project_manager::ValidateUiProjectCallResult { errors })
     }
@@ -498,7 +496,7 @@ impl UiProject {
     async fn deploy(
         &mut self,
     ) -> Result<project_manager::DeployUiProjectCallResult, ProjectManagerActorError> {
-        let definition = match self.data.prepare_deployment() {
+        let definition = match self.data.deploy() {
             Ok(definition) => definition,
             Err(validation_errors) => {
                 return Ok(project_manager::DeployUiProjectCallResult {

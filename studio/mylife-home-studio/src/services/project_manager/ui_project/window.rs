@@ -1,15 +1,21 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use studio_web_api::project_manager;
 use studio_web_api::utils::PartialField;
+use studio_web_api::{project_manager, ui_model};
 
 use crate::services::project_manager::ui_project::control::ControlOps;
 use crate::services::project_manager::ui_project::resource::OptionResourceOps;
 use crate::services::project_manager::ui_project::style::StyleOps;
 use crate::services::project_manager::ui_project::template_instance::TemplateInstanceOps;
 use crate::services::project_manager::ui_project::utils::ArcMapOps;
+use crate::services::project_manager::ui_project::validation::{
+    InvalidForDeployment, Validation, ValidationResult,
+};
+use crate::services::project_manager::ui_project::view::{DeployPosition, View};
 
 pub trait WindowOps {
+    fn deploy(&self, id: &str, validation: &Validation) -> ValidationResult<ui_model::Window>;
+
     fn new() -> Arc<project_manager::UiWindowData>;
 
     fn set_properties(
@@ -43,6 +49,28 @@ pub trait WindowOps {
 }
 
 impl WindowOps for Arc<project_manager::UiWindowData> {
+    fn deploy(&self, id: &str, validation: &Validation) -> ValidationResult<ui_model::Window> {
+        let background = validation.validate_optional_resource(&self.background_resource);
+
+        let controls = {
+            let view = View::window(self.clone());
+            view.deploy_controls(validation, &DeployPosition::default())
+        };
+
+        let (Ok(background_resource), Ok(controls)) = (background, controls) else {
+            return Err(InvalidForDeployment);
+        };
+
+        Ok(ui_model::Window {
+            id: id.to_owned(),
+            style: self.style.clone(),
+            height: self.height,
+            width: self.width,
+            background_resource,
+            controls,
+        })
+    }
+
     fn new() -> Arc<project_manager::UiWindowData> {
         Arc::new(project_manager::UiWindowData {
             style: project_manager::Style(vec![]),

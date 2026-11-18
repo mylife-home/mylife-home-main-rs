@@ -1,13 +1,25 @@
 use std::{collections::HashMap, sync::Arc};
 
-use studio_web_api::{project_manager, utils::PartialField};
+use studio_web_api::{project_manager, ui_model, utils::PartialField};
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
-    ui_project::{control::ControlOps, template_instance::TemplateInstanceOps, utils::ArcMapOps},
+    ui_project::{
+        control::ControlOps,
+        template_instance::TemplateInstanceOps,
+        utils::ArcMapOps,
+        validation::{Validation, ValidationResult},
+        view::{DeployPosition, View},
+    },
 };
 
 pub trait TemplateOps {
+    fn deploy(
+        &self,
+        validation: &Validation,
+        position: &DeployPosition,
+    ) -> ValidationResult<Vec<ui_model::Control>>;
+
     fn new() -> Arc<project_manager::UiTemplateData>;
 
     fn set_properties(
@@ -70,6 +82,19 @@ pub trait TemplateOps {
 }
 
 impl TemplateOps for Arc<project_manager::UiTemplateData> {
+    fn deploy(
+        &self,
+        validation: &Validation,
+        position: &DeployPosition,
+    ) -> ValidationResult<Vec<ui_model::Control>> {
+        let view = View::template(self.clone());
+
+        view.deploy_controls(
+            &validation.with_owner_template(Some(self.clone())),
+            position,
+        )
+    }
+
     fn new() -> Arc<project_manager::UiTemplateData> {
         Arc::new(project_manager::UiTemplateData {
             height: 500,

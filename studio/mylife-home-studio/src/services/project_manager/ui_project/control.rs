@@ -291,7 +291,7 @@ impl ControlOps for Arc<project_manager::UiControlData> {
     }
 
     fn deploy(&self, id: String, validation: &Validation) -> ValidationResult<ui_model::Control> {
-        let control_type = (self.display.is_some() == self.text.is_some())
+        let control_type = (self.display.is_some() != self.text.is_some())
             .ok_or_validation_err(&validation, "Le contrôle doit être image ou texte");
 
         let display = self
@@ -470,7 +470,8 @@ impl ControlDisplayOps for Arc<project_manager::ControlDisplay> {
             (None, None)
         };
 
-        let (Ok(default_resource), Ok(map)) = (default_resource, map) else {
+        let (Ok(default_resource), Ok(_), Ok(map)) = (default_resource, member_value_type, map)
+        else {
             return Err(InvalidForDeployment);
         };
 
@@ -745,7 +746,7 @@ impl ActionOps for Arc<project_manager::UiActionData> {
     }
 
     fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::Action> {
-        let action_type = (self.component.is_some() == self.window.is_some())
+        let action_type = (self.component.is_some() != self.window.is_some())
             .ok_or_validation_err(&validation, "L'action doit être composant ou fenêtre");
 
         let component = self

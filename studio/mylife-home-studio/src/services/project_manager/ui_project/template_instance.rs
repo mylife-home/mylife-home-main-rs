@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use std::collections::HashMap;
-use studio_web_api::project_manager;
+use studio_web_api::{project_manager, ui_model};
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
@@ -10,6 +10,7 @@ use crate::services::project_manager::{
         template::TemplateOps,
         utils::ArcMapOps,
         validation::{InvalidForDeployment, Validation, ValidationResult},
+        view::DeployPosition,
     },
 };
 
@@ -52,10 +53,8 @@ pub trait TemplateInstanceOps {
     fn deploy(
         &self,
         validation: &Validation,
-    ) -> ValidationResult<(
-        Arc<project_manager::UiTemplateData>,
-        HashMap<String, project_manager::UiTemplateInstanceBinding>,
-    )>;
+        position: &DeployPosition,
+    ) -> ValidationResult<Vec<ui_model::Control>>;
 }
 
 impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
@@ -226,10 +225,10 @@ impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
     fn deploy(
         &self,
         validation: &Validation,
-    ) -> ValidationResult<(
-        Arc<project_manager::UiTemplateData>,
-        HashMap<String, project_manager::UiTemplateInstanceBinding>,
-    )> {
+        position: &DeployPosition,
+    ) -> ValidationResult<Vec<ui_model::Control>> {
+        let validation = validation.enter_template(&self.template_id)?;
+
         let Some(template) = validation
             .project()
             .templates
@@ -240,53 +239,57 @@ impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
             return Err(InvalidForDeployment);
         };
 
-        let mut has_errors = false;
-        let mut bindings = HashMap::new();
-        for binding_id in self.bindings.keys() {
-            if !template.exports.contains_key(binding_id) {
-                let validation = validation.at("template-binding", binding_id);
-                validation.add_error(format!("Binding sur export '{}' inexistant", binding_id));
-                has_errors = true;
-            }
-        }
-
-        for (export_id, export) in template.exports.iter() {
-            let Some(binding) = self.bindings.get(export_id) else {
-                let validation = validation.at("template-binding", export_id);
-                validation.add_error(format!("Binding inexistant sur export '{}'", export_id));
-                has_errors = true;
-                continue;
-            };
-
-            let mut binding_validation = validation.at("template-binding", export_id);
-            let result = binding_validation.validate_component_member(
-                &binding.component_id,
-                &binding.member_name,
-                export.member_type,
-                Some(&export.value_type),
-                false,
-            );
-            has_errors |= result.is_err();
-
-            if result.is_ok() {
-                let resolved = if binding.component_id.is_some() {
-                    binding.as_ref().clone()
+        let extra_bindings = self.bindings.deploy(
+            &validation,
+            "template-binding",
+            |validation, binding_id, _| {
+                if template.exports.contains_key(binding_id) {
+                    Ok(())
                 } else {
-                    binding
-                        .member_name
-                        .as_ref()
-                        .and_then(|member_name| validation.bindings().get(member_name))
-                        .cloned()
-                        .unwrap_or_else(|| binding.as_ref().clone())
-                };
-                bindings.insert(export_id.clone(), resolved);
-            }
-        }
+                    validation.add_error(format!("Binding sur export '{}' inexistant", binding_id));
+                    Err(InvalidForDeployment)
+                }
+            },
+        );
 
-        if has_errors {
-            Err(InvalidForDeployment)
-        } else {
-            Ok((template, bindings))
-        }
+        let bindings = template.exports.deploy(
+            &validation,
+            "template-binding",
+            |validation, export_id, export| {
+                let Some(binding) = self.bindings.get(export_id) else {
+                    validation.add_error(format!("Binding inexistant sur export '{}'", export_id));
+                    return Err(InvalidForDeployment);
+                };
+                validation.validate_component_member(
+                    &binding.component_id,
+                    &binding.member_name,
+                    export.member_type,
+                    Some(&export.value_type),
+                    false,
+                )?;
+                let Some((component_id, member_name)) = validation
+                    .resolve_component_member(&binding.component_id, &binding.member_name)
+                else {
+                    validation.add_error("Le binding ne peut pas être résolu.");
+                    return Err(InvalidForDeployment);
+                };
+                Ok((
+                    export_id.clone(),
+                    project_manager::UiTemplateInstanceBinding {
+                        component_id: Some(component_id),
+                        member_name: Some(member_name),
+                    },
+                ))
+            },
+        );
+
+        let (Ok(_), Ok(bindings)) = (extra_bindings, bindings) else {
+            return Err(InvalidForDeployment);
+        };
+
+        template.deploy(
+            &validation.with_bindings(bindings.into_iter().collect()),
+            position,
+        )
     }
 }

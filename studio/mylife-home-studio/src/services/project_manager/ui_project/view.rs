@@ -1,11 +1,36 @@
 use std::{collections::HashMap, sync::Arc};
 
-use studio_web_api::project_manager;
+use studio_web_api::{project_manager, ui_model};
 
 use crate::services::project_manager::ui_project::{
-    control::ControlOps, resource::OptionResourceOps, style::StyleOps,
-    template_instance::TemplateInstanceOps, utils::ArcMapOps,
+    control::ControlOps,
+    resource::OptionResourceOps,
+    style::StyleOps,
+    template_instance::TemplateInstanceOps,
+    utils::ArcMapOps,
+    validation::{InvalidForDeployment, Validation, ValidationResult},
 };
+
+#[derive(Clone, Default)]
+pub struct DeployPosition {
+    pub prefix: String,
+    pub x: i32,
+    pub y: i32,
+}
+
+impl DeployPosition {
+    pub fn child(&self, id: &str, x: i32, y: i32) -> Self {
+        Self {
+            prefix: if self.prefix.is_empty() {
+                id.to_owned()
+            } else {
+                format!("{}:{}", self.prefix, id)
+            },
+            x: self.x + x,
+            y: self.y + y,
+        }
+    }
+}
 
 pub enum View {
     Window(Arc<project_manager::UiWindowData>),
@@ -13,6 +38,49 @@ pub enum View {
 }
 
 impl View {
+    pub fn deploy_controls(
+        &self,
+        validation: &Validation,
+        position: &DeployPosition,
+    ) -> ValidationResult<Vec<ui_model::Control>> {
+        let instances = self.get_templates().deploy(
+            validation,
+            "template-instance",
+            |validation, id, instance| {
+                let valid_id = validation.validate_id(&Some(id.clone()));
+                let controls =
+                    instance.deploy(validation, &position.child(id, instance.x, instance.y));
+
+                let (Ok(_), Ok(controls)) = (valid_id, controls) else {
+                    return Err(InvalidForDeployment);
+                };
+
+                Ok(controls)
+            },
+        );
+        let controls =
+            self.get_controls()
+                .deploy(validation, "control", |validation, id, control| {
+                    let valid_id = validation.validate_id(&Some(id.clone()));
+                    let position = position.child(id, control.x, control.y);
+                    let deployed = control.deploy(position.prefix, validation);
+
+                    let (Ok(_), Ok(mut control)) = (valid_id, deployed) else {
+                        return Err(InvalidForDeployment);
+                    };
+
+                    control.x = position.x;
+                    control.y = position.y;
+                    Ok(control)
+                });
+        match (instances, controls) {
+            (Ok(instances), Ok(controls)) => {
+                Ok(instances.into_iter().flatten().chain(controls).collect())
+            }
+            _ => Err(InvalidForDeployment),
+        }
+    }
+
     pub fn window(window: Arc<project_manager::UiWindowData>) -> View {
         View::Window(window)
     }
