@@ -6,11 +6,15 @@ use std::collections::HashMap;
 use studio_web_api::project_manager;
 
 use crate::{
-    services::project_manager::{
-        InitialEmitter, ProjectManagerActorError,
-        ui_project::{
-            control::ControlOps, project::ProjectOps, template::TemplateOps,
-            template_instance::TemplateInstanceOps, utils::ArcMapOps, window::WindowOps,
+    services::{
+        online::OnlineInstancesHandle,
+        project_manager::{
+            InitialEmitter, ProjectManagerActorError,
+            ui_project::{
+                control::ControlOps, deployment::DeploymentOps, project::ProjectOps,
+                template::TemplateOps, template_instance::TemplateInstanceOps, utils::ArcMapOps,
+                window::WindowOps,
+            },
         },
     },
     utils::fs_collection::{self, FsCollectionHandle, Update},
@@ -21,13 +25,14 @@ use kameo::{error::Infallible, message, prelude::*};
 
 mod control;
 mod default_window;
-mod old;
+mod deployment;
 mod project;
 mod resource;
 mod style;
 mod template;
 mod template_instance;
 mod utils;
+mod validation;
 mod view;
 mod window;
 
@@ -463,7 +468,7 @@ impl UiProject {
     async fn validate(
         &mut self,
     ) -> Result<project_manager::ValidateUiProjectCallResult, ProjectManagerActorError> {
-        let errors = old::validation::validate(&self.data);
+        let errors = self.data.prepare_deployment().err().unwrap_or_default();
 
         Ok(project_manager::ValidateUiProjectCallResult { errors })
     }
@@ -493,7 +498,30 @@ impl UiProject {
     async fn deploy(
         &mut self,
     ) -> Result<project_manager::DeployUiProjectCallResult, ProjectManagerActorError> {
-        todo!()
+        let definition = match self.data.prepare_deployment() {
+            Ok(definition) => definition,
+            Err(validation_errors) => {
+                return Ok(project_manager::DeployUiProjectCallResult {
+                    validation_errors: Some(validation_errors),
+                    deploy_error: None,
+                });
+            }
+        };
+
+        let online_instances = OnlineInstancesHandle::new()?;
+
+        let deploy_error = match online_instances.deploy_ui_definition(definition).await {
+            Ok(_) => None,
+            Err(error) => {
+                tracing::error!(%error, project = %self.name, "could not deploy UI project");
+                Some(error.to_string())
+            }
+        };
+
+        Ok(project_manager::DeployUiProjectCallResult {
+            validation_errors: None,
+            deploy_error,
+        })
     }
 
     async fn set_default_window(

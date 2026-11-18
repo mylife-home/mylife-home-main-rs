@@ -5,7 +5,12 @@ use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
-    ui_project::{project::ProjectOps, template::TemplateOps, utils::ArcMapOps},
+    ui_project::{
+        project::ProjectOps,
+        template::TemplateOps,
+        utils::ArcMapOps,
+        validation::{InvalidForDeployment, Validation, ValidationResult},
+    },
 };
 
 pub trait TemplateInstanceOps {
@@ -43,6 +48,14 @@ pub trait TemplateInstanceOps {
         &self,
         export_id: &str,
     ) -> Option<Arc<project_manager::UiTemplateInstanceData>>;
+
+    fn deploy(
+        &self,
+        validation: &Validation,
+    ) -> ValidationResult<(
+        Arc<project_manager::UiTemplateData>,
+        HashMap<String, project_manager::UiTemplateInstanceBinding>,
+    )>;
 }
 
 impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
@@ -208,5 +221,72 @@ impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
                 ..self.as_ref().clone()
             })
         })
+    }
+
+    fn deploy(
+        &self,
+        validation: &Validation,
+    ) -> ValidationResult<(
+        Arc<project_manager::UiTemplateData>,
+        HashMap<String, project_manager::UiTemplateInstanceBinding>,
+    )> {
+        let Some(template) = validation
+            .project()
+            .templates
+            .get(&self.template_id)
+            .cloned()
+        else {
+            validation.add_error(format!("Le template '{}' n'existe pas.", self.template_id));
+            return Err(InvalidForDeployment);
+        };
+
+        let mut has_errors = false;
+        let mut bindings = HashMap::new();
+        for binding_id in self.bindings.keys() {
+            if !template.exports.contains_key(binding_id) {
+                let validation = validation.at("template-binding", binding_id);
+                validation.add_error(format!("Binding sur export '{}' inexistant", binding_id));
+                has_errors = true;
+            }
+        }
+
+        for (export_id, export) in template.exports.iter() {
+            let Some(binding) = self.bindings.get(export_id) else {
+                let validation = validation.at("template-binding", export_id);
+                validation.add_error(format!("Binding inexistant sur export '{}'", export_id));
+                has_errors = true;
+                continue;
+            };
+
+            let mut binding_validation = validation.at("template-binding", export_id);
+            let result = binding_validation.validate_component_member(
+                &binding.component_id,
+                &binding.member_name,
+                export.member_type,
+                Some(&export.value_type),
+                false,
+            );
+            has_errors |= result.is_err();
+
+            if result.is_ok() {
+                let resolved = if binding.component_id.is_some() {
+                    binding.as_ref().clone()
+                } else {
+                    binding
+                        .member_name
+                        .as_ref()
+                        .and_then(|member_name| validation.bindings().get(member_name))
+                        .cloned()
+                        .unwrap_or_else(|| binding.as_ref().clone())
+                };
+                bindings.insert(export_id.clone(), resolved);
+            }
+        }
+
+        if has_errors {
+            Err(InvalidForDeployment)
+        } else {
+            Ok((template, bindings))
+        }
     }
 }

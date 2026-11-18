@@ -1,6 +1,10 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use studio_web_api::project_manager;
+use studio_web_api::{project_manager, ui_model};
+
+use crate::services::project_manager::ui_project::validation::{
+    InvalidForDeployment, Validation, ValidationResult,
+};
 
 pub trait DefaultWindowOps {
     fn set(
@@ -13,6 +17,8 @@ pub trait DefaultWindowOps {
         window_id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiDefaultWindowData>>;
+
+    fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::DefaultWindow>;
 }
 
 impl DefaultWindowOps for Arc<project_manager::UiDefaultWindowData> {
@@ -41,5 +47,27 @@ impl DefaultWindowOps for Arc<project_manager::UiDefaultWindowData> {
         }
 
         changed.then(|| Arc::new(project_manager::UiDefaultWindowData(data)))
+    }
+
+    fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::DefaultWindow> {
+        let mut map = HashMap::new();
+        let mut has_errors = false;
+
+        for (typ, window_id) in &self.0 {
+            let validation = validation.at("default-window", typ);
+
+            let Ok(window_id) = validation.validate_window_id(window_id) else {
+                has_errors = true;
+                continue;
+            };
+
+            map.insert(typ.clone(), window_id);
+        }
+
+        if has_errors {
+            Err(InvalidForDeployment)
+        } else {
+            Ok(ui_model::DefaultWindow(map))
+        }
     }
 }

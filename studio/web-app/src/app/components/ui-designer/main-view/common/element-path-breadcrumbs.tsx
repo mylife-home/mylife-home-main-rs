@@ -46,7 +46,7 @@ export const ElementPathNode: FunctionComponent<TypographyProps & { node: UiElem
 
 function renderIcon(node: UiElementPathNode, className: string) {
   switch (node.type) {
-    case 'defaultWindow':
+    case 'default-window':
       return (
         <Tooltip title="Fenêtre par défaut">
           <HomeIcon className={className} />
@@ -73,6 +73,13 @@ function renderIcon(node: UiElementPathNode, className: string) {
           <ImageIcon className={className} />
         </Tooltip>
       );
+  
+    case 'control-type':
+      return (
+        <Tooltip title="Type de contrôle">
+          <ImageIcon className={className} />
+        </Tooltip>
+      );
 
     case 'template-instance':
       return (
@@ -84,6 +91,13 @@ function renderIcon(node: UiElementPathNode, className: string) {
     case 'action':
       return (
         <Tooltip title="Action">
+          <ActionIcon className={className} />
+        </Tooltip>
+      );
+
+    case 'action-type':
+      return (
+        <Tooltip title="Type d'action">
           <ActionIcon className={className} />
         </Tooltip>
       );

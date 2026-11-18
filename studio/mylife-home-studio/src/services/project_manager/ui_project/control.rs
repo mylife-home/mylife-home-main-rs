@@ -1,8 +1,14 @@
 use std::{collections::HashMap, sync::Arc};
 
-use studio_web_api::{project_manager, utils::PartialField};
+use common::components::metadata::Type;
+use studio_web_api::{project_manager, ui_model, utils::PartialField};
 
-use crate::services::project_manager::ui_project::{resource::ResourceOps, style::StyleOps};
+use crate::services::project_manager::ui_project::{
+    resource::ResourceOps,
+    style::StyleOps,
+    utils::VecOps,
+    validation::{InvalidForDeployment, Validation, ValidationErrExt, ValidationResult},
+};
 
 pub trait ControlOps {
     fn new(x: i32, y: i32, r#type: project_manager::UiControlType) -> Self;
@@ -42,6 +48,8 @@ pub trait ControlOps {
         component_id: &str,
         member_name: &str,
     ) -> Option<Arc<project_manager::UiControlData>>;
+
+    fn deploy(&self, id: String, validation: &Validation) -> ValidationResult<ui_model::Control>;
 }
 
 impl ControlOps for Arc<project_manager::UiControlData> {
@@ -281,6 +289,55 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         }
         Some(Arc::new(control))
     }
+
+    fn deploy(&self, id: String, validation: &Validation) -> ValidationResult<ui_model::Control> {
+        let control_type = (self.display.is_some() == self.text.is_some())
+            .ok_or_validation_err(&validation, "Le contrôle doit être image ou texte");
+
+        let display = self
+            .display
+            .as_ref()
+            .map(|display| display.deploy(&validation.at("control-type", "display")))
+            .transpose();
+        let text = self
+            .text
+            .as_ref()
+            .map(|text| text.deploy(&validation.at("control-type", "text")))
+            .transpose();
+        let primary_action = self
+            .primary_action
+            .as_ref()
+            .map(|action| action.deploy(&validation.at("action", "primary-action")))
+            .transpose();
+        let secondary_action = self
+            .secondary_action
+            .as_ref()
+            .map(|action| action.deploy(&validation.at("action", "secondary-action")))
+            .transpose();
+
+        let (Ok(_), Ok(display), Ok(text), Ok(primary_action), Ok(secondary_action)) = (
+            control_type,
+            display,
+            text,
+            primary_action,
+            secondary_action,
+        ) else {
+            return Err(InvalidForDeployment);
+        };
+
+        Ok(ui_model::Control {
+            id,
+            style: self.style.clone(),
+            height: self.height,
+            width: self.width,
+            x: self.x,
+            y: self.y,
+            display,
+            text,
+            primary_action,
+            secondary_action,
+        })
+    }
 }
 
 pub trait ControlDisplayOps {
@@ -300,6 +357,8 @@ pub trait ControlDisplayOps {
         component_id: &str,
         member_name: &str,
     ) -> Option<Arc<project_manager::ControlDisplay>>;
+
+    fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::ControlDisplay>;
 }
 
 impl ControlDisplayOps for Arc<project_manager::ControlDisplay> {
@@ -366,6 +425,144 @@ impl ControlDisplayOps for Arc<project_manager::ControlDisplay> {
             None
         }
     }
+
+    fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::ControlDisplay> {
+        let default_resource = validation.validate_optional_resource(&self.default_resource);
+
+        let member_value_type = validation.validate_component_member(
+            &self.component_id,
+            &self.component_state,
+            project_manager::MemberType::State,
+            None,
+            self.map.is_empty(),
+        );
+
+        let map = self
+            .map
+            .deploy(&validation, "map-item", |validation, item| {
+                let resource = validation.validate_mandatory_resource(&item.resource);
+
+                let item_props = if let Ok(Some(typ)) = &member_value_type {
+                    validate_map_item(&validation, item, typ)
+                } else {
+                    Ok(())
+                };
+
+                let (Ok(_), Ok(resource)) = (item_props, resource) else {
+                    return Err(InvalidForDeployment);
+                };
+
+                Ok(ui_model::ControlDisplayMapItem {
+                    min: item.min,
+                    max: item.max,
+                    value: item.value.clone(),
+                    resource: Some(resource),
+                })
+            });
+
+        let binding =
+            validation.resolve_component_member(&self.component_id, &self.component_state);
+
+        let (component_id, component_state) = if let Some((component_id, component_state)) = binding
+        {
+            (Some(component_id), Some(component_state))
+        } else {
+            (None, None)
+        };
+
+        let (Ok(default_resource), Ok(map)) = (default_resource, map) else {
+            return Err(InvalidForDeployment);
+        };
+
+        Ok(ui_model::ControlDisplay {
+            component_id,
+            component_state,
+            default_resource,
+            map,
+        })
+    }
+}
+
+fn validate_map_item(
+    validation: &Validation,
+    item: &project_manager::UiControlDisplayMapItemData,
+    value_type: &Type,
+) -> ValidationResult<()> {
+    let mut has_errors = false;
+    match &value_type {
+        Type::Text => {
+            if item.min.is_some() || item.max.is_some() {
+                validation.add_error("Le type 'text' ne doit pas utiliser min/max");
+                has_errors = true;
+            }
+            if !item.value.is_string() {
+                validation.add_error("Valeur incorrecte");
+                has_errors = true;
+            }
+        }
+        Type::Enum(values) => {
+            if item.min.is_some() || item.max.is_some() {
+                validation.add_error("Le type 'enum' ne doit pas utiliser min/max");
+                has_errors = true;
+            }
+            if !item
+                .value
+                .as_str()
+                .is_some_and(|value| values.iter().any(|entry| entry == value))
+            {
+                validation.add_error("Valeur incorrecte");
+                has_errors = true;
+            }
+        }
+        Type::Bool => {
+            if item.min.is_some() || item.max.is_some() {
+                validation.add_error("Le type 'enum' ne doit pas utiliser min/max");
+                has_errors = true;
+            }
+            if !item.value.is_boolean() {
+                validation.add_error("Valeur incorrecte");
+                has_errors = true;
+            }
+        }
+        Type::Float => {
+            if !item.value.is_null() {
+                validation.add_error("Le type 'float' ne doit pas utiliser valeur mais min/max");
+                has_errors = true;
+            }
+            if item.min.zip(item.max).is_some_and(|(min, max)| min > max) {
+                validation.add_error("'min' > 'max'");
+                has_errors = true;
+            }
+        }
+        Type::Range(range) => {
+            if !item.value.is_null() {
+                validation.add_error("Le type 'range' ne doit pas utiliser valeur mais min/max");
+                has_errors = true;
+            }
+            if item.min.is_none_or(|min| min < *range.start()) {
+                validation.add_error("'min' incorrect");
+                has_errors = true;
+            }
+            if item.max.is_none_or(|max| max > *range.end()) {
+                validation.add_error("'max' incorrect");
+                has_errors = true;
+            }
+            if item.min.zip(item.max).is_some_and(|(min, max)| min > max) {
+                validation.add_error("'min' > 'max'");
+                has_errors = true;
+            }
+        }
+        Type::Complex => {
+            validation.add_error("Un composant de type complexe ne peut pas être utilisé");
+            has_errors = true;
+        }
+    }
+
+    if has_errors {
+        Err(InvalidForDeployment)
+    } else {
+        Ok(())
+    }
 }
 
 pub trait ControlTextOps {
@@ -379,6 +576,8 @@ pub trait ControlTextOps {
         component_id: &str,
         member_name: &str,
     ) -> Option<Arc<project_manager::UiControlTextData>>;
+
+    fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::ControlText>;
 }
 
 impl ControlTextOps for Arc<project_manager::UiControlTextData> {
@@ -422,6 +621,46 @@ impl ControlTextOps for Arc<project_manager::UiControlTextData> {
 
         if changed { Some(Arc::new(text)) } else { None }
     }
+
+    fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::ControlText> {
+        let context = self
+            .context
+            .deploy(validation, "context-item", |validation, item| {
+                let id = validation.validate_id(&Some(item.id.clone()));
+
+                let validation = validation.at("context-item", &item.id);
+                let member = validation.validate_component_member(
+                    &item.component_id,
+                    &item.component_state,
+                    project_manager::MemberType::State,
+                    None,
+                    false,
+                );
+
+                let (Ok(id), Ok(_), Some((component_id, component_state))) = (
+                    id,
+                    member,
+                    validation.resolve_component_member(&item.component_id, &item.component_state),
+                ) else {
+                    return Err(InvalidForDeployment);
+                };
+
+                Ok(ui_model::ControlTextContextItem {
+                    id,
+                    component_id,
+                    component_state,
+                })
+            });
+
+        let Ok(context) = context else {
+            return Err(InvalidForDeployment);
+        };
+
+        Ok(ui_model::ControlText {
+            context,
+            format: self.format.clone(),
+        })
+    }
 }
 
 pub trait ActionOps {
@@ -441,6 +680,8 @@ pub trait ActionOps {
         component_id: &str,
         member_name: &str,
     ) -> Option<Arc<project_manager::UiActionData>>;
+
+    fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::Action>;
 }
 
 impl ActionOps for Arc<project_manager::UiActionData> {
@@ -501,6 +742,56 @@ impl ActionOps for Arc<project_manager::UiActionData> {
         } else {
             None
         }
+    }
+
+    fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::Action> {
+        let action_type = (self.component.is_some() == self.window.is_some())
+            .ok_or_validation_err(&validation, "L'action doit être composant ou fenêtre");
+
+        let component = self
+            .component
+            .as_ref()
+            .map(|component| {
+                let validation = validation.at("action-type", "component");
+
+                validation.validate_component_member(
+                    &component.id,
+                    &component.action,
+                    project_manager::MemberType::Action,
+                    Some("bool"),
+                    false,
+                )?;
+
+                let Some((id, action)) =
+                    validation.resolve_component_member(&component.id, &component.action)
+                else {
+                    return Err(InvalidForDeployment);
+                };
+
+                Ok(ui_model::ActionComponent { id, action })
+            })
+            .transpose();
+
+        let window: ValidationResult<_> = self
+            .window
+            .as_ref()
+            .map(|window| {
+                let validation = validation.at("action-type", "window");
+
+                let id = validation.validate_window_id(&window.id)?;
+
+                Ok(ui_model::ActionWindow {
+                    id,
+                    popup: window.popup,
+                })
+            })
+            .transpose();
+
+        let (Ok(_), Ok(component), Ok(window)) = (action_type, component, window) else {
+            return Err(InvalidForDeployment);
+        };
+
+        Ok(ui_model::Action { component, window })
     }
 }
 

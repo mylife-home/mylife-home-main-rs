@@ -2,22 +2,45 @@ use std::{collections::HashMap, sync::Arc};
 
 use common::{
     InitData,
-    bus::metadata::{MetadataHandle, RemoteUpdate},
-    bus::rpc::{RpcClientError, RpcHandle},
+    bus::{
+        metadata::{MetadataHandle, RemoteUpdate},
+        rpc::{RpcClientError, RpcHandle},
+    },
     instance_info::{
         InstanceInfoProviderHandle,
         types::{self, InstanceInfo},
     },
-    utils::actors::{ActorHandle, HandleLookupError, SpawnedActor, SpawnedActors},
+    utils::actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
 };
 use kameo::{message, prelude::*};
-use studio_web_api::{online, protocol};
+use studio_web_api::{online, protocol, ui_model};
 use thiserror::Error;
 
 use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEvent};
 
 const ONLINE_INSTANCES_NAME: &str = "online-instances";
 const INSTANCE_INFO_PATH: &str = "instance-info";
+
+/// Client access to the client actor
+#[derive(Debug, Clone)]
+pub struct OnlineInstancesHandle(ActorHandle<OnlineInstances>);
+
+impl OnlineInstancesHandle {
+    /// Create a new access
+    pub fn new() -> Result<Self, HandleLookupError> {
+        Ok(Self(ActorHandle::<OnlineInstances>::from_name(
+            ONLINE_INSTANCES_NAME,
+        )?))
+    }
+
+    /// Deploy a UI definition to the online instances
+    pub async fn deploy_ui_definition(
+        &self,
+        definition: ui_model::Definition,
+    ) -> Result<(), CallError<OnlineInstancesError>> {
+        self.0.call(DeployUiDefinition(definition)).await
+    }
+}
 
 pub async fn init(
     actors: &mut SpawnedActors,
@@ -76,7 +99,7 @@ struct SystemRestartRpcReq {
 struct SystemRestartRpcRes {}
 
 #[derive(Debug, Error)]
-enum OnlineInstancesError {
+pub enum OnlineInstancesError {
     #[error("failed to lookup actor handle: {0}")]
     HandleLookup(#[from] HandleLookupError),
     #[error("rpc call failed: {0}")]
@@ -86,6 +109,10 @@ enum OnlineInstancesError {
         instance_name: String,
         capability: &'static str,
     },
+    #[error("no online instance has capability 'ui-api'")]
+    UiInstanceNotFound,
+    #[error("multiple online instances have capability 'ui-api'")]
+    MultipleUiInstances,
 }
 
 #[derive(Debug)]
@@ -266,6 +293,38 @@ impl message::Message<types::InstanceInfo> for OnlineInstances {
             self.local_instance_name.as_ref().clone(),
             convert_instance_info(msg),
         );
+    }
+}
+
+#[derive(Debug)]
+struct DeployUiDefinition(ui_model::Definition);
+
+impl message::Message<DeployUiDefinition> for OnlineInstances {
+    type Reply = Result<(), OnlineInstancesError>;
+
+    async fn handle(
+        &mut self,
+        msg: DeployUiDefinition,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        let mut ui_instances = self.instances.iter().filter_map(|(name, info)| {
+            info.capabilities
+                .iter()
+                .any(|capability| capability == "ui-api")
+                .then_some(name)
+        });
+        let Some(instance_name) = ui_instances.next() else {
+            return Err(OnlineInstancesError::UiInstanceNotFound);
+        };
+        if ui_instances.next().is_some() {
+            return Err(OnlineInstancesError::MultipleUiInstances);
+        }
+
+        self.rpc
+            .call::<_, ()>(instance_name.clone(), "definition.set", &msg.0, None)
+            .await?;
+
+        Ok(())
     }
 }
 

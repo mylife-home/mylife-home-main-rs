@@ -7,6 +7,8 @@ mod history;
 mod instances;
 mod status;
 
+pub use instances::{OnlineInstancesError, OnlineInstancesHandle};
+
 pub async fn init(
     actors: &mut SpawnedActors,
     dispatcher: &mut DispatcherBuilder,

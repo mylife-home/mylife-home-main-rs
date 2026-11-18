@@ -16,9 +16,12 @@ use studio_web_api::{component_model, project_manager, protocol};
 use thiserror::Error;
 
 use crate::{
-    services::project_manager::{
-        core_project::{CoreProjectHandle, new_core_project_data},
-        ui_project::{UiProjectHandle, new_ui_project_data},
+    services::{
+        online::OnlineInstancesError,
+        project_manager::{
+            core_project::{CoreProjectHandle, new_core_project_data},
+            ui_project::{UiProjectHandle, new_ui_project_data},
+        },
     },
     utils::fs_collection::{self, FsCollectionError, FsCollectionHandle},
     web::{
@@ -365,6 +368,8 @@ pub enum ProjectManagerActorError {
     OpenedProjectError(Box<CallError<ProjectManagerActorError>>),
     #[error("Notifier not found: {0}")]
     NotifierNotFound(String),
+    #[error("Online instances error: {0}")]
+    OnlineInstancesHandleError(#[from] OnlineInstancesError),
 }
 
 impl Actor for ProjectManager {

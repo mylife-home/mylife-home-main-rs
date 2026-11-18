@@ -1,6 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::services::project_manager::ProjectManagerActorError;
+use crate::services::project_manager::{
+    ProjectManagerActorError,
+    ui_project::validation::{Validation, ValidationResult},
+};
 
 pub trait ArcMapOps<Value: Clone> {
     fn with_inserted(
@@ -35,6 +38,13 @@ pub trait ArcMapOps<Value: Clone> {
         &self,
         update: impl FnMut(&String, &Value) -> Option<Value>,
     ) -> Option<Arc<HashMap<String, Value>>>;
+
+    fn deploy<DeployedItem>(
+        &self,
+        validation: &Validation,
+        item_type: &str,
+        item_deploy: impl FnMut(&Validation, &String, &Value) -> ValidationResult<DeployedItem>,
+    ) -> ValidationResult<Vec<DeployedItem>>;
 }
 
 impl<Value: Clone> ArcMapOps<Value> for Arc<HashMap<String, Value>> {
@@ -144,6 +154,46 @@ impl<Value: Clone> ArcMapOps<Value> for Arc<HashMap<String, Value>> {
         } else {
             None
         }
+    }
+
+    fn deploy<DeployedItem>(
+        &self,
+        validation: &Validation,
+        item_type: &str,
+        mut item_deploy: impl FnMut(&Validation, &String, &Value) -> ValidationResult<DeployedItem>,
+    ) -> ValidationResult<Vec<DeployedItem>> {
+        // force to collect all items (and don't stop at first error)
+        let result: Vec<_> = self
+            .iter()
+            .map(|(id, value)| item_deploy(&validation.at(item_type, id), id, value))
+            .collect();
+        result.into_iter().collect()
+    }
+}
+
+pub trait VecOps<Value> {
+    fn deploy<DeployedItem>(
+        &self,
+        validation: &Validation,
+        item_type: &str,
+        item_deploy: impl FnMut(&Validation, &Value) -> ValidationResult<DeployedItem>,
+    ) -> ValidationResult<Vec<DeployedItem>>;
+}
+
+impl<Value> VecOps<Value> for Vec<Value> {
+    fn deploy<DeployedItem>(
+        &self,
+        validation: &Validation,
+        item_type: &str,
+        mut item_deploy: impl FnMut(&Validation, &Value) -> ValidationResult<DeployedItem>,
+    ) -> ValidationResult<Vec<DeployedItem>> {
+        // force to collect all items (and don't stop at first error)
+        let result: Vec<_> = self
+            .iter()
+            .enumerate()
+            .map(|(index, value)| item_deploy(&validation.at(item_type, &index.to_string()), value))
+            .collect();
+        result.into_iter().collect()
     }
 }
 
