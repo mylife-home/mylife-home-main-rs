@@ -89,20 +89,6 @@ impl View {
         View::Template(template)
     }
 
-    pub fn r#type(&self) -> project_manager::ViewType {
-        match self {
-            View::Window(_) => project_manager::ViewType::Window,
-            View::Template(_) => project_manager::ViewType::Template,
-        }
-    }
-
-    pub fn as_window(&self) -> Option<&Arc<project_manager::UiWindowData>> {
-        match self {
-            View::Window(window) => Some(window),
-            _ => None,
-        }
-    }
-
     pub fn as_template(&self) -> Option<&Arc<project_manager::UiTemplateData>> {
         match self {
             View::Template(template) => Some(template),
@@ -173,22 +159,22 @@ impl View {
                     return None;
                 }
 
-                let mut updated = window.as_ref().clone();
+                let mut window = window.as_ref().clone();
                 if let Some(controls) = controls {
-                    updated.controls = controls;
+                    window.controls = controls;
                 }
                 if let Some(background_resource) = background_resource {
-                    updated.background_resource = background_resource;
+                    window.background_resource = background_resource;
                 }
-                Some(View::window(Arc::new(updated)))
+                Some(View::window(Arc::new(window)))
             }
             View::Template(template) => {
                 let controls = template
                     .controls
                     .with_values_updated(|_, control| control.on_change_resource(id, new_id))?;
-                let mut updated = template.as_ref().clone();
-                updated.controls = controls;
-                Some(View::template(Arc::new(updated)))
+                let mut template = template.as_ref().clone();
+                template.controls = controls;
+                Some(View::template(Arc::new(template)))
             }
         }
     }
@@ -204,22 +190,22 @@ impl View {
                     return None;
                 }
 
-                let mut updated = window.as_ref().clone();
+                let mut window = window.as_ref().clone();
                 if let Some(controls) = controls {
-                    updated.controls = controls;
+                    window.controls = controls;
                 }
                 if let Some(style) = style {
-                    updated.style = style;
+                    window.style = style;
                 }
-                Some(View::window(Arc::new(updated)))
+                Some(View::window(Arc::new(window)))
             }
             View::Template(template) => {
                 let controls = template
                     .controls
                     .with_values_updated(|_, control| control.on_change_style(id, new_id))?;
-                let mut updated = template.as_ref().clone();
-                updated.controls = controls;
-                Some(View::template(Arc::new(updated)))
+                let mut template = template.as_ref().clone();
+                template.controls = controls;
+                Some(View::template(Arc::new(template)))
             }
         }
     }

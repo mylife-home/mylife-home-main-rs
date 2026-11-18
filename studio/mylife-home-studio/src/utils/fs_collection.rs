@@ -670,11 +670,6 @@ impl<T: DeserializeOwned + Serialize + Send + Sync + 'static> Item<T> {
         })
     }
 
-    /// Handle rename from filesystem.
-    pub fn handle_rename(&mut self, new_path: PathBuf) {
-        self.path = new_path;
-    }
-
     /// Handle refresh from filesystem
     pub async fn handle_refresh(&mut self) -> Result<bool, FsCollectionError> {
         let metadata = fs::metadata(&self.path).await?;
@@ -700,11 +695,6 @@ impl<T: DeserializeOwned + Serialize + Send + Sync + 'static> Item<T> {
         self.value = Arc::new(value);
 
         Ok(true)
-    }
-
-    /// Returns a reference to the path of the item.
-    pub fn path(&self) -> &Path {
-        &self.path
     }
 
     /// Returns a reference to the value contained in the item.
