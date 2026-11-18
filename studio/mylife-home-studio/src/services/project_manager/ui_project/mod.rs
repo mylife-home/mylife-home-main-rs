@@ -111,6 +111,16 @@ impl UiProjectHandle {
         })?)
     }
 
+    pub async fn get_data(
+        &self,
+    ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError> {
+        let res = self.0.ask(Get).try_send().await;
+
+        Ok(res.map_err(|e| {
+            ProjectManagerActorError::OpenedProjectError(Box::new(CallError::from(e)))
+        })?)
+    }
+
     pub async fn call(
         &self,
         session: SessionHandle,
@@ -212,6 +222,17 @@ impl message::Message<Close> for UiProject {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct Get;
+
+impl message::Message<Get> for UiProject {
+    type Reply = Arc<project_manager::UiProject>;
+
+    async fn handle(&mut self, _msg: Get, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
+        self.data.clone()
     }
 }
 

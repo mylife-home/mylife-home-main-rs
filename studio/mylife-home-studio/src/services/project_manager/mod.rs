@@ -37,6 +37,54 @@ const PROJECT_MANAGER_NAME: &str = "project-manager";
 const CORE_PROJECTS_FS_COLLECTION: &str = "core-projects";
 const UI_PROJECTS_FS_COLLECTION: &str = "ui-projects";
 
+/// Handler for interacting with the project manager actor.
+#[derive(Debug, Clone)]
+pub struct ProjectManagerHandler(ActorHandle<ProjectManager>);
+
+impl ProjectManagerHandler {
+    pub fn new() -> Result<Self, HandleLookupError> {
+        Ok(Self(ActorHandle::<ProjectManager>::from_name(
+            PROJECT_MANAGER_NAME,
+        )?))
+    }
+
+    /// Get project data
+    pub async fn get_project_data(
+        &self,
+        project_type: project_manager::ProjectType,
+        project_id: String,
+    ) -> Result<ProjectData, ProjectManagerActorError> {
+        self.0
+            .call(GetProjectData {
+                project_type,
+                project_id,
+            })
+            .await
+            .map_err(|err| match err {
+                // unwrap handler error, otherwise wrap in ActorCommunicationError
+                CallError::HandlerError(e) => e,
+                CallError::ActorNotRunning => {
+                    ProjectManagerActorError::ActorCommunicationError(CallError::ActorNotRunning)
+                }
+                CallError::ActorStopped => {
+                    ProjectManagerActorError::ActorCommunicationError(CallError::ActorStopped)
+                }
+                CallError::MailboxFull => {
+                    ProjectManagerActorError::ActorCommunicationError(CallError::MailboxFull)
+                }
+                CallError::Timeout => {
+                    ProjectManagerActorError::ActorCommunicationError(CallError::Timeout)
+                }
+            })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ProjectData {
+    Core(Arc<project_manager::CoreProject>),
+    Ui(Arc<project_manager::UiProject>),
+}
+
 #[derive(Debug)]
 pub struct ProjectManagerConfig {
     pub core_projects_store_path: PathBuf,
@@ -276,6 +324,13 @@ impl OpenedProjectEntry {
         }
     }
 
+    pub async fn get_data(&self) -> Result<ProjectData, ProjectManagerActorError> {
+        Ok(match &self.handle {
+            OpenedProjectHandle::Core(handle) => ProjectData::Core(handle.get_data().await?),
+            OpenedProjectHandle::Ui(handle) => ProjectData::Ui(handle.get_data().await?),
+        })
+    }
+
     pub async fn call(
         &self,
         session: SessionHandle,
@@ -358,12 +413,12 @@ pub enum ProjectManagerActorError {
     HandleLookupError(#[from] HandleLookupError),
     #[error("Failed to access data: {0}")]
     DataAccessError(#[from] CallError<FsCollectionError>),
-    #[error("Failed to process data: {0}")]
-    DataProcessingError(String),
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
-    #[error("Project not found: {0}")]
-    ProjectNotFound(String),
+    #[error("Actor communication error: {0}")]
+    ActorCommunicationError(#[from] CallError),
+    #[error("Failed to process data: {0}")]
+    DataProcessingError(String),
     #[error("Opened project error: {0}")]
     OpenedProjectError(Box<CallError<ProjectManagerActorError>>),
     #[error("Notifier not found: {0}")]
@@ -1104,5 +1159,36 @@ impl message::Message<ServiceRequest<CallOpenedReq>> for ProjectManager {
         };
 
         call.reply_ok(CallOpenedRes(res));
+    }
+}
+
+#[derive(Debug)]
+struct GetProjectData {
+    project_type: project_manager::ProjectType,
+    project_id: String,
+}
+
+impl message::Message<GetProjectData> for ProjectManager {
+    type Reply = Result<ProjectData, ProjectManagerActorError>;
+
+    async fn handle(
+        &mut self,
+        msg: GetProjectData,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        let project = self
+            .get_or_open_project(msg.project_type, msg.project_id)
+            .await?;
+
+        let res = project.get_data().await;
+
+        // Need to cleanup if just opened
+        if !project.used() {
+            project.terminate().await;
+            self.opened_projects_names
+                .remove(&(project.project_type(), project.name().to_owned()));
+        }
+
+        res
     }
 }
