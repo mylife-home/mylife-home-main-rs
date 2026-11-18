@@ -202,7 +202,7 @@ export function makeGetWindowUsage() {
 
       for (const [key, value] of Object.entries(project.defaultWindow)) {
         if (value === windowId) {
-          usage.push([{ type: 'defaultWindow', id: key }]);
+          usage.push([{ type: 'default-window', id: key }]);
         }
       }
 
