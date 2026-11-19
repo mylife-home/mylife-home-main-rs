@@ -254,11 +254,11 @@ impl Validation {
         Ok(validation)
     }
 
-    pub fn at(&self, node_type: &str, id: &str) -> Self {
+    pub fn at(&self, node_type: impl Into<String>, id: impl Into<String>) -> Self {
         let mut path = self.path.clone();
         path.push(Arc::new(project_manager::UiElementPathNode {
-            r#type: node_type.to_string(),
-            id: id.to_string(),
+            r#type: node_type.into(),
+            id: id.into(),
         }));
 
         Self {
