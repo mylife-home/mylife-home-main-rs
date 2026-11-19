@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     format, io, mem,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::Arc,
     time::{Duration, SystemTime},
 };
