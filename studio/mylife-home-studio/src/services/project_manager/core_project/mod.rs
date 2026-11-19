@@ -87,9 +87,7 @@ impl CoreProjectHandle {
     ) -> Result<Arc<project_manager::CoreProject>, ProjectManagerActorError> {
         let res = self.0.ask(Get).try_send().await;
 
-        Ok(res.map_err(|e| {
-            ProjectManagerActorError::OpenedProjectError(Box::new(CallError::from(e)))
-        })?)
+        Ok(res.map_err(|e| ProjectManagerActorError::ActorCommunicationError(CallError::from(e)))?)
     }
 
     pub async fn call(
