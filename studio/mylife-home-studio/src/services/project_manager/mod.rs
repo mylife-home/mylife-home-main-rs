@@ -80,6 +80,7 @@ impl ProjectManagerHandler {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum ProjectData {
     Core(Arc<project_manager::CoreProject>),
     Ui(Arc<project_manager::UiProject>),

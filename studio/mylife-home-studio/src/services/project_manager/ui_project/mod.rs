@@ -1,9 +1,6 @@
-use std::{mem, sync::Arc, todo, unreachable};
+use std::{mem, sync::Arc, unreachable};
 
-use common::{
-    components::{metadata, registry::RegistryHandle},
-    utils::actors::{CallError, SpawnExt},
-};
+use common::utils::actors::{CallError, SpawnExt};
 use serde::Serialize;
 use std::collections::HashMap;
 use studio_web_api::project_manager;
@@ -14,8 +11,9 @@ use crate::{
         project_manager::{
             InitialEmitter, ProjectData, ProjectManagerActorError, ProjectManagerHandler,
             ui_project::{
-                control::ControlOps, project::ProjectOps, template::TemplateOps,
-                template_instance::TemplateInstanceOps, utils::ArcMapOps, window::WindowOps,
+                component::ComponentUsageCollector, control::ControlOps, project::ProjectOps,
+                template::TemplateOps, template_instance::TemplateInstanceOps, utils::ArcMapOps,
+                window::WindowOps,
             },
         },
     },
@@ -498,70 +496,17 @@ impl UiProject {
         &mut self,
     ) -> Result<project_manager::RefreshComponentsUiProjectCallResult, ProjectManagerActorError>
     {
-        let registry = RegistryHandle::new()?;
+        let component_data = component::load_online_component_data().await?;
 
-        let registry_components = registry.get_components().await?;
+        let collector = ComponentUsageCollector::new();
+        self.data.collect_component_usage(&collector);
+        let usage = collector.usage();
+        let (breaking_operations, server_data) = component::prepare_refresh(usage, component_data)?;
 
-        let mut components = HashMap::new();
-        let mut plugins = HashMap::new();
-
-        for comp in registry_components {
-            let Some(instance) = comp.instance else {
-                tracing::warn!(component = %comp.component_id, "component has no instance. this is considered a local component, but local 'studio' instance has no component. skipping.");
-                continue;
-            };
-
-            let plugin_id = format!(
-                "{}:{}.{}",
-                instance,
-                comp.plugin.module(),
-                comp.plugin.name()
-            );
-
-            if !plugins.contains_key(&plugin_id) {
-                plugins.insert(
-                    plugin_id.clone(),
-                    project_manager::UiPluginData {
-                        name: comp.plugin.name().to_owned(),
-                        module: comp.plugin.module().to_owned(),
-                        version: comp.plugin.version().to_owned(),
-                        description: comp.plugin.description().map(String::from),
-                        members: comp
-                            .plugin
-                            .members()
-                            .iter()
-                            .map(|(id, member)| {
-                                (
-                                    id.clone(),
-                                    project_manager::Member {
-                                        description: member.description().map(String::from),
-                                        member_type: match member.member_type() {
-                                            metadata::MemberType::State => {
-                                                project_manager::MemberType::State
-                                            }
-                                            metadata::MemberType::Action => {
-                                                project_manager::MemberType::Action
-                                            }
-                                        },
-                                        value_type: member.value_type().to_string(),
-                                    },
-                                )
-                            })
-                            .collect::<HashMap<_, _>>(),
-                        instance_name: instance,
-                    },
-                );
-            }
-
-            components.insert(
-                comp.component_id,
-                project_manager::UiComponentData { plugin: plugin_id },
-            );
-        }
-
-        // components
-        // plugins
-        todo!()
+        Ok(project_manager::RefreshComponentsUiProjectCallResult {
+            breaking_operations,
+            server_data,
+        })
     }
 
     async fn refresh_components_from_project(
@@ -578,18 +523,28 @@ impl UiProject {
             unreachable!("Expected core project data")
         };
 
-        // TODO: template instantiation
-        // TODO: convert to
-        //  pub components: Arc<HashMap<String, Arc<UiComponentData>>>,
-        //  pub plugins: Arc<HashMap<String, Arc<UiPluginData>>>,
-        todo!()
+        let component_data = component::load_core_project_component_data(project_data)?;
+
+        let collector = ComponentUsageCollector::new();
+        self.data.collect_component_usage(&collector);
+        let usage = collector.usage();
+        let (breaking_operations, server_data) = component::prepare_refresh(usage, component_data)?;
+
+        Ok(project_manager::RefreshComponentsUiProjectCallResult {
+            breaking_operations,
+            server_data,
+        })
     }
 
     async fn apply_refresh_components(
         &mut self,
         call_data: project_manager::ApplyRefreshComponentsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        todo!()
+        let mut notifications = Vec::new();
+        let new_data =
+            component::apply_refresh(&self.data, &mut notifications, call_data.server_data)?;
+
+        self.apply_update(new_data, notifications).await
     }
 
     async fn deploy(
