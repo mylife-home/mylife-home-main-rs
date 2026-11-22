@@ -501,7 +501,8 @@ impl UiProject {
         let collector = ComponentUsageCollector::new();
         self.data.collect_component_usage(&collector);
         let usage = collector.usage();
-        let (breaking_operations, server_data) = component::prepare_refresh(usage, component_data)?;
+        let (breaking_operations, server_data) =
+            component::prepare_refresh(&self.data, usage, component_data)?;
 
         Ok(project_manager::RefreshComponentsUiProjectCallResult {
             breaking_operations,
@@ -528,7 +529,8 @@ impl UiProject {
         let collector = ComponentUsageCollector::new();
         self.data.collect_component_usage(&collector);
         let usage = collector.usage();
-        let (breaking_operations, server_data) = component::prepare_refresh(usage, component_data)?;
+        let (breaking_operations, server_data) =
+            component::prepare_refresh(&self.data, usage, component_data)?;
 
         Ok(project_manager::RefreshComponentsUiProjectCallResult {
             breaking_operations,
