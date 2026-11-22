@@ -940,8 +940,13 @@ impl ProjectOps for Arc<project_manager::UiProject> {
     }
 
     fn collect_component_usage(&self, collector: &ComponentUsageCollector) {
-        for (_, view) in self.get_views() {
-            view.collect_component_usage(collector);
+        for (view_id, view) in self.get_views() {
+            let view_type = match view.r#type() {
+                project_manager::ViewType::Window => "window",
+                project_manager::ViewType::Template => "template",
+            };
+            let collector = collector.at(view_type, view_id);
+            view.collect_component_usage(&collector);
         }
     }
 

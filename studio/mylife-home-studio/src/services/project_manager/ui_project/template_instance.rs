@@ -231,7 +231,14 @@ impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
     }
 
     fn collect_component_usage(&self, collector: &ComponentUsageCollector) {
-        todo!()
+        for (binding_id, binding) in self.bindings.iter() {
+            if let Some(component_id) = &binding.component_id
+                && let Some(member_name) = &binding.member_name
+            {
+                let collector = collector.at("template-binding", binding_id);
+                collector.add_usage(component_id, member_name);
+            }
+        }
     }
 
     fn clear_component_usage(

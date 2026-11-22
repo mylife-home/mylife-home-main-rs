@@ -85,6 +85,13 @@ impl View {
         }
     }
 
+    pub fn r#type(&self) -> project_manager::ViewType {
+        match self {
+            View::Window(_) => project_manager::ViewType::Window,
+            View::Template(_) => project_manager::ViewType::Template,
+        }
+    }
+
     pub fn window(window: Arc<project_manager::UiWindowData>) -> View {
         View::Window(window)
     }
@@ -235,12 +242,14 @@ impl View {
     }
 
     pub fn collect_component_usage(&self, collector: &ComponentUsageCollector) {
-        for control in self.get_controls().values() {
-            control.collect_component_usage(collector);
+        for (id, control) in self.get_controls().iter() {
+            let collector = collector.at("control", id);
+            control.collect_component_usage(&collector);
         }
 
-        for template in self.get_templates().values() {
-            template.collect_component_usage(collector);
+        for (id, template) in self.get_templates().iter() {
+            let collector = collector.at("template-instance", id);
+            template.collect_component_usage(&collector);
         }
     }
 
