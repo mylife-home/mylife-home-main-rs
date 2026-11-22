@@ -1,4 +1,4 @@
-use std::{sync::Arc, todo};
+use std::sync::Arc;
 
 use std::collections::HashMap;
 use studio_web_api::{project_manager, ui_model};
@@ -245,7 +245,33 @@ impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
         &self,
         usage: &ComponentUsage,
     ) -> Option<Arc<project_manager::UiTemplateInstanceData>> {
-        todo!()
+        let mut new_bindings = self.bindings.as_ref().clone();
+
+        let Some(node) = usage.path.get(2) else {
+            return None;
+        };
+
+        if node.r#type.as_str() != "template-binding" {
+            return None;
+        }
+
+        let binding_id = &node.id;
+        if !new_bindings.contains_key(binding_id) {
+            return None;
+        }
+
+        new_bindings.insert(
+            binding_id.clone(),
+            Arc::new(project_manager::UiTemplateInstanceBinding {
+                component_id: None,
+                member_name: None,
+            }),
+        );
+
+        Some(Arc::new(project_manager::UiTemplateInstanceData {
+            bindings: Arc::new(new_bindings),
+            ..self.as_ref().clone()
+        }))
     }
 
     fn deploy(
