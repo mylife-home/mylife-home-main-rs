@@ -2,13 +2,17 @@ use std::{collections::HashMap, sync::Arc};
 
 use studio_web_api::{project_manager, ui_model};
 
-use crate::services::project_manager::ui_project::{
-    control::ControlOps,
-    resource::OptionResourceOps,
-    style::StyleOps,
-    template_instance::TemplateInstanceOps,
-    utils::ArcMapOps,
-    validation::{InvalidForDeployment, Validation, ValidationResult},
+use crate::services::project_manager::{
+    ProjectManagerActorError,
+    ui_project::{
+        component::{ComponentUsage, ComponentUsageCollector},
+        control::ControlOps,
+        resource::OptionResourceOps,
+        style::StyleOps,
+        template_instance::TemplateInstanceOps,
+        utils::ArcMapOps,
+        validation::{InvalidForDeployment, Validation, ValidationResult},
+    },
 };
 
 #[derive(Clone, Default)]
@@ -228,5 +232,58 @@ impl View {
         }?;
 
         Some(self.set_templates(updated_templates))
+    }
+
+    pub fn collect_component_usage(&self, collector: &ComponentUsageCollector) {
+        for control in self.get_controls().values() {
+            control.collect_component_usage(collector);
+        }
+
+        for template in self.get_templates().values() {
+            template.collect_component_usage(collector);
+        }
+    }
+
+    pub fn clear_component_usage(
+        &self,
+        usage: &ComponentUsage,
+    ) -> Result<Option<View>, ProjectManagerActorError> {
+        let Some(node) = usage.path.get(1) else {
+            return Err(ProjectManagerActorError::DataProcessingError(format!(
+                "Malformed usage path: {:?}",
+                usage
+            )));
+        };
+
+        let view = match node.r#type.as_str() {
+            "control" => {
+                let controls = self.get_controls();
+                let control = controls.get_required(&node.id)?;
+                if let Some(control) = control.clear_component_usage(usage) {
+                    let controls = controls.with_updated(node.id.clone(), control)?;
+                    Some(self.set_controls(controls))
+                } else {
+                    None
+                }
+            }
+            "template-instance" => {
+                let templates = self.get_templates();
+                let template = templates.get_required(&node.id)?;
+                if let Some(template) = template.clear_component_usage(usage) {
+                    let templates = templates.with_updated(node.id.clone(), template)?;
+                    Some(self.set_templates(templates))
+                } else {
+                    None
+                }
+            }
+            _ => {
+                return Err(ProjectManagerActorError::DataProcessingError(format!(
+                    "Unknown view element type: {:?}",
+                    node.r#type
+                )));
+            }
+        };
+
+        Ok(view)
     }
 }

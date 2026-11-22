@@ -4,6 +4,7 @@ use common::components::metadata::Type;
 use studio_web_api::{project_manager, ui_model, utils::PartialField};
 
 use crate::services::project_manager::ui_project::{
+    component::{ComponentUsage, ComponentUsageCollector},
     resource::ResourceOps,
     style::StyleOps,
     utils::VecOps,
@@ -43,10 +44,11 @@ pub trait ControlOps {
         member_name: &str,
     ) -> Option<Arc<project_manager::UiControlData>>;
 
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector);
+
     fn clear_component_usage(
         &self,
-        component_id: &str,
-        member_name: &str,
+        usage: &ComponentUsage,
     ) -> Option<Arc<project_manager::UiControlData>>;
 
     fn deploy(&self, id: String, validation: &Validation) -> ValidationResult<ui_model::Control>;
@@ -244,27 +246,41 @@ impl ControlOps for Arc<project_manager::UiControlData> {
         Some(Arc::new(control))
     }
 
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector) {
+        if let Some(display) = &self.display {
+            display.collect_component_usage(&collector.at("control-type", "display"));
+        }
+        if let Some(text) = &self.text {
+            text.collect_component_usage(&collector.at("control-type", "text"));
+        }
+        if let Some(action) = &self.primary_action {
+            action.collect_component_usage(&collector.at("action", "primary-action"));
+        }
+        if let Some(action) = &self.secondary_action {
+            action.collect_component_usage(&collector.at("action", "secondary-action"));
+        }
+    }
+
     fn clear_component_usage(
         &self,
-        component_id: &str,
-        member_name: &str,
+        usage: &ComponentUsage,
     ) -> Option<Arc<project_manager::UiControlData>> {
         let display = self
             .display
             .as_ref()
-            .and_then(|display| display.clear_component_usage(component_id, member_name));
+            .and_then(|display| display.clear_component_usage(usage));
         let text = self
             .text
             .as_ref()
-            .and_then(|text| text.clear_component_usage(component_id, member_name));
+            .and_then(|text| text.clear_component_usage(usage));
         let primary_action = self
             .primary_action
             .as_ref()
-            .and_then(|action| action.clear_component_usage(component_id, member_name));
+            .and_then(|action| action.clear_component_usage(usage));
         let secondary_action = self
             .secondary_action
             .as_ref()
-            .and_then(|action| action.clear_component_usage(component_id, member_name));
+            .and_then(|action| action.clear_component_usage(usage));
 
         if display.is_none()
             && text.is_none()
@@ -352,10 +368,11 @@ pub trait ControlDisplayOps {
         member_name: &str,
     ) -> Option<Arc<project_manager::ControlDisplay>>;
 
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector);
+
     fn clear_component_usage(
         &self,
-        component_id: &str,
-        member_name: &str,
+        usage: &ComponentUsage,
     ) -> Option<Arc<project_manager::ControlDisplay>>;
 
     fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::ControlDisplay>;
@@ -409,13 +426,20 @@ impl ControlDisplayOps for Arc<project_manager::ControlDisplay> {
         }
     }
 
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector) {
+        if let Some(component_id) = &self.component_id
+            && let Some(member_name) = &self.component_state
+        {
+            collector.add_usage(component_id, member_name);
+        }
+    }
+
     fn clear_component_usage(
         &self,
-        component_id: &str,
-        member_name: &str,
+        usage: &ComponentUsage,
     ) -> Option<Arc<project_manager::ControlDisplay>> {
-        if self.component_id.as_deref() == Some(component_id)
-            && self.component_state.as_deref() == Some(member_name)
+        if self.component_id.as_deref() == Some(&usage.component_id)
+            && self.component_state.as_deref() == Some(&usage.member_name)
         {
             let mut display = self.as_ref().clone();
             display.component_id = None;
@@ -572,10 +596,11 @@ pub trait ControlTextOps {
         member_name: &str,
     ) -> Option<Arc<project_manager::UiControlTextData>>;
 
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector);
+
     fn clear_component_usage(
         &self,
-        component_id: &str,
-        member_name: &str,
+        usage: &ComponentUsage,
     ) -> Option<Arc<project_manager::UiControlTextData>>;
 
     fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::ControlText>;
@@ -602,17 +627,27 @@ impl ControlTextOps for Arc<project_manager::UiControlTextData> {
         if changed { Some(Arc::new(text)) } else { None }
     }
 
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector) {
+        for (index, item) in self.context.iter().enumerate() {
+            if let Some(component_id) = &item.component_id
+                && let Some(member_name) = &item.component_state
+            {
+                let collector = collector.at("context-item", format!("{}", index));
+                collector.add_usage(component_id, member_name);
+            }
+        }
+    }
+
     fn clear_component_usage(
         &self,
-        component_id: &str,
-        member_name: &str,
+        usage: &ComponentUsage,
     ) -> Option<Arc<project_manager::UiControlTextData>> {
         let mut text = self.as_ref().clone();
         let mut changed = false;
 
         for item in &mut text.context {
-            if item.component_id.as_deref() == Some(component_id)
-                && item.component_state.as_deref() == Some(member_name)
+            if item.component_id.as_deref() == Some(&usage.component_id)
+                && item.component_state.as_deref() == Some(&usage.member_name)
             {
                 item.component_id = None;
                 item.component_state = None;
@@ -676,10 +711,11 @@ pub trait ActionOps {
         member_name: &str,
     ) -> Option<Arc<project_manager::UiActionData>>;
 
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector);
+
     fn clear_component_usage(
         &self,
-        component_id: &str,
-        member_name: &str,
+        usage: &ComponentUsage,
     ) -> Option<Arc<project_manager::UiActionData>>;
 
     fn deploy(&self, validation: &Validation) -> ValidationResult<ui_model::Action>;
@@ -722,18 +758,26 @@ impl ActionOps for Arc<project_manager::UiActionData> {
         }
     }
 
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector) {
+        if let Some(component) = &self.component
+            && let Some(component_id) = &component.id
+            && let Some(action) = &component.action
+        {
+            collector.add_usage(component_id, action);
+        }
+    }
+
     fn clear_component_usage(
         &self,
-        component_id: &str,
-        member_name: &str,
+        usage: &ComponentUsage,
     ) -> Option<Arc<project_manager::UiActionData>> {
         let mut action = self.as_ref().clone();
         let Some(component) = &mut action.component else {
             return None;
         };
 
-        if component.id.as_deref() == Some(component_id)
-            && component.action.as_deref() == Some(member_name)
+        if component.id.as_deref() == Some(&usage.component_id)
+            && component.action.as_deref() == Some(&usage.member_name)
         {
             let mut action = self.as_ref().clone();
             let component = action.component.as_mut().expect("data inconsistency");

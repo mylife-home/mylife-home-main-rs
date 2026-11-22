@@ -5,6 +5,7 @@ use studio_web_api::{project_manager, ui_model};
 use crate::services::project_manager::{
     ProjectManagerActorError,
     ui_project::{
+        component::{ComponentUsage, ComponentUsageCollector},
         default_window::DefaultWindowOps,
         template::TemplateOps,
         utils::{ArcMapOps, check_id},
@@ -202,11 +203,21 @@ pub trait ProjectOps {
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiProject>>;
 
-    fn on_change_views(
+    fn with_updated_views(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         change: impl FnMut(View) -> Option<View>,
     ) -> Option<Arc<project_manager::UiProject>>;
+
+    fn get_views(&self) -> impl Iterator<Item = (&String, View)>;
+
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector);
+
+    fn clear_component_usage(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        usage: &Vec<ComponentUsage>,
+    ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError>;
 }
 
 impl ProjectOps for Arc<project_manager::UiProject> {
@@ -812,7 +823,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiProject>> {
-        self.on_change_views(notifications, |view| view.on_change_resource(id, new_id))
+        self.with_updated_views(notifications, |view| view.on_change_resource(id, new_id))
     }
 
     fn on_change_style(
@@ -821,7 +832,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiProject>> {
-        self.on_change_views(notifications, |view| view.on_change_style(id, new_id))
+        self.with_updated_views(notifications, |view| view.on_change_style(id, new_id))
     }
 
     fn on_change_window(
@@ -831,7 +842,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiProject>> {
         let updated_views =
-            self.on_change_views(notifications, |view| view.on_change_window(id, new_id));
+            self.with_updated_views(notifications, |view| view.on_change_window(id, new_id));
         let updated_default = self.default_window.on_change_window(id, new_id);
 
         if updated_views.is_none() && updated_default.is_none() {
@@ -861,10 +872,10 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         id: &str,
         new_id: Option<&str>,
     ) -> Option<Arc<project_manager::UiProject>> {
-        self.on_change_views(notifications, |view| view.on_change_template(id, new_id))
+        self.with_updated_views(notifications, |view| view.on_change_template(id, new_id))
     }
 
-    fn on_change_views(
+    fn with_updated_views(
         &self,
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         mut change: impl FnMut(View) -> Option<View>,
@@ -915,5 +926,63 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             project.templates = templates;
         }
         Some(Arc::new(project))
+    }
+
+    fn get_views(&self) -> impl Iterator<Item = (&String, View)> {
+        self.windows
+            .iter()
+            .map(|(id, window)| (id, View::window(window.clone())))
+            .chain(
+                self.templates
+                    .iter()
+                    .map(|(id, template)| (id, View::template(template.clone()))),
+            )
+    }
+
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector) {
+        for (_, view) in self.get_views() {
+            view.collect_component_usage(collector);
+        }
+    }
+
+    fn clear_component_usage(
+        &self,
+        notifications: &mut Vec<project_manager::UpdateProjectNotification>,
+        usage: &Vec<ComponentUsage>,
+    ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError> {
+        let mut project = self.clone();
+
+        for usage in usage {
+            let Some(node) = usage.path.get(0) else {
+                return Err(ProjectManagerActorError::DataProcessingError(format!(
+                    "Malformed usage path: {:?}",
+                    usage
+                )));
+            };
+
+            let view_type = match node.r#type.as_str() {
+                "window" => project_manager::ViewType::Window,
+                "template" => project_manager::ViewType::Template,
+                _ => {
+                    return Err(ProjectManagerActorError::DataProcessingError(format!(
+                        "Unknown view type: {:?}",
+                        node.r#type
+                    )));
+                }
+            };
+
+            let view_id = node.id.clone();
+
+            let view = self.get_view(view_type, &view_id)?;
+            if let Some(view) = view.clear_component_usage(usage)? {
+                project = project.update_view(notifications, view_id, view)?;
+            }
+        }
+
+        Ok(if Arc::ptr_eq(&self, &project) {
+            None
+        } else {
+            Some(project)
+        })
     }
 }

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, todo};
 
 use std::collections::HashMap;
 use studio_web_api::{project_manager, ui_model};
@@ -6,6 +6,7 @@ use studio_web_api::{project_manager, ui_model};
 use crate::services::project_manager::{
     ProjectManagerActorError,
     ui_project::{
+        component::{ComponentUsage, ComponentUsageCollector},
         project::ProjectOps,
         template::TemplateOps,
         utils::ArcMapOps,
@@ -48,6 +49,13 @@ pub trait TemplateInstanceOps {
     fn on_clear_template_export(
         &self,
         export_id: &str,
+    ) -> Option<Arc<project_manager::UiTemplateInstanceData>>;
+
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector);
+
+    fn clear_component_usage(
+        &self,
+        usage: &ComponentUsage,
     ) -> Option<Arc<project_manager::UiTemplateInstanceData>>;
 
     fn deploy(
@@ -220,6 +228,17 @@ impl TemplateInstanceOps for Arc<project_manager::UiTemplateInstanceData> {
                 ..self.as_ref().clone()
             })
         })
+    }
+
+    fn collect_component_usage(&self, collector: &ComponentUsageCollector) {
+        todo!()
+    }
+
+    fn clear_component_usage(
+        &self,
+        usage: &ComponentUsage,
+    ) -> Option<Arc<project_manager::UiTemplateInstanceData>> {
+        todo!()
     }
 
     fn deploy(

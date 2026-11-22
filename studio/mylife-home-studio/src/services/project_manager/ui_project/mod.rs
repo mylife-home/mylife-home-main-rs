@@ -25,6 +25,7 @@ use crate::{
 
 use kameo::{error::Infallible, message, prelude::*};
 
+mod component;
 mod control;
 mod default_window;
 mod project;
