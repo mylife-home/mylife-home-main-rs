@@ -955,7 +955,8 @@ impl ProjectOps for Arc<project_manager::UiProject> {
         notifications: &mut Vec<project_manager::UpdateProjectNotification>,
         usage: &Vec<ComponentUsage>,
     ) -> Result<Option<Arc<project_manager::UiProject>>, ProjectManagerActorError> {
-        let mut project = self.clone();
+        // one update per view
+        let mut views: HashMap<(project_manager::ViewType, String), View> = HashMap::new();
 
         for usage in usage {
             let Some(node) = usage.path.get(0) else {
@@ -978,16 +979,25 @@ impl ProjectOps for Arc<project_manager::UiProject> {
 
             let view_id = node.id.clone();
 
-            let view = project.get_view(view_type, &view_id)?;
+            let view = match views.get(&(view_type.clone(), view_id.clone())) {
+                Some(view) => view.clone(),
+                None => self.get_view(view_type.clone(), &view_id)?,
+            };
+
             if let Some(view) = view.clear_component_usage(usage)? {
-                project = project.update_view(notifications, view_id, view)?;
+                views.insert((view_type.clone(), view_id.clone()), view);
             }
         }
 
-        Ok(if Arc::ptr_eq(&self, &project) {
-            None
-        } else {
-            Some(project)
-        })
+        if views.is_empty() {
+            return Ok(None);
+        }
+
+        let mut project = self.clone();
+        for ((_, view_id), view) in views {
+            project = project.update_view(notifications, view_id, view)?;
+        }
+
+        Ok(Some(project))
     }
 }

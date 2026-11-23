@@ -36,6 +36,7 @@ impl DeployPosition {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum View {
     Window(Arc<project_manager::UiWindowData>),
     Template(Arc<project_manager::UiTemplateData>),
