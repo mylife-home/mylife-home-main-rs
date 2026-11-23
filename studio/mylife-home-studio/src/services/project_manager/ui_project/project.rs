@@ -978,14 +978,15 @@ impl ProjectOps for Arc<project_manager::UiProject> {
             };
 
             let view_id = node.id.clone();
+            let key = (view_type, view_id.clone());
 
-            let view = match views.get(&(view_type.clone(), view_id.clone())) {
+            let view = match views.get(&key) {
                 Some(view) => view.clone(),
-                None => self.get_view(view_type.clone(), &view_id)?,
+                None => self.get_view(view_type, &view_id)?,
             };
 
             if let Some(view) = view.clear_component_usage(usage)? {
-                views.insert((view_type.clone(), view_id.clone()), view);
+                views.insert(key, view);
             }
         }
 
