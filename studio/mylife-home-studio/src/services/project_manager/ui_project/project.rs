@@ -978,7 +978,7 @@ impl ProjectOps for Arc<project_manager::UiProject> {
 
             let view_id = node.id.clone();
 
-            let view = self.get_view(view_type, &view_id)?;
+            let view = project.get_view(view_type, &view_id)?;
             if let Some(view) = view.clear_component_usage(usage)? {
                 project = project.update_view(notifications, view_id, view)?;
             }

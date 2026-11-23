@@ -473,12 +473,11 @@ impl UiProject {
         new_data: Arc<project_manager::UiProject>,
         notifications: Vec<project_manager::UpdateProjectNotification>,
     ) -> Result<(), ProjectManagerActorError> {
-        self.data = new_data;
-
         self.fs_collection
-            .update(self.name.clone(), self.data.clone())
+            .update(self.name.clone(), new_data.clone())
             .await?;
 
+        self.data = new_data;
         self.notify_all(&notifications);
 
         Ok(())

@@ -369,6 +369,16 @@ pub fn apply_refresh(
             .map(|(id, component)| (id, Arc::new(component)))
             .collect(),
     );
+
+    notifications.push(
+        project_manager::UpdateProjectNotification::SetUiComponentData(
+            project_manager::SetUiComponentDataNotification {
+                components: project.components.clone(),
+                plugins: project.plugins.clone(),
+            },
+        ),
+    );
+
     let project = Arc::new(project);
     let project = project
         .clear_component_usage(notifications, &server_data.usage_to_clear)?
