@@ -20,5 +20,6 @@ mod ids;
 mod import_ops;
 mod naming;
 mod plugins;
+mod resolver;
 mod templates;
 mod wire;

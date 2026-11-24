@@ -280,15 +280,15 @@ fn component_set(members: &[(&str, MemberType, &str)], version: &str) -> NewComp
         instance_name: String::from("instance"),
     };
 
-    NewComponentData::new(
-        Collection::from_iter([(
+    NewComponentData {
+        components: Collection::from_iter([(
             component_id("comp"),
             Arc::new(Component {
                 plugin: plugin_id(),
             }),
         )]),
-        Collection::from_iter([(plugin_id(), Arc::new(plugin))]),
-    )
+        plugins: Collection::from_iter([(plugin_id(), Arc::new(plugin))]),
+    }
 }
 
 /// The whole chain: work out what breaks, hand the payload back as the client
@@ -340,7 +340,10 @@ fn a_component_that_is_gone_breaks_the_references_to_it() {
 
     let (breaking, applied) = refresh(
         &project,
-        NewComponentData::new(Collection::new(), Collection::new()),
+        NewComponentData {
+            components: Collection::new(),
+            plugins: Collection::new(),
+        },
     );
 
     assert_eq!(breaking, ["remove:comp"]);
@@ -447,7 +450,10 @@ fn applying_a_refresh_announces_the_new_component_set() {
     let (_, server_data) = component::prepare_refresh(
         &project,
         &usage,
-        NewComponentData::new(Collection::new(), Collection::new()),
+        NewComponentData {
+            components: Collection::new(),
+            plugins: Collection::new(),
+        },
     )
     .unwrap();
 

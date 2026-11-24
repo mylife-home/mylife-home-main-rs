@@ -17,6 +17,7 @@
 
 mod components;
 mod controls;
+mod core_import;
 mod deploy;
 mod fixture;
 mod ids;

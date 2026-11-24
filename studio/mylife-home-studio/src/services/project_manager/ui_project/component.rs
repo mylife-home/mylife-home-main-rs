@@ -6,34 +6,24 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
+use studio_web_api::component_model::PluginUsage;
 use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
-    core_project::model as core_model,
+    core_project::{model as core_model, resolver as core_resolver},
     ui_project::model::{self, Collection, Component, ComponentId, Plugin, PluginId, UiModelError},
 };
 
 /// The component and plugin set to move the project onto.
+///
+/// Built from the registry, from another project, or stated outright by a
+/// test: it is two collections and nothing else, so it has no constructor of
+/// its own.
 #[derive(Debug, Clone)]
 pub struct NewComponentData {
-    components: Collection<ComponentId, Component>,
-    plugins: Collection<PluginId, Plugin>,
-}
-
-impl NewComponentData {
-    /// The set a refresh moves the project onto. `load_online_component_data`
-    /// builds it from the registry, so this is the way to state one outright.
-    #[allow(dead_code, reason = "only the tests build a set by hand")]
-    pub fn new(
-        components: Collection<ComponentId, Component>,
-        plugins: Collection<PluginId, Plugin>,
-    ) -> Self {
-        Self {
-            components,
-            plugins,
-        }
-    }
+    pub components: Collection<ComponentId, Component>,
+    pub plugins: Collection<PluginId, Plugin>,
 }
 
 /// What the client hands back untouched between `prepare_refresh` and the
@@ -146,11 +136,52 @@ pub async fn load_online_component_data() -> Result<NewComponentData, ProjectMan
     })
 }
 
+/// The component set a core project would deploy, as the UI designer sees it.
+///
+/// The core project is flattened first: a UI control binds to a component that
+/// will exist at runtime, and a component inside a template does not until the
+/// template is instantiated. Only plugins a UI can talk to are kept.
 pub fn load_core_project_component_data(
-    _project: &core_model::Project,
+    project: &core_model::Project,
 ) -> Result<NewComponentData, ProjectManagerActorError> {
-    // TODO: template instantiation
-    std::todo!()
+    let resolved = core_resolver::resolve(project)?;
+
+    let mut components = HashMap::new();
+    let mut plugins = HashMap::new();
+
+    for (id, component) in resolved.components() {
+        let plugin = resolved.plugin_of(component)?;
+
+        if plugin.usage != PluginUsage::Ui {
+            continue;
+        }
+
+        let plugin_id = PluginId::new(component.plugin.to_string())?;
+
+        if !plugins.contains_key(&plugin_id) {
+            plugins.insert(
+                plugin_id.clone(),
+                Arc::new(Plugin {
+                    name: plugin.name.clone(),
+                    module: plugin.module.clone(),
+                    version: plugin.version.clone(),
+                    description: plugin.description.clone(),
+                    members: plugin.members.clone(),
+                    instance_name: plugin.instance_name.to_string(),
+                }),
+            );
+        }
+
+        components.insert(
+            ComponentId::new(id.to_string())?,
+            Arc::new(Component { plugin: plugin_id }),
+        );
+    }
+
+    Ok(NewComponentData {
+        components: components.into_iter().collect(),
+        plugins: plugins.into_iter().collect(),
+    })
 }
 
 struct UsageHelper {
