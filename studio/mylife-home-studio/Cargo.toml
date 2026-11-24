@@ -12,6 +12,7 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
+git2 = { workspace = true, features = [ "https", "ssh", "vendored-libgit2", "vendored-openssl"] }
 kameo = { workspace = true, features = ["console"] }
 kameo_actors = { workspace = true }
 mime_guess = { workspace = true }

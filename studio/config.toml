@@ -9,10 +9,17 @@ server_address = "%{BUS_SERVER|rpi-dev-home-main:1883}"
 listen_address = "0.0.0.0:%{WEB_PORT|8002}"
 
 [git]
-app_url = "https://www.google.com"
+app_url = "%{GIT_APP_URL|https://www.google.com}"
+
+ssh_key = "%{GIT_SSH_KEY|}"
+ssh_key_passphrase = "%{GIT_SSH_KEY_PASSPHRASE|}"
+username = "%{GIT_USERNAME|}"
+token = "%{GIT_TOKEN|}"
+
+accept_unknown_host = true
 
 [paths]
-root = "../../mylife-home-studio-data-dev"
+root = "%{PATH_ROOT|../../mylife-home-studio-data-dev}"
 
 [paths.project_manager]
 ui = "ui-projects"

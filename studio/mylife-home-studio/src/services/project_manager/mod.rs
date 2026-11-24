@@ -18,6 +18,7 @@ use thiserror::Error;
 
 use crate::{
     services::{
+        git::{GitBuilder, GitHandle},
         online::OnlineInstancesError,
         project_manager::{
             core_project::{CoreProjectHandle, new_core_project_data},
@@ -102,8 +103,12 @@ pub struct ProjectManagerConfig {
 pub async fn init(
     actors: &mut SpawnedActors,
     dispatcher: &mut DispatcherBuilder,
+    git: &mut GitBuilder,
     config: ProjectManagerConfig,
 ) {
+    git.register_path_feature("project/core", [config.core_projects_store_path.clone()]);
+    git.register_path_feature("project/ui", [config.ui_projects_store_path.clone()]);
+
     fs_collection::init_collection::<project_manager::CoreProject>(
         actors,
         CORE_PROJECTS_FS_COLLECTION,
@@ -144,10 +149,6 @@ pub async fn init(
     dispatcher.register_call::<OpenReq, _>("project-manager/open", actor.clone());
     dispatcher.register_call::<CloseReq, _>("project-manager/close", actor.clone());
     dispatcher.register_call::<CallOpenedReq, _>("project-manager/call-opened", actor.clone());
-
-    // TODO
-    // Services.instance.git.registerPathFeature('project/core', paths.core);
-    // Services.instance.git.registerPathFeature('project/ui', paths.ui);
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -520,6 +521,7 @@ impl message::Message<fs_collection::Update<project_manager::CoreProject>> for P
         };
 
         self.list_notifiers.notify_all(&notification);
+        self.notify_git();
     }
 }
 
@@ -573,6 +575,7 @@ impl message::Message<fs_collection::Update<project_manager::UiProject>> for Pro
         };
 
         self.list_notifiers.notify_all(&notification);
+        self.notify_git();
     }
 }
 
@@ -1068,6 +1071,20 @@ impl ProjectManager {
         };
 
         Ok(project)
+    }
+
+    /// Says the project files moved, so the git status bar catches up.
+    /// Says the working tree moved, when there is a git service to hear it.
+    ///
+    /// There is none while the studio starts: the projects are loaded before
+    /// git is built, and git reads the working tree itself once it is up.
+    fn notify_git(&self) {
+        match GitHandle::new() {
+            Ok(git) => git.notify_file_update(),
+            Err(error) => {
+                tracing::debug!(%error, "no git service to notify of a file update")
+            }
+        }
     }
 
     fn get_project(
