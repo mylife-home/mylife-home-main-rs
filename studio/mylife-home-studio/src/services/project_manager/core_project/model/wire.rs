@@ -466,12 +466,13 @@ pub fn notifications(changes: &[Change]) -> Vec<project_manager::UpdateProjectNo
 
 /// A call names its view with a nullable `templateId`. Resolving it once, here,
 /// is what lets the model take a `ViewKey` and never test for null again.
-pub fn view_key(template_id: &str) -> Result<ViewKey, CoreModelError> {
-    if template_id.is_empty() {
-        return Ok(ViewKey::Project);
+/// The view a call names. No template is the project's own view, which is
+/// what the client sends for anything outside a template.
+pub fn view_key(template_id: Option<&str>) -> Result<ViewKey, CoreModelError> {
+    match template_id {
+        None | Some("") => Ok(ViewKey::Project),
+        Some(id) => Ok(ViewKey::Template(TemplateId::new(id)?)),
     }
-
-    Ok(ViewKey::Template(TemplateId::new(template_id)?))
 }
 
 pub fn component_ids(ids: &[String]) -> Result<Vec<ComponentId>, CoreModelError> {

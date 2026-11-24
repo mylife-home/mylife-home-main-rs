@@ -68,10 +68,11 @@ fn the_outbound_conversion_carries_every_part_of_a_project() {
 fn a_null_template_id_is_the_project_view() {
     // Every core call carries `templateId: string | null`. Resolving it once,
     // here, is what lets the model take a single `ViewKey`.
-    assert_eq!(wire::view_key("").unwrap(), ViewKey::Project);
-    assert_eq!(wire::view_key("tpl").unwrap(), template_view("tpl"));
+    assert_eq!(wire::view_key(None).unwrap(), ViewKey::Project);
+    assert_eq!(wire::view_key(Some("")).unwrap(), ViewKey::Project);
+    assert_eq!(wire::view_key(Some("tpl")).unwrap(), template_view("tpl"));
     assert!(
-        wire::view_key("a:b").is_err(),
+        wire::view_key(Some("a:b")).is_err(),
         "an id the client made up is refused at the boundary"
     );
 }
@@ -221,4 +222,41 @@ fn a_change_carries_the_view_it_happened_in() {
     };
 
     assert_eq!(notification.template_id.as_deref(), Some("tpl"));
+}
+
+/// The core designer sends `templateId: null` for anything outside a
+/// template, so the call types have to accept it. Asserting it on `view_key`
+/// alone is not enough: that never sees the JSON.
+#[test]
+fn the_client_payloads_with_a_null_template_deserialize() {
+    use studio_web_api::project_manager as api;
+
+    let call: api::SetComponentCoreProjectCall = serde_json::from_value(serde_json::json!({
+        "templateId": null,
+        "componentId": "comp",
+        "definition": { "type": "plugin", "id": "inst:mod.plug" },
+        "x": 1,
+        "y": 2,
+    }))
+    .unwrap();
+    assert_eq!(call.template_id, None);
+
+    serde_json::from_value::<api::MoveComponentsCoreProjectCall>(serde_json::json!({
+        "templateId": null,
+        "componentsIds": ["comp"],
+        "delta": { "x": 1, "y": 2 },
+    }))
+    .unwrap();
+
+    serde_json::from_value::<api::ClearComponentsCoreProjectCall>(serde_json::json!({
+        "templateId": null,
+        "componentsIds": ["comp"],
+    }))
+    .unwrap();
+
+    serde_json::from_value::<api::ClearBindingCoreProjectCall>(serde_json::json!({
+        "templateId": null,
+        "bindingId": "a:b:c:d",
+    }))
+    .unwrap();
 }

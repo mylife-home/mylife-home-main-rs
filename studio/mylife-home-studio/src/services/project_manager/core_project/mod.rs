@@ -578,7 +578,9 @@ impl CoreProject {
         &mut self,
         call_data: project_manager::SetTemplateExportCoreProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let template_id = model::TemplateId::new(&call_data.template_id)?;
+        // An export belongs to a template, so no template is an empty id here.
+        let template_id =
+            model::TemplateId::new(call_data.template_id.as_deref().unwrap_or_default())?;
         let kind = model::ExportKind::parse(&call_data.export_type)?;
         let export_id = model::ExportId::new(&call_data.export_id)?;
         let component_id = model::ComponentId::new(&call_data.component_id)?;
@@ -602,7 +604,7 @@ impl CoreProject {
         &mut self,
         call_data: project_manager::SetComponentCoreProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let view = model::wire::view_key(&call_data.template_id)?;
+        let view = model::wire::view_key(call_data.template_id.as_deref())?;
         let id = model::ComponentId::new(&call_data.component_id)?;
         let definition = model::ComponentDefinition::try_from(&call_data.definition)?;
         let position = model::Position {
@@ -622,7 +624,7 @@ impl CoreProject {
         &mut self,
         call_data: project_manager::MoveComponentsCoreProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let view = model::wire::view_key(&call_data.template_id)?;
+        let view = model::wire::view_key(call_data.template_id.as_deref())?;
         let ids = model::wire::component_ids(&call_data.components_ids)?;
         let delta = model::Position {
             x: call_data.delta.x,
@@ -641,7 +643,7 @@ impl CoreProject {
         &mut self,
         call_data: project_manager::ConfigureComponentCoreProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let view = model::wire::view_key(&call_data.template_id)?;
+        let view = model::wire::view_key(call_data.template_id.as_deref())?;
         let id = model::ComponentId::new(&call_data.component_id)?;
 
         self.apply(|project, changes| {
@@ -662,7 +664,7 @@ impl CoreProject {
         &mut self,
         call_data: project_manager::RenameComponentCoreProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let view = model::wire::view_key(&call_data.template_id)?;
+        let view = model::wire::view_key(call_data.template_id.as_deref())?;
         let id = model::ComponentId::new(&call_data.component_id)?;
         let new_id = model::ComponentId::new(&call_data.new_id)?;
 
@@ -678,7 +680,7 @@ impl CoreProject {
         &mut self,
         call_data: project_manager::ClearComponentsCoreProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let view = model::wire::view_key(&call_data.template_id)?;
+        let view = model::wire::view_key(call_data.template_id.as_deref())?;
         let ids = model::wire::component_ids(&call_data.components_ids)?;
 
         self.apply(|project, changes| project.clear_components(changes, &view, &ids).map(Some))
@@ -690,8 +692,8 @@ impl CoreProject {
         call_data: project_manager::CopyComponentsToTemplateCoreProjectCall,
     ) -> Result<project_manager::CopyComponentsCoreProjectCallResult, ProjectManagerActorError>
     {
-        let source = model::wire::view_key(&call_data.template_id)?;
-        let target = model::wire::view_key(&call_data.target_template_id)?;
+        let source = model::wire::view_key(call_data.template_id.as_deref())?;
+        let target = model::wire::view_key(Some(&call_data.target_template_id))?;
         let ids = model::wire::component_ids(&call_data.components_ids)?;
 
         let stats = self
@@ -717,7 +719,7 @@ impl CoreProject {
         &mut self,
         call_data: project_manager::SetBindingCoreProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let view = model::wire::view_key(&call_data.template_id)?;
+        let view = model::wire::view_key(call_data.template_id.as_deref())?;
         let binding = model::Binding::try_from(&call_data.binding)?;
 
         self.apply(|project, changes| project.set_binding(changes, &view, binding).map(Some))
@@ -728,7 +730,7 @@ impl CoreProject {
         &mut self,
         call_data: project_manager::ClearBindingCoreProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let view = model::wire::view_key(&call_data.template_id)?;
+        let view = model::wire::view_key(call_data.template_id.as_deref())?;
         let id = model::wire::binding_id(&call_data.binding_id)?;
 
         self.apply(|project, changes| project.clear_binding(changes, &view, &id))
