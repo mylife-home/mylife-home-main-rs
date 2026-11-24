@@ -765,6 +765,12 @@ impl CoreProject {
         call_data: project_manager::PrepareImportFromProjectCoreProjectCall,
     ) -> Result<project_manager::PrepareBulkUpdatesCoreProjectCallResult, ProjectManagerActorError>
     {
+        // Asking the manager for this project would reach this actor, which is
+        // here, in this call.
+        if call_data.config.project_id == self.name {
+            return Err(model::CoreModelError::ImportFromSelf.into());
+        }
+
         let manager = ProjectManagerHandler::new()?;
         let source = manager
             .get_project_model(

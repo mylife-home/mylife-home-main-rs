@@ -87,6 +87,9 @@ pub enum CoreModelError {
     #[error("cannot copy a view onto itself")]
     CopyToSelf,
 
+    #[error("cannot import a project into itself")]
+    ImportFromSelf,
+
     #[error("cannot copy component '{id}': {reason}")]
     NotCopyable { id: String, reason: &'static str },
 
