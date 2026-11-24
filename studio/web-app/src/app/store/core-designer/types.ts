@@ -18,10 +18,8 @@ export const enum ActionTypes {
   PREPARE_IMPORT_FROM_PROJECT = 'core-designer/prepare-import-from-project',
   APPLY_BULK_UPDATES = 'core-designer/apply-bulk-updates',
   VALIDATE_PROJECT = 'core-designer/validate-project',
-  PREPARE_DEPLOY_TO_FILES = 'core-designer/prepare-deploy-to-files',
-  APPLY_DEPLOY_TO_FILES = 'core-designer/apply-deploy-to-files',
-  PREPARE_DEPLOY_TO_ONLINE = 'core-designer/prepare-deploy-to-online',
-  APPLY_DEPLOY_TO_ONLINE = 'core-designer/apply-deploy-to-online',
+  PREPARE_DEPLOY = 'core-designer/prepare-deploy',
+  APPLY_DEPLOY = 'core-designer/apply-deploy',
   SET_TEMPLATE = 'core-designer/set-template',
   RENAME_TEMPLATE = 'core-designer/rename-template',
   CLEAR_TEMPLATE = 'core-designer/clear-template',
@@ -53,10 +51,8 @@ export namespace ActionPayloads {
   export type PrepareImportFromOnline = { tabId: string; config: ImportFromOnlineConfig };
   export type ApplyBulkUpdates = { tabId: string; selection: string[]; serverData: unknown; };
   export type ValidateProject = { tabId: string; };
-  export type PrepareDeployToFiles = { tabId: string; };
-  export type ApplyDeployToFiles = { tabId: string; bindingsInstanceName?: string; serverData: unknown; };
-  export type PrepareDeployToOnline = { tabId: string; };
-  export type ApplyDeployToOnline = { tabId: string; serverData: unknown; };
+  export type PrepareDeploy = { tabId: string; };
+  export type ApplyDeploy = { tabId: string; serverData: unknown; };
   export type ActivateView = { tabId: string; templateId: string; };
   export type Select = { tabId: string; selection: Selection; };
   export type SelectComponent = { tabId: string; componentId: string; };
@@ -196,23 +192,8 @@ export interface BulkUpdatesData {
   serverData: unknown;
 }
 
-export interface OnlineDeployData {
+export interface DeployData {
   validation: coreValidation.Item[];
   changes: DeployChanges;
   serverData: unknown;
-}
-
-export interface FilesDeployData {
-  validation: coreValidation.Item[];
-  changes: DeployChanges; // only adds
-  files: string[];
-  bindingsInstanceName: {
-    actual: string;
-    needed: boolean;
-  };
-  serverData: unknown;
-}
-
-export interface FilesDeployResult {
-  writtenFilesCount: number;
 }

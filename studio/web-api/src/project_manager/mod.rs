@@ -1447,10 +1447,8 @@ pub enum CoreProjectCall {
     PrepareImportFromProject(PrepareImportFromProjectCoreProjectCall),
     ApplyBulkUpdates(ApplyBulkUpdatesCoreProject),
     Validate,
-    PrepareDeployToFiles,
-    ApplyDeployToFiles(ApplyDeployToFilesCoreProjectCall),
-    PrepareDeployToOnline,
-    ApplyDeployToOnline(ApplyDeployToOnlineCoreProjectCall),
+    PrepareDeploy,
+    ApplyDeploy(ApplyDeployCoreProjectCall),
 }
 
 register_ts!(CoreProjectCall);
@@ -1640,24 +1638,12 @@ register_ts!(ApplyBulkUpdatesCoreProject);
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
-pub struct ApplyDeployToFilesCoreProjectCall {
-    /// optional: omitted when the instance is left to be deduced
-    pub bindings_instance_name: Option<String>,
+pub struct ApplyDeployCoreProjectCall {
     #[ts(type = "unknown")]
     pub server_data: serde_json::Value,
 }
 
-register_ts!(ApplyDeployToFilesCoreProjectCall);
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
-#[serde(rename_all = "camelCase")]
-pub struct ApplyDeployToOnlineCoreProjectCall {
-    #[ts(type = "unknown")]
-    pub server_data: serde_json::Value,
-}
-
-register_ts!(ApplyDeployToOnlineCoreProjectCall);
+register_ts!(ApplyDeployCoreProjectCall);
 
 // ---- import configs ----
 
@@ -1749,49 +1735,14 @@ register_ts!(ValidateCoreProjectCallResult);
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
-pub struct BindingsInstanceName {
-    /// null if could not deduce
-    pub actual: Option<String>,
-    pub needed: bool,
-}
-
-register_ts!(BindingsInstanceName);
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
-#[serde(rename_all = "camelCase")]
-pub struct PrepareDeployToFilesCoreProjectCallResult {
-    pub validation: Vec<Item>,
-    /// only adds
-    pub changes: DeployChanges,
-    pub files: Vec<String>,
-    pub bindings_instance_name: BindingsInstanceName,
-    #[ts(type = "unknown")]
-    pub server_data: serde_json::Value,
-}
-
-register_ts!(PrepareDeployToFilesCoreProjectCallResult);
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
-#[serde(rename_all = "camelCase")]
-pub struct ApplyDeployToFilesCoreProjectCallResult {
-    pub written_files_count: i32,
-}
-
-register_ts!(ApplyDeployToFilesCoreProjectCallResult);
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
-#[serde(rename_all = "camelCase")]
-pub struct PrepareDeployToOnlineCoreProjectCallResult {
+pub struct PrepareDeployCoreProjectCallResult {
     pub validation: Vec<Item>,
     pub changes: DeployChanges,
     #[ts(type = "unknown")]
     pub server_data: serde_json::Value,
 }
 
-register_ts!(PrepareDeployToOnlineCoreProjectCallResult);
+register_ts!(PrepareDeployCoreProjectCallResult);
 
 // ---- deploy changes ----
 

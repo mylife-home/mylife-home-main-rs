@@ -8,16 +8,15 @@ import { useSnackbar } from '../../dialogs/snackbar';
 import { useBusy } from '../../dialogs/busy';
 import { useShowChangesDialog } from './changes-selection-dialog';
 import { AsyncDispatch } from '../../../store/types';
-import { BulkUpdatesData, BulkUpdatesStats, coreValidation, FilesDeployData, OnlineDeployData, FilesDeployResult } from '../../../store/core-designer/types';
+import { BulkUpdatesData, BulkUpdatesStats, coreValidation, DeployData } from '../../../store/core-designer/types';
 import { 
   prepareImportFromProject, prepareImportFromOnline, applyBulkUpdates, 
-  prepareDeployToFiles, applyDeployToFiles, prepareDeployToOnline, applyDeployToOnline, validateProject, clearTemplateExport
+  prepareDeploy, applyDeploy, validateProject, clearTemplateExport
 } from '../../../store/core-designer/actions';
 import { getActiveTemplateId } from '../../../store/core-designer/selectors';
 import { useImportFromProjectSelectionDialog, useImportFromOnlineSelectionDialog } from './import-selection-dialog';
 import { useShowValidationDialog } from './validation-dialog';
-import { useShowDhowDeployToFilesDialog } from './deploy-to-files-dialog';
-import { useShowDhowDeployToOnlineDialog } from './deploy-to-online-dialog';
+import { useShowDeployDialog } from './deploy-dialog';
 
 export function useImportFromProject() {
   const tabId = useTabPanelId();
@@ -151,50 +150,18 @@ export function useProjectValidation() {
   }, [tabId, dispatch, fireAsync, showDialog, enqueueSnackbar]);
 }
 
-export function useDeployToFiles() {
+export function useProjectDeploy() {
   const tabId = useTabPanelId();
   const dispatch = useDispatch();
   const fireAsync = useFireAsync();
   const validate = useValidate();
-  const showDhowDeployToFilesDialog = useShowDhowDeployToFilesDialog();
+  const showDeployDialog = useShowDeployDialog();
   const { enqueueSnackbar } = useSnackbar();
   const wrapBusy = useBusy('Déploiement en cours ...');
 
   return useCallback(() => {
     fireAsync(async () => {
-      const deployData = await (dispatch as AsyncDispatch<FilesDeployData>)(prepareDeployToFiles({ tabId }));
-      if (!await validate(deployData.validation)) {
-        return;
-      }
-
-      const { changes, files, serverData } = deployData;
-      const { status, bindingsInstanceName } = await showDhowDeployToFilesDialog(deployData.bindingsInstanceName, changes, files);
-      if (status === 'cancel') {
-        return;
-      }
-
-      const { writtenFilesCount } = await wrapBusy(async () => {
-        return await (dispatch as AsyncDispatch<FilesDeployResult>)(applyDeployToFiles({ tabId, bindingsInstanceName, serverData }));
-      }) as FilesDeployResult;
-
-      const text = writtenFilesCount < 2 ? `${writtenFilesCount} fichier créé` : `${writtenFilesCount} Fichiers créés`;
-      enqueueSnackbar(text, { variant: 'success' });
-    });
-  }, [fireAsync, dispatch]);
-}
-
-export function useDeployToOnline() {
-  const tabId = useTabPanelId();
-  const dispatch = useDispatch();
-  const fireAsync = useFireAsync();
-  const validate = useValidate();
-  const showDhowDeployToOnlineDialog = useShowDhowDeployToOnlineDialog();
-  const { enqueueSnackbar } = useSnackbar();
-  const wrapBusy = useBusy('Déploiement en cours ...');
-
-  return useCallback(() => {
-    fireAsync(async () => {
-      const { validation, changes, serverData } = await (dispatch as AsyncDispatch<OnlineDeployData>)(prepareDeployToOnline({ tabId }));
+      const { validation, changes, serverData } = await (dispatch as AsyncDispatch<DeployData>)(prepareDeploy({ tabId }));
       if (!await validate(validation)) {
         return;
       }
@@ -204,13 +171,13 @@ export function useDeployToOnline() {
         return;  
       }
 
-      const { status } = await showDhowDeployToOnlineDialog(changes);
+      const { status } = await showDeployDialog(changes);
       if (status === 'cancel') {
         return;
       }
       
       await wrapBusy(async () => {
-        await dispatch(applyDeployToOnline({ tabId, serverData }));
+        await dispatch(applyDeploy({ tabId, serverData }));
       });
 
       enqueueSnackbar('Le projet a été deployé avec succès.', { variant: 'success' });

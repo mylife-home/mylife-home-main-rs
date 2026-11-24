@@ -11,7 +11,7 @@ import { TransitionProps, DialogText, DialogSeparator } from '../../dialogs/comm
 import { DeployChanges } from '../../../api/project-manager';
 import DeployChangesList from './deploy-changes-list';
 
-export function useShowDhowDeployToOnlineDialog() {
+export function useShowDeployDialog() {
   const [changes, setChanges] = useState<DeployChanges>();
   const [onResult, setOnResult] = useState<(value: ConfirmResult) => void>();
 

@@ -1,6 +1,6 @@
 import { createAction } from '@reduxjs/toolkit';
 import { createAsyncAction } from '../common/async-action';
-import { ActionTypes, ActionPayloads, OnlineDeployData, FilesDeployData, BulkUpdatesData, BulkUpdatesStats, FilesDeployResult, CopyComponentsStats } from './types';
+import { ActionTypes, ActionPayloads, DeployData, BulkUpdatesData, BulkUpdatesStats, CopyComponentsStats } from './types';
 
 export const setNotifier = createAction<ActionPayloads.SetNotifier>(ActionTypes.SET_NOTIFIER);
 export const clearAllNotifiers = createAction<ActionPayloads.ClearAllNotifiers>(ActionTypes.CLEAR_ALL_NOTIFIERS);
@@ -11,10 +11,8 @@ export const prepareImportFromProject = createAsyncAction<ActionPayloads.Prepare
 export const prepareImportFromOnline = createAsyncAction<ActionPayloads.PrepareImportFromOnline, BulkUpdatesData>(ActionTypes.PREPARE_IMPORT_FROM_ONLINE);
 export const applyBulkUpdates = createAsyncAction<ActionPayloads.ApplyBulkUpdates, BulkUpdatesStats>(ActionTypes.APPLY_BULK_UPDATES);
 export const validateProject = createAsyncAction<ActionPayloads.ValidateProject>(ActionTypes.VALIDATE_PROJECT);
-export const prepareDeployToFiles = createAsyncAction<ActionPayloads.PrepareDeployToFiles, FilesDeployData>(ActionTypes.PREPARE_DEPLOY_TO_FILES);
-export const applyDeployToFiles = createAsyncAction<ActionPayloads.ApplyDeployToFiles, FilesDeployResult>(ActionTypes.APPLY_DEPLOY_TO_FILES);
-export const prepareDeployToOnline = createAsyncAction<ActionPayloads.PrepareDeployToOnline, OnlineDeployData>(ActionTypes.PREPARE_DEPLOY_TO_ONLINE);
-export const applyDeployToOnline = createAsyncAction<ActionPayloads.ApplyDeployToOnline>(ActionTypes.APPLY_DEPLOY_TO_ONLINE);
+export const prepareDeploy = createAsyncAction<ActionPayloads.PrepareDeploy, DeployData>(ActionTypes.PREPARE_DEPLOY);
+export const applyDeploy = createAsyncAction<ActionPayloads.ApplyDeploy>(ActionTypes.APPLY_DEPLOY);
 export const activateView = createAction<ActionPayloads.ActivateView>(ActionTypes.ACTIVATE_VIEW);
 export const select = createAction<ActionPayloads.Select>(ActionTypes.SELECT);
 export const selectComponent = createAction<ActionPayloads.SelectComponent>(ActionTypes.SELECT_COMPONENT);

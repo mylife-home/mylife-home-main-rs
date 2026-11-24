@@ -3,7 +3,7 @@ import { TabType } from '../tabs/types';
 import { updateCoreDesignerTab } from '../tabs/actions';
 import { setNotifier, clearAllNotifiers, removeOpenedProject, updateProject } from './actions';
 import { hasOpenedProjects, getOpenedProject, getOpenedProjectsIdAndProjectIdList, getOpenedProjectIdByNotifierId } from './selectors';
-import { ActionTypes, ActionPayloads, BulkUpdatesData, BulkUpdatesStats, OnlineDeployData, FilesDeployData, FilesDeployResult, ComponentDefinition } from './types';
+import { ActionTypes, ActionPayloads, BulkUpdatesData, BulkUpdatesStats, DeployData, ComponentDefinition } from './types';
 import {
   UpdateToolboxCoreProjectCall,
   MoveComponentsCoreProjectCall,
@@ -14,8 +14,8 @@ import {
   ClearBindingCoreProjectCall,
   CoreBindingData,
   SetComponentCoreProjectCall,
-  PrepareDeployToOnlineCoreProjectCallResult,
-  ApplyDeployToOnlineCoreProjectCall,
+  PrepareDeployCoreProjectCallResult,
+  ApplyDeployCoreProjectCall,
   CoreProjectCall,
   PrepareBulkUpdatesCoreProjectCallResult,
   ApplyBulkUpdatesCoreProject,
@@ -23,9 +23,6 @@ import {
   PrepareImportFromProjectCoreProjectCall,
   ApplyBulkUpdatesCoreProjectCallResult,
   ValidateCoreProjectCallResult,
-  PrepareDeployToFilesCoreProjectCallResult,
-  ApplyDeployToFilesCoreProjectCall,
-  ApplyDeployToFilesCoreProjectCallResult,
   SetTemplateCoreProjectCall,
   RenameTemplateCoreProjectCall,
   ClearTemplateCoreProjectCall,
@@ -83,42 +80,20 @@ export default createProjectManagementEpic({
       }
     },
 
-    [ActionTypes.PREPARE_DEPLOY_TO_FILES]: {
-      mapper({ tabId }: ActionPayloads.PrepareDeployToFiles) {
-        const callData: CoreProjectCall = { operation: 'prepare-deploy-to-files' };
-        return { tabId, callData };
-      },
-      resultMapper(serviceResult: PrepareDeployToFilesCoreProjectCallResult): FilesDeployData {
-        const { validation, changes, serverData, files, bindingsInstanceName } = serviceResult;
-        return { validation, changes, serverData, files, bindingsInstanceName };
-      }
-    },
-
-    [ActionTypes.APPLY_DEPLOY_TO_FILES]: {
-      mapper({ tabId, bindingsInstanceName, serverData }: ActionPayloads.ApplyDeployToFiles) {
-        const callData: CoreProjectCall = { operation: 'apply-deploy-to-files', serverData, bindingsInstanceName };
-        return { tabId, callData };
-      },
-      resultMapper(serviceResult: ApplyDeployToFilesCoreProjectCallResult): FilesDeployResult {
-        const { writtenFilesCount } = serviceResult;
-        return { writtenFilesCount };
-      }
-    },
-
-    [ActionTypes.PREPARE_DEPLOY_TO_ONLINE]: {
+    [ActionTypes.PREPARE_DEPLOY]: {
       mapper({ tabId }: { tabId: string }) {
-        const callData: CoreProjectCall = { operation: 'prepare-deploy-to-online' };
+        const callData: CoreProjectCall = { operation: 'prepare-deploy' };
         return { tabId, callData };
       },
-      resultMapper(serviceResult: PrepareDeployToOnlineCoreProjectCallResult): OnlineDeployData {
+      resultMapper(serviceResult: PrepareDeployCoreProjectCallResult): DeployData {
         const { validation, changes, serverData } = serviceResult;
         return { validation, changes, serverData };
       }
     },
 
-    [ActionTypes.APPLY_DEPLOY_TO_ONLINE]: {
-      mapper({ tabId, serverData }: ActionPayloads.ApplyDeployToOnline) {
-        const callData: CoreProjectCall = { operation: 'apply-deploy-to-online', serverData };
+    [ActionTypes.APPLY_DEPLOY]: {
+      mapper({ tabId, serverData }: ActionPayloads.ApplyDeploy) {
+        const callData: CoreProjectCall = { operation: 'apply-deploy', serverData };
         return { tabId, callData };
       }
     },
