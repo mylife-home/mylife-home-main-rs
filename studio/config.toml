@@ -17,8 +17,3 @@ root = "../../mylife-home-studio-data-dev"
 [paths.project_manager]
 ui = "ui-projects"
 core = "core-projects"
-
-[paths.deploy]
-files = "files"
-recipes = "recipes"
-pinned_recipes_file = "pinned-recipes.json"

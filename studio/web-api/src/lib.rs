@@ -2,7 +2,6 @@ use ts_rs::Config;
 
 pub mod component_model;
 pub mod core_model;
-pub mod deploy;
 pub mod git;
 pub mod logging;
 pub mod online;

@@ -23,7 +23,6 @@ struct GitConfig {
 struct PathsConfig {
     pub root: PathBuf,
     pub project_manager: ProjectManagerPaths,
-    pub deploy: DeployPaths,
 }
 
 impl PathsConfig {
@@ -35,11 +34,6 @@ impl PathsConfig {
 
         self.project_manager.core = Self::resolve_path(&self.root, &self.project_manager.core);
         self.project_manager.ui = Self::resolve_path(&self.root, &self.project_manager.ui);
-
-        self.deploy.files = Self::resolve_path(&self.root, &self.deploy.files);
-        self.deploy.recipes = Self::resolve_path(&self.root, &self.deploy.recipes);
-        self.deploy.pinned_recipes_file =
-            Self::resolve_path(&self.root, &self.deploy.pinned_recipes_file);
     }
 
     fn resolve_path(base: &Path, child: &Path) -> PathBuf {
@@ -55,13 +49,6 @@ impl PathsConfig {
 struct ProjectManagerPaths {
     pub ui: PathBuf,
     pub core: PathBuf,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct DeployPaths {
-    pub files: PathBuf,
-    pub recipes: PathBuf,
-    pub pinned_recipes_file: PathBuf,
 }
 
 pub async fn init(

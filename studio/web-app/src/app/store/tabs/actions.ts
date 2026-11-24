@@ -58,14 +58,6 @@ export const newOnlineLogsTab = () => newTab({
   data: null
 });
 
-export const newDeployTab = () => newTab({
-  id: `deploy-${++idCounter}`,
-  title: `Déploiement`,
-  type: TabType.DEPLOY,
-  closable: true,
-  data: null
-});
-
 export const updateCoreDesignerTab = (id: string, data: DesignerTabActionData) => updateTab({
   id,
   title: `Designer Core '${data.projectId}'`,

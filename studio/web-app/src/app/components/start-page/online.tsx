@@ -7,7 +7,6 @@ import {
   newOnlineHistoryTab,
   newOnlineInstancesViewTab,
   newOnlineLogsTab,
-  newDeployTab,
 } from '../../store/tabs/actions';
 
 const Online: FunctionComponent<{ className?: string }> = ({ className }) => {
@@ -15,7 +14,6 @@ const Online: FunctionComponent<{ className?: string }> = ({ className }) => {
   const newOnlineHistory = useAction(newOnlineHistoryTab);
   const newOnlineInstancesView = useAction(newOnlineInstancesViewTab);
   const newOnlineLogs = useAction(newOnlineLogsTab);
-  const newDeploy = useAction(newDeployTab);
 
   return (
     <Container className={className}>
@@ -25,7 +23,6 @@ const Online: FunctionComponent<{ className?: string }> = ({ className }) => {
       <ItemLink text="Historique" onClick={newOnlineHistory} />
       <ItemLink text="Vue des instances" onClick={newOnlineInstancesView} />
       <ItemLink text="Vue des composants" onClick={newOnlineComponentsView} />
-      <ItemLink text="Déploiement" onClick={newDeploy} />
     </Container>
   );
 };

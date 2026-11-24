@@ -8,7 +8,6 @@ export const enum TabType {
   ONLINE_HISTORY = 'online-history',
   ONLINE_INSTANCES_VIEW = 'online-entities-view',
   ONLINE_LOGS = 'online-logs',
-  DEPLOY = 'deploy',
 }
 
 export interface TabActionData { }

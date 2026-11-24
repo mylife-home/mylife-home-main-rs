@@ -10,7 +10,6 @@ import OnlineComponentsView from '../online-components-view';
 import OnlineHistory from '../online-history';
 import OnlineInstancesView from '../online-instances-view';
 import OnlineLogs from '../online-logs';
-import Deploy from '../deploy';
 import { DialogText } from '../dialogs/common';
 
 import { TabType } from '../../store/tabs/types';
@@ -42,8 +41,6 @@ const UnsafePanel: FunctionComponent = () => {
       return (<OnlineInstancesView />);
     case TabType.ONLINE_LOGS:
       return (<OnlineLogs />);
-    case TabType.DEPLOY:
-      return (<Deploy />);
   }
 };
 
