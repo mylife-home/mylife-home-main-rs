@@ -1496,7 +1496,8 @@ register_ts!(RenameTemplateCoreProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetTemplateExportCoreProjectCall {
-    pub template_id: String,
+    /// null for the project's own view, a template id otherwise
+    pub template_id: Option<String>,
     pub export_type: String,
     pub export_id: String,
     pub component_id: String,
@@ -1521,7 +1522,8 @@ register_ts!(ClearTemplateExportCoreProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetComponentCoreProjectCall {
-    pub template_id: String,
+    /// null for the project's own view, a template id otherwise
+    pub template_id: Option<String>,
     pub component_id: String,
     pub definition: CoreComponentDefinition,
     pub x: i32,
@@ -1534,7 +1536,8 @@ register_ts!(SetComponentCoreProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct MoveComponentsCoreProjectCall {
-    pub template_id: String,
+    /// null for the project's own view, a template id otherwise
+    pub template_id: Option<String>,
     pub components_ids: Vec<String>,
     pub delta: CorePosition,
 }
@@ -1545,7 +1548,8 @@ register_ts!(MoveComponentsCoreProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigureComponentCoreProjectCall {
-    pub template_id: String,
+    /// null for the project's own view, a template id otherwise
+    pub template_id: Option<String>,
     pub component_id: String,
     pub config_id: String,
     #[ts(type = "any")]
@@ -1558,7 +1562,8 @@ register_ts!(ConfigureComponentCoreProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameComponentCoreProjectCall {
-    pub template_id: String,
+    /// null for the project's own view, a template id otherwise
+    pub template_id: Option<String>,
     pub component_id: String,
     pub new_id: String,
 }
@@ -1569,7 +1574,8 @@ register_ts!(RenameComponentCoreProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearComponentsCoreProjectCall {
-    pub template_id: String,
+    /// null for the project's own view, a template id otherwise
+    pub template_id: Option<String>,
     pub components_ids: Vec<String>,
 }
 
@@ -1579,7 +1585,8 @@ register_ts!(ClearComponentsCoreProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CopyComponentsToTemplateCoreProjectCall {
-    pub template_id: String,
+    /// null for the project's own view, a template id otherwise
+    pub template_id: Option<String>,
     pub components_ids: Vec<String>,
     pub target_template_id: String,
 }
@@ -1590,7 +1597,8 @@ register_ts!(CopyComponentsToTemplateCoreProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetBindingCoreProjectCall {
-    pub template_id: String,
+    /// null for the project's own view, a template id otherwise
+    pub template_id: Option<String>,
     pub binding: CoreBindingData,
 }
 
@@ -1600,7 +1608,8 @@ register_ts!(SetBindingCoreProjectCall);
 #[ts(export, export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearBindingCoreProjectCall {
-    pub template_id: String,
+    /// null for the project's own view, a template id otherwise
+    pub template_id: Option<String>,
     pub binding_id: String,
 }
 
