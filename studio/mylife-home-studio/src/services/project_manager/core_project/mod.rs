@@ -1,18 +1,27 @@
+mod import;
 pub mod model;
 pub mod resolver;
 
 #[cfg(test)]
 mod tests;
 
-use std::{collections::HashMap, mem, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashMap},
+    mem,
+    sync::Arc,
+};
 
 use common::utils::actors::{CallError, SpawnExt};
 use studio_web_api::project_manager;
 
 use serde::Serialize;
 
+use common::components::registry::RegistryHandle;
+
 use crate::{
-    services::project_manager::{InitialEmitter, ProjectManagerActorError},
+    services::project_manager::{
+        InitialEmitter, ProjectManagerActorError, ProjectManagerHandler, ProjectModel,
+    },
     utils::fs_collection::{self, FsCollectionHandle, Update},
     web::{NotifierManager, SessionEvent, SessionHandle},
 };
@@ -290,10 +299,18 @@ impl message::Message<Call> for CoreProject {
             }
             Call::SetBinding(call_data) => map_call_result(self.set_binding(call_data).await),
             Call::ClearBinding(call_data) => map_call_result(self.clear_binding(call_data).await),
-            Call::ClearTemplateExport(_) => todo!("clear-template-export"),
-            Call::PrepareImportFromOnline(_) => todo!("prepare-import-from-online"),
-            Call::PrepareImportFromProject(_) => todo!("prepare-import-from-project"),
-            Call::ApplyBulkUpdates(_) => todo!("apply-bulk-updates"),
+            Call::ClearTemplateExport(call_data) => {
+                map_call_result(self.clear_template_export(call_data).await)
+            }
+            Call::PrepareImportFromOnline(call_data) => {
+                map_call_result(self.prepare_import_from_online(call_data).await)
+            }
+            Call::PrepareImportFromProject(call_data) => {
+                map_call_result(self.prepare_import_from_project(call_data).await)
+            }
+            Call::ApplyBulkUpdates(call_data) => {
+                map_call_result(self.apply_bulk_updates(call_data).await)
+            }
             Call::Validate => todo!("validate"),
             Call::PrepareDeploy => todo!("prepare-deploy"),
             Call::ApplyDeploy(_) => todo!("apply-deploy"),
@@ -699,6 +716,150 @@ impl CoreProject {
         self.apply(|project, changes| project.clear_binding(changes, &view, &id))
             .await
     }
+
+    async fn prepare_import_from_online(
+        &mut self,
+        call_data: project_manager::PrepareImportFromOnlineCoreProjectCall,
+    ) -> Result<project_manager::PrepareBulkUpdatesCoreProjectCallResult, ProjectManagerActorError>
+    {
+        let source = online_source().await?;
+        let imports = import::from_online(&source, &call_data.config)?;
+
+        self.prepare_bulk_updates(imports)
+    }
+
+    /// What taking in another project would change.
+    async fn prepare_import_from_project(
+        &mut self,
+        call_data: project_manager::PrepareImportFromProjectCoreProjectCall,
+    ) -> Result<project_manager::PrepareBulkUpdatesCoreProjectCallResult, ProjectManagerActorError>
+    {
+        let manager = ProjectManagerHandler::new()?;
+        let source = manager
+            .get_project_model(
+                project_manager::ProjectType::Core,
+                call_data.config.project_id.clone(),
+            )
+            .await?;
+
+        let ProjectModel::Core(source) = source else {
+            unreachable!("asked for a core project, got a ui one")
+        };
+
+        // Flattened, because an import is about what runs.
+        let source = resolver::resolve(&source)?;
+        let imports = import::from_project(&source, &call_data.config)?;
+
+        self.prepare_bulk_updates(imports)
+    }
+
+    /// Removing a template export is prepared like an import: it drags enough
+    /// along that the designer is shown the whole of it first.
+    async fn clear_template_export(
+        &mut self,
+        call_data: project_manager::ClearTemplateExportCoreProjectCall,
+    ) -> Result<project_manager::PrepareBulkUpdatesCoreProjectCallResult, ProjectManagerActorError>
+    {
+        let change = project_manager::core_import_data::ObjectChange::Template(
+            project_manager::core_import_data::TemplateChange {
+                // There is only ever this one change, so the key is fixed.
+                key: String::from("update-template"),
+                id: call_data.template_id,
+                change_type: project_manager::core_import_data::ChangeType::Update,
+                dependencies: Vec::new(),
+                impacts: Vec::new(),
+                export_type: call_data.export_type,
+                export_id: call_data.export_id,
+            },
+        );
+
+        self.bulk_updates(import::ImportData::default(), vec![change])
+    }
+
+    /// Work out every write the changes call for, and hand both back.
+    fn prepare_bulk_updates(
+        &mut self,
+        imports: import::ImportData,
+    ) -> Result<project_manager::PrepareBulkUpdatesCoreProjectCallResult, ProjectManagerActorError>
+    {
+        let changes = import::prepare_changes(&imports, &self.model)?;
+        self.bulk_updates(imports, changes)
+    }
+
+    fn bulk_updates(
+        &mut self,
+        imports: import::ImportData,
+        mut changes: Vec<project_manager::core_import_data::ObjectChange>,
+    ) -> Result<project_manager::PrepareBulkUpdatesCoreProjectCallResult, ProjectManagerActorError>
+    {
+        let updates = import::build_updates(&imports, &self.model, &mut changes)?;
+
+        Ok(project_manager::PrepareBulkUpdatesCoreProjectCallResult {
+            changes,
+            server_data: serde_json::to_value(&updates)?,
+        })
+    }
+
+    /// Write the changes the designer picked.
+    async fn apply_bulk_updates(
+        &mut self,
+        call_data: project_manager::ApplyBulkUpdatesCoreProject,
+    ) -> Result<project_manager::ApplyBulkUpdatesCoreProjectCallResult, ProjectManagerActorError>
+    {
+        let updates: Vec<import::Update> = serde_json::from_value(call_data.server_data)?;
+        let selection: BTreeSet<String> = call_data.selection.into_iter().collect();
+
+        let stats = self
+            .apply_model_update(|project, changes| {
+                let (project, stats) =
+                    import::apply_updates(project, &updates, &selection, changes)?;
+
+                Ok(Some((project, stats)))
+            })
+            .await?
+            .unwrap_or(project_manager::BulkUpdatesStats {
+                plugins: 0,
+                components: 0,
+                templates: 0,
+                bindings: 0,
+            });
+
+        Ok(project_manager::ApplyBulkUpdatesCoreProjectCallResult { stats })
+    }
+}
+
+/// Every plugin and component the registry knows about.
+async fn online_source() -> Result<import::OnlineSource, ProjectManagerActorError> {
+    let registry = RegistryHandle::new()?;
+
+    let mut plugins = Vec::new();
+
+    for plugin in registry.get_plugins().await? {
+        let Some(instance) = plugin.instance else {
+            continue;
+        };
+
+        plugins.push((model::InstanceId::new(instance)?, plugin.metadata));
+    }
+
+    let mut components = Vec::new();
+
+    for component in registry.get_components().await? {
+        let Some(instance) = component.instance else {
+            continue;
+        };
+
+        components.push(import::OnlineComponent {
+            id: model::ComponentId::new(component.component_id)?,
+            instance: model::InstanceId::new(instance)?,
+            plugin: component.plugin,
+        });
+    }
+
+    Ok(import::OnlineSource {
+        plugins,
+        components,
+    })
 }
 
 fn toolbox_display(action: &str) -> Result<model::ToolboxDisplay, model::CoreModelError> {

@@ -17,6 +17,7 @@ mod components;
 mod copy;
 mod fixture;
 mod ids;
+mod import;
 mod import_ops;
 mod naming;
 mod plugins;
