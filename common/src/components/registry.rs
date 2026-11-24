@@ -104,6 +104,11 @@ impl RegistryHandle {
         self.actor.call(GetComponents).await
     }
 
+    /// Get all plugins, including the ones no component instantiates
+    pub async fn get_plugins(&self) -> Result<Vec<PluginInfo>, CallError> {
+        self.actor.call(GetPlugins).await
+    }
+
     /// Get info on a component
     pub async fn get_component(
         &self,
@@ -144,6 +149,13 @@ impl ComponentInfo {
             state: component_data.state().clone(),
         }
     }
+}
+
+/// One plugin an instance has declared.
+#[derive(Debug, Clone)]
+pub struct PluginInfo {
+    pub instance: Option<String>,
+    pub metadata: Arc<PluginMetadata>,
 }
 
 /// Specific registry access part for a component
@@ -354,6 +366,22 @@ impl Registry {
         self.components
             .values()
             .map(ComponentInfo::from_data)
+            .collect()
+    }
+
+    /// Every plugin of every instance. A plugin with no component is still
+    /// declared, so this cannot be derived from the components.
+    fn get_plugins(&self) -> Vec<PluginInfo> {
+        self.instances
+            .values()
+            .flat_map(|instance| {
+                let instance_name: Option<String> = (&instance.instance_name).into();
+
+                instance.plugins.values().map(move |plugin| PluginInfo {
+                    instance: instance_name.clone(),
+                    metadata: plugin.metadata().clone(),
+                })
+            })
             .collect()
     }
 
@@ -640,6 +668,18 @@ impl message::Message<GetComponents> for Registry {
     }
 }
 
+impl message::Message<GetPlugins> for Registry {
+    type Reply = Result<Vec<PluginInfo>, Infallible>;
+
+    async fn handle(
+        &mut self,
+        _msg: GetPlugins,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        Ok(self.get_plugins())
+    }
+}
+
 impl message::Message<ComponentAction> for Registry {
     type Reply = ();
 
@@ -700,6 +740,10 @@ struct GetComponentIds;
 /// Registry command: get all components
 #[derive(Debug, Clone)]
 struct GetComponents;
+
+/// Registry command: get all plugins
+#[derive(Debug, Clone)]
+struct GetPlugins;
 
 /// Registry command: get a component
 #[derive(Debug, Clone)]
