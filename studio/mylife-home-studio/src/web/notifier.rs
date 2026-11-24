@@ -143,16 +143,6 @@ impl<Data: serde::Serialize> NotifierManager<Data> {
 
         Some(notifier)
     }
-
-    /// Get a list of all active notifiers in the manager.
-    pub fn get_all_notifiers(&self) -> Vec<Notifier<Data>> {
-        self.notifiers.values().cloned().collect()
-    }
-
-    /// Check if there are no active notifiers in the manager.
-    pub fn is_empty(&self) -> bool {
-        self.notifiers.is_empty()
-    }
 }
 
 #[derive(Debug)]

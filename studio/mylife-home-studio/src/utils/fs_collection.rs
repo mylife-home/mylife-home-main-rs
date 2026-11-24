@@ -112,17 +112,6 @@ impl<T: DeserializeOwned + Serialize + Send + Sync + 'static> FsCollectionHandle
         self.actor.call(Start).await
     }
 
-    /// Sets the value of an item in the collection, creating it if it does not exist.
-    pub async fn set(&self, id: String, value: Arc<T>) -> Result<(), CallError<FsCollectionError>> {
-        self.actor
-            .call(Set {
-                id,
-                value,
-                kind: SetKind::Set,
-            })
-            .await
-    }
-
     /// Creates a new item in the collection with the given ID and value. Fails if the item already exists.
     pub async fn create(
         &self,
@@ -401,7 +390,6 @@ struct Set<T> {
 
 #[derive(Debug)]
 enum SetKind {
-    Set,
     Create,
     Update,
 }
@@ -417,13 +405,6 @@ impl<T: DeserializeOwned + Serialize + Send + Sync + 'static> message::Message<S
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
         match msg.kind {
-            SetKind::Set => {
-                if self.items.contains_key(&msg.id) {
-                    self.update(&msg.id, msg.value).await
-                } else {
-                    self.create(&msg.id, msg.value).await
-                }
-            }
             SetKind::Create => self.create(&msg.id, msg.value).await,
             SetKind::Update => self.update(&msg.id, msg.value).await,
         }
