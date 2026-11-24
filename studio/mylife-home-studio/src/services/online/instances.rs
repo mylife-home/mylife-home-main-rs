@@ -33,6 +33,17 @@ impl OnlineInstancesHandle {
         )?))
     }
 
+    /// The online instances declaring a capability, such as `bindings-api`.
+    ///
+    /// A deploy needs to know there is exactly one of some of these, and
+    /// validation reports when there is not.
+    pub async fn instances_with_capability(
+        &self,
+        capability: String,
+    ) -> Result<Vec<String>, CallError<OnlineInstancesError>> {
+        self.0.call(InstancesWithCapability(capability)).await
+    }
+
     /// Deploy a UI definition to the online instances
     pub async fn deploy_ui_definition(
         &self,
@@ -297,6 +308,21 @@ impl message::Message<types::InstanceInfo> for OnlineInstances {
 }
 
 #[derive(Debug)]
+struct InstancesWithCapability(String);
+
+impl message::Message<InstancesWithCapability> for OnlineInstances {
+    type Reply = Result<Vec<String>, OnlineInstancesError>;
+
+    async fn handle(
+        &mut self,
+        msg: InstancesWithCapability,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        Ok(self.with_capability(&msg.0).collect())
+    }
+}
+
+#[derive(Debug)]
 struct DeployUiDefinition(ui_model::Definition);
 
 impl message::Message<DeployUiDefinition> for OnlineInstances {
@@ -307,12 +333,7 @@ impl message::Message<DeployUiDefinition> for OnlineInstances {
         msg: DeployUiDefinition,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let mut ui_instances = self.instances.iter().filter_map(|(name, info)| {
-            info.capabilities
-                .iter()
-                .any(|capability| capability == "ui-api")
-                .then_some(name)
-        });
+        let mut ui_instances = self.with_capability("ui-api");
         let Some(instance_name) = ui_instances.next() else {
             return Err(OnlineInstancesError::UiInstanceNotFound);
         };
@@ -321,7 +342,7 @@ impl message::Message<DeployUiDefinition> for OnlineInstances {
         }
 
         self.rpc
-            .call::<_, ()>(instance_name.clone(), "definition.set", &msg.0, None)
+            .call::<_, ()>(instance_name, "definition.set", &msg.0, None)
             .await?;
 
         Ok(())
@@ -329,6 +350,17 @@ impl message::Message<DeployUiDefinition> for OnlineInstances {
 }
 
 impl OnlineInstances {
+    fn with_capability<'a>(&'a self, capability: &'a str) -> impl Iterator<Item = String> + 'a {
+        self.instances
+            .iter()
+            .filter(move |(_, info)| {
+                info.capabilities
+                    .iter()
+                    .any(|declared| declared == capability)
+            })
+            .map(|(name, _)| name.clone())
+    }
+
     fn set_instance(&mut self, instance_name: String, data: online::InstanceInfo) {
         self.instances.insert(instance_name.clone(), data.clone());
 
