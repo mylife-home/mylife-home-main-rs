@@ -49,14 +49,14 @@ impl ProjectManagerHandler {
         )?))
     }
 
-    /// Get project data
-    pub async fn get_project_data(
+    /// Get a project's model, opening it if it is not open already
+    pub async fn get_project_model(
         &self,
         project_type: project_manager::ProjectType,
         project_id: String,
-    ) -> Result<ProjectData, ProjectManagerActorError> {
+    ) -> Result<ProjectModel, ProjectManagerActorError> {
         self.0
-            .call(GetProjectData {
+            .call(GetProjectModel {
                 project_type,
                 project_id,
             })
@@ -82,9 +82,10 @@ impl ProjectManagerHandler {
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-pub enum ProjectData {
-    Core(Arc<project_manager::CoreProject>),
-    Ui(Arc<project_manager::UiProject>),
+/// An opened project, as its own model.
+pub enum ProjectModel {
+    Core(Arc<core_project::model::Project>),
+    Ui(Arc<ui_project::model::Project>),
 }
 
 #[derive(Debug)]
@@ -326,10 +327,10 @@ impl OpenedProjectEntry {
         }
     }
 
-    pub async fn get_data(&self) -> Result<ProjectData, ProjectManagerActorError> {
+    pub async fn get_model(&self) -> Result<ProjectModel, ProjectManagerActorError> {
         Ok(match &self.handle {
-            OpenedProjectHandle::Core(handle) => ProjectData::Core(handle.get_data().await?),
-            OpenedProjectHandle::Ui(handle) => ProjectData::Ui(handle.get_data().await?),
+            OpenedProjectHandle::Core(handle) => ProjectModel::Core(handle.get_model().await?),
+            OpenedProjectHandle::Ui(handle) => ProjectModel::Ui(handle.get_model().await?),
         })
     }
 
@@ -425,12 +426,16 @@ pub enum ProjectManagerActorError {
     InconsistentProjectData(String),
     #[error("UI model error: {0}")]
     UiModelError(#[from] ui_project::model::UiModelError),
+    #[error("Core model error: {0}")]
+    CoreModelError(#[from] core_project::model::CoreModelError),
     #[error("Opened project error: {0}")]
     OpenedProjectError(Box<CallError<ProjectManagerActorError>>),
     #[error("Notifier not found: {0}")]
     NotifierNotFound(String),
     #[error("Online instances error: {0}")]
     OnlineInstancesHandleError(#[from] OnlineInstancesError),
+    #[error("Online instances call error: {0}")]
+    OnlineInstancesCallError(#[from] CallError<OnlineInstancesError>),
 }
 
 impl Actor for ProjectManager {
@@ -1169,24 +1174,24 @@ impl message::Message<ServiceRequest<CallOpenedReq>> for ProjectManager {
 }
 
 #[derive(Debug)]
-struct GetProjectData {
+struct GetProjectModel {
     project_type: project_manager::ProjectType,
     project_id: String,
 }
 
-impl message::Message<GetProjectData> for ProjectManager {
-    type Reply = Result<ProjectData, ProjectManagerActorError>;
+impl message::Message<GetProjectModel> for ProjectManager {
+    type Reply = Result<ProjectModel, ProjectManagerActorError>;
 
     async fn handle(
         &mut self,
-        msg: GetProjectData,
+        msg: GetProjectModel,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let project = self
             .get_or_open_project(msg.project_type, msg.project_id)
             .await?;
 
-        let res = project.get_data().await;
+        let res = project.get_model().await;
 
         // Need to cleanup if just opened
         if !project.used() {

@@ -6,10 +6,11 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
-use studio_web_api::project_manager::{self, CoreProject};
+use studio_web_api::project_manager;
 
 use crate::services::project_manager::{
     ProjectManagerActorError,
+    core_project::model as core_model,
     ui_project::model::{self, Collection, Component, ComponentId, Plugin, PluginId, UiModelError},
 };
 
@@ -146,7 +147,7 @@ pub async fn load_online_component_data() -> Result<NewComponentData, ProjectMan
 }
 
 pub fn load_core_project_component_data(
-    _project_data: Arc<CoreProject>,
+    _project: &core_model::Project,
 ) -> Result<NewComponentData, ProjectManagerActorError> {
     // TODO: template instantiation
     std::todo!()

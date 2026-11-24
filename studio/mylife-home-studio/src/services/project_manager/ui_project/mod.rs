@@ -9,7 +9,7 @@ use crate::{
     services::{
         online::OnlineInstancesHandle,
         project_manager::{
-            InitialEmitter, ProjectData, ProjectManagerActorError, ProjectManagerHandler,
+            InitialEmitter, ProjectManagerActorError, ProjectManagerHandler, ProjectModel,
         },
     },
     utils::fs_collection::{self, FsCollectionHandle, Update},
@@ -107,9 +107,7 @@ impl UiProjectHandle {
         })?)
     }
 
-    pub async fn get_data(
-        &self,
-    ) -> Result<Arc<project_manager::UiProject>, ProjectManagerActorError> {
+    pub async fn get_model(&self) -> Result<Arc<model::Project>, ProjectManagerActorError> {
         let res = self.0.ask(Get).try_send().await;
 
         Ok(res.map_err(|e| ProjectManagerActorError::ActorCommunicationError(CallError::from(e)))?)
@@ -234,10 +232,10 @@ impl message::Message<Close> for UiProject {
 struct Get;
 
 impl message::Message<Get> for UiProject {
-    type Reply = Arc<project_manager::UiProject>;
+    type Reply = Arc<model::Project>;
 
     async fn handle(&mut self, _msg: Get, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
-        self.data.clone()
+        Arc::new(self.model.clone())
     }
 }
 
@@ -554,15 +552,15 @@ impl UiProject {
     ) -> Result<project_manager::RefreshComponentsUiProjectCallResult, ProjectManagerActorError>
     {
         let manager = ProjectManagerHandler::new()?;
-        let project_data = manager
-            .get_project_data(project_manager::ProjectType::Core, call_data.project_id)
+        let project = manager
+            .get_project_model(project_manager::ProjectType::Core, call_data.project_id)
             .await?;
 
-        let ProjectData::Core(project_data) = project_data else {
-            unreachable!("Expected core project data")
+        let ProjectModel::Core(project) = project else {
+            unreachable!("asked for a core project, got something else")
         };
 
-        let component_data = component::load_core_project_component_data(project_data)?;
+        let component_data = component::load_core_project_component_data(&project)?;
 
         let usage = self.model.collect_component_usage();
         let (breaking_operations, server_data) =

@@ -1,7 +1,14 @@
-use std::{collections::HashMap, mem, sync::Arc, todo};
+pub mod model;
+
+#[cfg(test)]
+mod tests;
+
+use std::{collections::HashMap, mem, sync::Arc};
 
 use common::utils::actors::{CallError, SpawnExt};
 use studio_web_api::project_manager;
+
+use serde::Serialize;
 
 use crate::{
     services::project_manager::{InitialEmitter, ProjectManagerActorError},
@@ -10,11 +17,6 @@ use crate::{
 };
 
 use kameo::{error::Infallible, message, prelude::*};
-
-pub mod model;
-
-#[cfg(test)]
-mod tests;
 
 pub fn new_core_project_data() -> Arc<project_manager::CoreProject> {
     Arc::new(project_manager::CoreProject {
@@ -35,9 +37,14 @@ impl CoreProjectHandle {
     ) -> Result<Self, ProjectManagerActorError> {
         let data = fs_collection.get(name.clone()).await?;
 
+        // A stored project the model refuses cannot be served at all, so it
+        // fails here rather than on whichever call happens to touch it first.
+        let model = model::Project::try_from(data.as_ref())?;
+
         let actor = CoreProject::spawn_unbounded(CoreProjectArgs {
             name,
             data,
+            model,
             fs_collection,
         });
 
@@ -87,9 +94,7 @@ impl CoreProjectHandle {
         })?)
     }
 
-    pub async fn get_data(
-        &self,
-    ) -> Result<Arc<project_manager::CoreProject>, ProjectManagerActorError> {
+    pub async fn get_model(&self) -> Result<Arc<model::Project>, ProjectManagerActorError> {
         let res = self.0.ask(Get).try_send().await;
 
         Ok(res.map_err(|e| ProjectManagerActorError::ActorCommunicationError(CallError::from(e)))?)
@@ -130,6 +135,7 @@ impl CoreProjectHandle {
 struct CoreProjectArgs {
     name: String,
     data: Arc<project_manager::CoreProject>,
+    model: model::Project,
     fs_collection: FsCollectionHandle<project_manager::CoreProject>,
 }
 
@@ -138,7 +144,10 @@ struct CoreProjectArgs {
 struct CoreProject {
     name: String,
     notifiers: NotifierManager<project_manager::UpdateProjectNotification>,
+    /// The stored project, and the domain model of it. Two views of one
+    /// project, replaced together and never apart, as in the UI project.
     data: Arc<project_manager::CoreProject>,
+    model: model::Project,
     fs_collection: FsCollectionHandle<project_manager::CoreProject>,
 }
 
@@ -153,6 +162,7 @@ impl Actor for CoreProject {
             name: args.name,
             notifiers: NotifierManager::new("project-manager/opened-project"),
             data: args.data,
+            model: args.model,
             fs_collection: args.fs_collection,
         })
     }
@@ -167,10 +177,11 @@ impl message::Message<Open> for CoreProject {
     type Reply = Result<(String, InitialEmitter), ProjectManagerActorError>;
 
     async fn handle(&mut self, msg: Open, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
-        let notifier = self.notifiers.create_notifier(msg.session);
+        let mut changes = Vec::new();
+        self.model.initial_changes(&mut changes);
+        let notifications = model::wire::notifications(&changes);
 
-        // TODO: initial notifications
-        let notifications = Vec::new();
+        let notifier = self.notifiers.create_notifier(msg.session);
 
         let notifier_id = notifier.notifier_id().to_owned();
         let notification_emitter = InitialEmitter::new(notifier.clone(), notifications);
@@ -204,10 +215,10 @@ impl message::Message<Close> for CoreProject {
 struct Get;
 
 impl message::Message<Get> for CoreProject {
-    type Reply = Arc<project_manager::CoreProject>;
+    type Reply = Arc<model::Project>;
 
     async fn handle(&mut self, _msg: Get, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
-        self.data.clone()
+        Arc::new(self.model.clone())
     }
 }
 
@@ -221,8 +232,71 @@ struct Call {
 impl message::Message<Call> for CoreProject {
     type Reply = Result<project_manager::ProjectCallResult, ProjectManagerActorError>;
 
-    async fn handle(&mut self, msg: Call, ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
-        todo!()
+    async fn handle(&mut self, msg: Call, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
+        let Some(notifier) = self.notifiers.get_notifier(&msg.session, &msg.notifier_id) else {
+            return Err(ProjectManagerActorError::NotifierNotFound(
+                msg.notifier_id.clone(),
+            ));
+        };
+
+        if notifier.session_id() != msg.session.id() {
+            return Err(ProjectManagerActorError::NotifierNotFound(
+                msg.notifier_id.clone(),
+            ));
+        }
+
+        let call_data =
+            serde_json::from_value::<project_manager::CoreProjectCall>(msg.call_data.0)?;
+
+        fn map_call_result<T: Serialize>(
+            result: Result<T, ProjectManagerActorError>,
+        ) -> Result<project_manager::ProjectCallResult, ProjectManagerActorError> {
+            match result {
+                Ok(value) => Ok(project_manager::ProjectCallResult(serde_json::to_value(
+                    value,
+                )?)),
+                Err(err) => Err(err),
+            }
+        }
+
+        use project_manager::CoreProjectCall as Call;
+
+        match call_data {
+            Call::UpdateToolbox(call_data) => map_call_result(self.update_toolbox(call_data).await),
+            Call::SetTemplate(call_data) => map_call_result(self.set_template(call_data).await),
+            Call::ClearTemplate(call_data) => map_call_result(self.clear_template(call_data).await),
+            Call::RenameTemplate(call_data) => {
+                map_call_result(self.rename_template(call_data).await)
+            }
+            Call::SetTemplateExport(call_data) => {
+                map_call_result(self.set_template_export(call_data).await)
+            }
+            Call::SetComponent(call_data) => map_call_result(self.set_component(call_data).await),
+            Call::MoveComponents(call_data) => {
+                map_call_result(self.move_components(call_data).await)
+            }
+            Call::ConfigureComponent(call_data) => {
+                map_call_result(self.configure_component(call_data).await)
+            }
+            Call::RenameComponent(call_data) => {
+                map_call_result(self.rename_component(call_data).await)
+            }
+            Call::ClearComponents(call_data) => {
+                map_call_result(self.clear_components(call_data).await)
+            }
+            Call::CopyComponentsToTemplate(call_data) => {
+                map_call_result(self.copy_components_to_template(call_data).await)
+            }
+            Call::SetBinding(call_data) => map_call_result(self.set_binding(call_data).await),
+            Call::ClearBinding(call_data) => map_call_result(self.clear_binding(call_data).await),
+            Call::ClearTemplateExport(_) => todo!("clear-template-export"),
+            Call::PrepareImportFromOnline(_) => todo!("prepare-import-from-online"),
+            Call::PrepareImportFromProject(_) => todo!("prepare-import-from-project"),
+            Call::ApplyBulkUpdates(_) => todo!("apply-bulk-updates"),
+            Call::Validate => todo!("validate"),
+            Call::PrepareDeploy => todo!("prepare-deploy"),
+            Call::ApplyDeploy(_) => todo!("apply-deploy"),
+        }
     }
 }
 
@@ -239,7 +313,7 @@ impl message::Message<Update<project_manager::CoreProject>> for CoreProject {
         }
 
         match msg.kind {
-            fs_collection::Kind::Created { value } => {
+            fs_collection::Kind::Created { .. } => {
                 tracing::warn!(name = self.name, "unexpected creation of project");
             }
             fs_collection::Kind::Deleted => {
@@ -273,9 +347,84 @@ impl message::Message<Update<project_manager::CoreProject>> for CoreProject {
 }
 
 impl CoreProject {
-    fn reload(&mut self, value: Arc<project_manager::CoreProject>) {
-        // TODO
-        self.data = value;
+    /// Take a project written underneath us.
+    ///
+    /// A project the model refuses is not taken: the pair in memory stays the
+    /// one that was last known to hold together, and nothing is announced.
+    fn reload(&mut self, data: Arc<project_manager::CoreProject>) {
+        let model = match model::Project::try_from(data.as_ref()) {
+            Ok(model) => model,
+            Err(error) => {
+                tracing::error!(
+                    %error,
+                    name = self.name,
+                    "core project written outside the studio does not fit the model, keeping the one in memory"
+                );
+                return;
+            }
+        };
+
+        self.data = data;
+        self.model = model;
+
+        let mut changes = vec![model::Change::Reset];
+        self.model.initial_changes(&mut changes);
+
+        self.notify_all(&model::wire::notifications(&changes));
+    }
+
+    fn notify_all(&mut self, notifications: &[project_manager::UpdateProjectNotification]) {
+        for notification in notifications {
+            self.notifiers.notify_all(notification);
+        }
+    }
+
+    /// Run one operation against the domain model, store what it produced and
+    /// announce what it changed.
+    ///
+    /// Same shape as the UI project's bridge: the operation can only fail with
+    /// a `CoreModelError`, and anything it records is turned into notifications in
+    /// one place.
+    async fn apply_model_update<T>(
+        &mut self,
+        operation: impl FnOnce(
+            &model::Project,
+            &mut Vec<model::Change>,
+        ) -> Result<Option<(model::Project, T)>, model::CoreModelError>,
+    ) -> Result<Option<T>, ProjectManagerActorError> {
+        let mut changes = Vec::new();
+        let Some((model, result)) = operation(&self.model, &mut changes)? else {
+            return Ok(None);
+        };
+
+        let data = Arc::new(project_manager::CoreProject::from(&model));
+
+        self.fs_collection
+            .update(self.name.clone(), data.clone())
+            .await?;
+
+        self.data = data;
+        self.model = model;
+
+        self.notify_all(&model::wire::notifications(&changes));
+
+        Ok(Some(result))
+    }
+
+    /// The common case: an operation that returns nothing.
+    async fn apply(
+        &mut self,
+        operation: impl FnOnce(
+            &model::Project,
+            &mut Vec<model::Change>,
+        ) -> Result<Option<model::Project>, model::CoreModelError>,
+    ) -> Result<(), ProjectManagerActorError> {
+        self.apply_model_update(|project, changes| {
+            Ok(operation(project, changes)?.map(|project| (project, ())))
+        })
+        .await?;
+
+        Ok(())
     }
 }
 
@@ -288,5 +437,276 @@ impl message::Message<SessionEvent> for CoreProject {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.notifiers.session_event(&msg)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Operations
+//
+// Each one is the same three steps: turn the untyped call payload into typed
+// values, run one model operation, let the bridge store and notify.
+// ---------------------------------------------------------------------------
+
+impl CoreProject {
+    async fn update_toolbox(
+        &mut self,
+        call_data: project_manager::UpdateToolboxCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let project_manager::UpdateToolboxCoreProjectCall {
+            item_type,
+            item_id,
+            action,
+        } = call_data;
+
+        match (item_type.as_str(), action.as_str()) {
+            ("instance", "show") | ("instance", "hide") => {
+                let instance = model::InstanceId::new(&item_id)?;
+                let display = toolbox_display(&action)?;
+
+                self.apply(|project, changes| {
+                    project.set_instance_display(changes, &instance, display)
+                })
+                .await
+            }
+
+            ("instance", "delete") => {
+                let instance = model::InstanceId::new(&item_id)?;
+
+                self.apply(|project, changes| {
+                    project.clear_unused_instance_plugins(changes, &instance)
+                })
+                .await
+            }
+
+            ("plugin", "show") | ("plugin", "hide") => {
+                let plugin = model::PluginId::new(&item_id)?;
+                let display = toolbox_display(&action)?;
+
+                self.apply(|project, changes| project.set_plugin_display(changes, &plugin, display))
+                    .await
+            }
+
+            ("plugin", "delete") => {
+                let plugin = model::PluginId::new(&item_id)?;
+
+                self.apply(|project, changes| project.clear_plugin(changes, &plugin))
+                    .await
+            }
+
+            ("instance", _) | ("plugin", _) => Err(model::CoreModelError::UnknownValue {
+                kind: "toolbox action",
+                value: action,
+            }
+            .into()),
+
+            _ => Err(model::CoreModelError::UnknownValue {
+                kind: "toolbox item type",
+                value: item_type,
+            }
+            .into()),
+        }
+    }
+
+    async fn set_template(
+        &mut self,
+        call_data: project_manager::SetTemplateCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let id = model::TemplateId::new(&call_data.template_id)?;
+
+        self.apply(|project, changes| project.set_template(changes, id).map(Some))
+            .await
+    }
+
+    async fn clear_template(
+        &mut self,
+        call_data: project_manager::ClearTemplateCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let id = model::TemplateId::new(&call_data.template_id)?;
+
+        self.apply(|project, changes| project.clear_template(changes, &id))
+            .await
+    }
+
+    async fn rename_template(
+        &mut self,
+        call_data: project_manager::RenameTemplateCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let id = model::TemplateId::new(&call_data.template_id)?;
+        let new_id = model::TemplateId::new(&call_data.new_id)?;
+
+        self.apply(|project, changes| project.rename_template(changes, &id, new_id))
+            .await
+    }
+
+    async fn set_template_export(
+        &mut self,
+        call_data: project_manager::SetTemplateExportCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let template_id = model::TemplateId::new(&call_data.template_id)?;
+        let kind = model::ExportKind::parse(&call_data.export_type)?;
+        let export_id = model::ExportId::new(&call_data.export_id)?;
+        let component_id = model::ComponentId::new(&call_data.component_id)?;
+
+        self.apply(|project, changes| {
+            project
+                .set_template_export(
+                    changes,
+                    &template_id,
+                    kind,
+                    export_id,
+                    &component_id,
+                    &call_data.property_name,
+                )
+                .map(Some)
+        })
+        .await
+    }
+
+    async fn set_component(
+        &mut self,
+        call_data: project_manager::SetComponentCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let view = model::wire::view_key(&call_data.template_id)?;
+        let id = model::ComponentId::new(&call_data.component_id)?;
+        let definition = model::ComponentDefinition::try_from(&call_data.definition)?;
+        let position = model::Position {
+            x: call_data.x,
+            y: call_data.y,
+        };
+
+        self.apply(|project, changes| {
+            project
+                .set_component(changes, &view, id, definition, position)
+                .map(Some)
+        })
+        .await
+    }
+
+    async fn move_components(
+        &mut self,
+        call_data: project_manager::MoveComponentsCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let view = model::wire::view_key(&call_data.template_id)?;
+        let ids = model::wire::component_ids(&call_data.components_ids)?;
+        let delta = model::Position {
+            x: call_data.delta.x,
+            y: call_data.delta.y,
+        };
+
+        self.apply(|project, changes| {
+            project
+                .move_components(changes, &view, &ids, delta)
+                .map(Some)
+        })
+        .await
+    }
+
+    async fn configure_component(
+        &mut self,
+        call_data: project_manager::ConfigureComponentCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let view = model::wire::view_key(&call_data.template_id)?;
+        let id = model::ComponentId::new(&call_data.component_id)?;
+
+        self.apply(|project, changes| {
+            project
+                .configure_component(
+                    changes,
+                    &view,
+                    id,
+                    &call_data.config_id,
+                    call_data.config_value,
+                )
+                .map(Some)
+        })
+        .await
+    }
+
+    async fn rename_component(
+        &mut self,
+        call_data: project_manager::RenameComponentCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let view = model::wire::view_key(&call_data.template_id)?;
+        let id = model::ComponentId::new(&call_data.component_id)?;
+        let new_id = model::ComponentId::new(&call_data.new_id)?;
+
+        self.apply(|project, changes| {
+            project
+                .rename_component(changes, &view, &id, new_id)
+                .map(Some)
+        })
+        .await
+    }
+
+    async fn clear_components(
+        &mut self,
+        call_data: project_manager::ClearComponentsCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let view = model::wire::view_key(&call_data.template_id)?;
+        let ids = model::wire::component_ids(&call_data.components_ids)?;
+
+        self.apply(|project, changes| project.clear_components(changes, &view, &ids).map(Some))
+            .await
+    }
+
+    async fn copy_components_to_template(
+        &mut self,
+        call_data: project_manager::CopyComponentsToTemplateCoreProjectCall,
+    ) -> Result<project_manager::CopyComponentsCoreProjectCallResult, ProjectManagerActorError>
+    {
+        let source = model::wire::view_key(&call_data.template_id)?;
+        let target = model::wire::view_key(&call_data.target_template_id)?;
+        let ids = model::wire::component_ids(&call_data.components_ids)?;
+
+        let stats = self
+            .apply_model_update(|project, changes| {
+                let (project, components, bindings) =
+                    project.copy_components(changes, &source, &ids, &target)?;
+
+                Ok(Some((
+                    project,
+                    project_manager::CopyComponentsStats {
+                        components: components as i32,
+                        bindings: bindings as i32,
+                    },
+                )))
+            })
+            .await?
+            .expect("copy always reports its result");
+
+        Ok(project_manager::CopyComponentsCoreProjectCallResult { stats })
+    }
+
+    async fn set_binding(
+        &mut self,
+        call_data: project_manager::SetBindingCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let view = model::wire::view_key(&call_data.template_id)?;
+        let binding = model::Binding::try_from(&call_data.binding)?;
+
+        self.apply(|project, changes| project.set_binding(changes, &view, binding).map(Some))
+            .await
+    }
+
+    async fn clear_binding(
+        &mut self,
+        call_data: project_manager::ClearBindingCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let view = model::wire::view_key(&call_data.template_id)?;
+        let id = model::wire::binding_id(&call_data.binding_id)?;
+
+        self.apply(|project, changes| project.clear_binding(changes, &view, &id))
+            .await
+    }
+}
+
+fn toolbox_display(action: &str) -> Result<model::ToolboxDisplay, model::CoreModelError> {
+    match action {
+        "show" => Ok(model::ToolboxDisplay::Show),
+        "hide" => Ok(model::ToolboxDisplay::Hide),
+        _ => Err(model::CoreModelError::UnknownValue {
+            kind: "toolbox action",
+            value: action.to_owned(),
+        }),
     }
 }
