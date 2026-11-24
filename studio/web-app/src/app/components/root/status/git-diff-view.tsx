@@ -5,7 +5,7 @@ import { makeStyles } from '@material-ui/core/styles';
 
 import { AppState } from '../../../store/types';
 import { getGitDiffChunk } from '../../../store/git/selectors';
-import { diff } from '../../../store/git/types';
+import { GitDiffChange } from '../../../store/git/types';
 
 // https://github.com/olahol/viewdiff/blob/master/client.js
 
@@ -83,7 +83,7 @@ const ChunkView: FunctionComponent<{ chunkId: string }> = ({ chunkId }) => {
   );
 };
 
-const Change: FunctionComponent<{ change: diff.Change }> = ({ change }) => {
+const Change: FunctionComponent<{ change: GitDiffChange }> = ({ change }) => {
   const classes = useStyles();
   const ln1 = change.type === 'normal' ? change.ln1 : change.ln;
   const ln2 = change.type === 'normal' ? change.ln2 : change.ln;

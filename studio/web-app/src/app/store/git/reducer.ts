@@ -1,6 +1,6 @@
 import { createReducer, PayloadAction } from '@reduxjs/toolkit';
 import { arrayAdd, createTable, tableClear, tableSet } from '../common/reducer-tools';
-import { ActionTypes, ActionPayloads, GitState, GitStatus, DEFAULT_STATUS, GitDiff, Feature, File, Chunk, GitDiffFile, diff } from './types';
+import { ActionTypes, ActionPayloads, GitState, GitStatus, DEFAULT_STATUS, GitDiff, Feature, File, Chunk, GitDiffFile, GitDiffChunk } from './types';
 
 const initialState: GitState = {
   notifierId: null,
@@ -38,8 +38,14 @@ export default createReducer(initialState, {
     }
 
     for (const file of action.payload.files) {
-      const id = createFile(state, file);
+      // A file outside every registered path belongs to no feature, and the
+      // view groups by feature, so there is nowhere to show it.
       const feature = state.features.byId[file.feature];
+      if (!feature) {
+        continue;
+      }
+
+      const id = createFile(state, file);
       arrayAdd(feature.files, id, true);
     }
 
@@ -106,7 +112,7 @@ function createFile(state: GitState, file: GitDiffFile) {
   return fileId;
 }
 
-function createChunk(state: GitState, id: string, chunk: diff.Chunk) {
+function createChunk(state: GitState, id: string, chunk: GitDiffChunk) {
   const newChunk: Chunk = { id, ...chunk };
   tableSet(state.chunks, newChunk);
   return id;

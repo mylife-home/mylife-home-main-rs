@@ -1,9 +1,14 @@
-import type { GitStatus, GitDiff, GitDiffFile } from '../../api/git';
-import type { diff } from '../../api/git';
+import type { GitStatus, GitDiff, GitDiffFile, GitDiffChunk, GitDiffChange } from '../../api/git';
 import { Table } from '../common/types';
-export { DEFAULT_STATUS } from '../../api/git';
-export type { diff };
-export type { GitStatus, GitDiff, GitDiffFile };
+export type { GitStatus, GitDiff, GitDiffFile, GitDiffChunk, GitDiffChange };
+
+export const DEFAULT_STATUS: GitStatus = {
+  appUrl: null,
+  branch: '<unknown>',
+  changedFeatures: [],
+  ahead: null,
+  behind: null,
+};
 
 export const enum ActionTypes {
   SET_NOTIFICATION = 'git/set-notification',
@@ -34,14 +39,14 @@ export interface Feature {
   files: string[];
 }
 
-export interface File extends Omit<diff.File, 'chunks'> {
+export interface File extends Omit<GitDiffFile, 'chunks' | 'feature'> {
   id: string;
   name: string;
   chunks: string[];
   staged: boolean;
 }
 
-export interface Chunk extends diff.Chunk {
+export interface Chunk extends GitDiffChunk {
   id: string;
 }
 

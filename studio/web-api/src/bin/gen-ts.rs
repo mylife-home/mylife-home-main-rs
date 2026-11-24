@@ -34,29 +34,6 @@ export const MemberType = { STATE: 'state', ACTION: 'action' } as const;
 export const ConfigType = { STRING: 'string', BOOL: 'bool', INTEGER: 'integer', FLOAT: 'float' } as const;
 export const PluginUsage = { SENSOR: 'sensor', ACTUATOR: 'actuator', LOGIC: 'logic', UI: 'ui' } as const;",
     },
-    Appendix {
-        file: "git.ts",
-        content: "\
-import parseDiff from 'parse-diff';
-
-export namespace diff {
-  export type File = parseDiff.File;
-  export type Chunk = parseDiff.Chunk;
-  export type NormalChange = parseDiff.NormalChange;
-  export type AddChange = parseDiff.AddChange;
-  export type DeleteChange = parseDiff.DeleteChange;
-  export type ChangeType = parseDiff.ChangeType;
-  export type Change = parseDiff.Change;
-}
-
-export const DEFAULT_STATUS: GitStatus = {
-  appUrl: null,
-  branch: '<unknown>',
-  changedFeatures: [],
-  ahead: null,
-  behind: null,
-};",
-    },
 ];
 
 fn main() {
