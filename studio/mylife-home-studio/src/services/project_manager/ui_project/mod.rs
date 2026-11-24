@@ -10,11 +10,6 @@ use crate::{
         online::OnlineInstancesHandle,
         project_manager::{
             InitialEmitter, ProjectData, ProjectManagerActorError, ProjectManagerHandler,
-            ui_project::{
-                component::ComponentUsageCollector, control::ControlOps, project::ProjectOps,
-                template::TemplateOps, template_instance::TemplateInstanceOps, utils::ArcMapOps,
-                window::WindowOps,
-            },
         },
     },
     utils::fs_collection::{self, FsCollectionHandle, Update},
@@ -24,17 +19,11 @@ use crate::{
 use kameo::{error::Infallible, message, prelude::*};
 
 mod component;
-mod control;
-mod default_window;
-mod project;
-mod resource;
-mod style;
-mod template;
-mod template_instance;
-mod utils;
-mod validation;
-mod view;
-mod window;
+mod deploy;
+pub mod model;
+
+#[cfg(test)]
+mod tests;
 
 pub fn new_ui_project_data() -> Arc<project_manager::UiProject> {
     Arc::new(project_manager::UiProject {
@@ -61,9 +50,14 @@ impl UiProjectHandle {
     ) -> Result<Self, ProjectManagerActorError> {
         let data = fs_collection.get(name.clone()).await?;
 
+        // A stored project the model refuses cannot be served at all, so it
+        // fails here rather than on whichever call happens to touch it first.
+        let model = model::Project::try_from(data.as_ref())?;
+
         let actor = UiProject::spawn_unbounded(UiProjectArgs {
             name,
             data,
+            model,
             fs_collection,
         });
 
@@ -156,6 +150,7 @@ impl UiProjectHandle {
 struct UiProjectArgs {
     name: String,
     data: Arc<project_manager::UiProject>,
+    model: model::Project,
     fs_collection: FsCollectionHandle<project_manager::UiProject>,
 }
 
@@ -164,7 +159,13 @@ struct UiProjectArgs {
 struct UiProject {
     name: String,
     notifiers: NotifierManager<project_manager::UpdateProjectNotification>,
+    /// The stored project, and the domain model of it.
+    ///
+    /// Two views of one project, replaced together and never apart, so nothing
+    /// below has to ask whether they agree. `data` is what `fs_collection`
+    /// writes and hands back; `model` is what the operations run on.
     data: Arc<project_manager::UiProject>,
+    model: model::Project,
     fs_collection: FsCollectionHandle<project_manager::UiProject>,
 }
 
@@ -179,6 +180,7 @@ impl Actor for UiProject {
             name: args.name,
             notifiers: NotifierManager::new("project-manager/opened-project"),
             data: args.data,
+            model: args.model,
             fs_collection: args.fs_collection,
         })
     }
@@ -193,9 +195,12 @@ impl message::Message<Open> for UiProject {
     type Reply = Result<(String, InitialEmitter), ProjectManagerActorError>;
 
     async fn handle(&mut self, msg: Open, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
+        // Built before the notifier, which borrows `self.notifiers`.
+        let mut changes = Vec::new();
+        self.model.initial_changes(&mut changes);
+        let notifications = model::wire::notifications(&changes);
+
         let notifier = self.notifiers.create_notifier(msg.session);
-        let mut notifications = Vec::new();
-        self.data.initial_notifications(&mut notifications);
 
         let notifier_id = notifier.notifier_id().to_owned();
         let notification_emitter = InitialEmitter::new(notifier.clone(), notifications);
@@ -449,36 +454,72 @@ impl message::Message<SessionEvent> for UiProject {
 }
 
 impl UiProject {
-    fn reload(&mut self, value: Arc<project_manager::UiProject>) {
-        self.data = value;
+    /// Take a project written underneath us.
+    ///
+    /// A project the model refuses is not taken: the pair in memory stays the
+    /// one that was last known to hold together, and nothing is announced.
+    /// Serving a project no call can operate on would be worse.
+    fn reload(&mut self, data: Arc<project_manager::UiProject>) {
+        let model = match model::Project::try_from(data.as_ref()) {
+            Ok(model) => model,
+            Err(error) => {
+                tracing::error!(
+                    %error,
+                    name = self.name,
+                    "UI project written outside the studio does not fit the model, keeping the one in memory"
+                );
+                return;
+            }
+        };
 
-        let mut notifications = Vec::new();
+        self.data = data;
+        self.model = model;
 
-        notifications.push(project_manager::UpdateProjectNotification::Reset(
-            project_manager::ResetProjectNotification {},
-        ));
+        let mut changes = vec![model::Change::Reset];
+        self.model.initial_changes(&mut changes);
 
-        self.data.initial_notifications(&mut notifications);
-        self.notify_all(&notifications);
+        self.notify_all(&model::wire::notifications(&changes));
     }
 
-    fn notify_all(&mut self, notifications: &Vec<project_manager::UpdateProjectNotification>) {
+    fn notify_all(&mut self, notifications: &[project_manager::UpdateProjectNotification]) {
         for notification in notifications {
             self.notifiers.notify_all(notification);
         }
     }
 
-    async fn apply_update(
+    /// Run one operation against the domain model, store what it produced and
+    /// announce what it changed.
+    ///
+    /// `Ok(None)` from the operation means nothing moved, so nothing is stored
+    /// and nothing is notified. An operation that fails has written nothing:
+    /// `self` is still the project it was handed.
+    ///
+    /// The outbound conversion happens per call and is not worth avoiding:
+    /// `fs_collection` serialises the whole project to JSON and rewrites its
+    /// file every time, so a `UiProject` has to exist anyway, and building one
+    /// from the model is a rounding error next to that write.
+    async fn apply_model_update(
         &mut self,
-        new_data: Arc<project_manager::UiProject>,
-        notifications: Vec<project_manager::UpdateProjectNotification>,
+        operation: impl FnOnce(
+            &model::Project,
+            &mut Vec<model::Change>,
+        ) -> Result<Option<model::Project>, model::UiModelError>,
     ) -> Result<(), ProjectManagerActorError> {
+        let mut changes = Vec::new();
+        let Some(model) = operation(&self.model, &mut changes)? else {
+            return Ok(());
+        };
+
+        let data = Arc::new(project_manager::UiProject::from(&model));
+
         self.fs_collection
-            .update(self.name.clone(), new_data.clone())
+            .update(self.name.clone(), data.clone())
             .await?;
 
-        self.data = new_data;
-        self.notify_all(&notifications);
+        self.data = data;
+        self.model = model;
+
+        self.notify_all(&model::wire::notifications(&changes));
 
         Ok(())
     }
@@ -486,7 +527,7 @@ impl UiProject {
     async fn validate(
         &mut self,
     ) -> Result<project_manager::ValidateUiProjectCallResult, ProjectManagerActorError> {
-        let errors = self.data.deploy().err().unwrap_or_default();
+        let errors = deploy::deploy(&self.model).err().unwrap_or_default();
 
         Ok(project_manager::ValidateUiProjectCallResult { errors })
     }
@@ -497,11 +538,9 @@ impl UiProject {
     {
         let component_data = component::load_online_component_data().await?;
 
-        let collector = ComponentUsageCollector::new();
-        self.data.collect_component_usage(&collector);
-        let usage = collector.usage();
+        let usage = self.model.collect_component_usage();
         let (breaking_operations, server_data) =
-            component::prepare_refresh(&self.data, usage, component_data)?;
+            component::prepare_refresh(&self.model, &usage, component_data)?;
 
         Ok(project_manager::RefreshComponentsUiProjectCallResult {
             breaking_operations,
@@ -525,11 +564,9 @@ impl UiProject {
 
         let component_data = component::load_core_project_component_data(project_data)?;
 
-        let collector = ComponentUsageCollector::new();
-        self.data.collect_component_usage(&collector);
-        let usage = collector.usage();
+        let usage = self.model.collect_component_usage();
         let (breaking_operations, server_data) =
-            component::prepare_refresh(&self.data, usage, component_data)?;
+            component::prepare_refresh(&self.model, &usage, component_data)?;
 
         Ok(project_manager::RefreshComponentsUiProjectCallResult {
             breaking_operations,
@@ -541,17 +578,18 @@ impl UiProject {
         &mut self,
         call_data: project_manager::ApplyRefreshComponentsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data =
-            component::apply_refresh(&self.data, &mut notifications, call_data.server_data)?;
+        // Parsed before the model is touched, so the operation itself can only
+        // fail with a `UiModelError`.
+        let refresh = component::Refresh::parse(call_data.server_data)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| refresh.apply(project, changes).map(Some))
+            .await
     }
 
     async fn deploy(
         &mut self,
     ) -> Result<project_manager::DeployUiProjectCallResult, ProjectManagerActorError> {
-        let definition = match self.data.deploy() {
+        let definition = match deploy::deploy(&self.model) {
             Ok(definition) => definition,
             Err(validation_errors) => {
                 return Ok(project_manager::DeployUiProjectCallResult {
@@ -581,548 +619,449 @@ impl UiProject {
         &mut self,
         call_data: project_manager::SetDefaultWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data = self
-            .data
-            .set_default_window(&mut notifications, call_data.default_window)?;
+        let default_window = model::DefaultWindow::try_from(&call_data.default_window)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            Ok(Some(project.set_default_window(changes, default_window)))
+        })
+        .await
     }
+
+    // -----------------------------------------------------------------------
+    // Resources
+    // -----------------------------------------------------------------------
 
     async fn set_resource(
         &mut self,
         call_data: project_manager::SetResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data =
-            self.data
-                .set_resource(&mut notifications, call_data.id, call_data.resource)?;
+        let id = model::ResourceId::new(&call_data.id)?;
+        let resource = model::Resource::try_from(&call_data.resource)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            Ok(Some(project.set_resource(changes, id, resource)))
+        })
+        .await
     }
 
     async fn clear_resource(
         &mut self,
         call_data: project_manager::ClearResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data = self.data.clear_resource(&mut notifications, call_data.id)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::ResourceId::new(&call_data.id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| Ok(project.clear_resource(changes, &id)))
+            .await
     }
 
     async fn rename_resource(
         &mut self,
         call_data: project_manager::RenameResourceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data =
-            self.data
-                .rename_resource(&mut notifications, call_data.id, call_data.new_id)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::ResourceId::new(&call_data.id)?;
+        let new_id = model::ResourceId::new(&call_data.new_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| project.rename_resource(changes, &id, new_id))
+            .await
     }
+
+    // -----------------------------------------------------------------------
+    // Styles
+    // -----------------------------------------------------------------------
 
     async fn set_style(
         &mut self,
         call_data: project_manager::SetStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data = self
-            .data
-            .set_style(&mut notifications, call_data.id, call_data.style)?;
+        let id = model::StyleId::new(&call_data.id)?;
+        let style = model::StyleDefinition::try_from(&call_data.style)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| Ok(Some(project.set_style(changes, id, style))))
+            .await
     }
 
     async fn clear_style(
         &mut self,
         call_data: project_manager::ClearStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data = self.data.clear_style(&mut notifications, call_data.id)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::StyleId::new(&call_data.id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| Ok(project.clear_style(changes, &id)))
+            .await
     }
 
     async fn rename_style(
         &mut self,
         call_data: project_manager::RenameStyleUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data =
-            self.data
-                .rename_style(&mut notifications, call_data.id, call_data.new_id)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::StyleId::new(&call_data.id)?;
+        let new_id = model::StyleId::new(&call_data.new_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| project.rename_style(changes, &id, new_id))
+            .await
     }
+
+    // -----------------------------------------------------------------------
+    // Windows
+    // -----------------------------------------------------------------------
 
     async fn new_window(
         &mut self,
         call_data: project_manager::NewWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data = self.data.new_window(&mut notifications, call_data.id)?;
+        let id = model::WindowId::new(&call_data.id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| project.new_window(changes, id).map(Some))
+            .await
     }
 
     async fn clear_window(
         &mut self,
         call_data: project_manager::ClearWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data = self.data.clear_window(&mut notifications, call_data.id)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::WindowId::new(&call_data.id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| Ok(project.clear_window(changes, &id)))
+            .await
     }
 
     async fn rename_window(
         &mut self,
         call_data: project_manager::RenameWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data =
-            self.data
-                .rename_window(&mut notifications, call_data.id, call_data.new_id)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::WindowId::new(&call_data.id)?;
+        let new_id = model::WindowId::new(&call_data.new_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| project.rename_window(changes, &id, new_id))
+            .await
     }
 
     async fn clone_window(
         &mut self,
         call_data: project_manager::CloneWindowUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data =
-            self.data
-                .clone_window(&mut notifications, call_data.id, call_data.new_id)?;
+        let id = model::WindowId::new(&call_data.id)?;
+        let new_id = model::WindowId::new(&call_data.new_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project.clone_window(changes, &id, new_id).map(Some)
+        })
+        .await
     }
 
     async fn set_window_properties(
         &mut self,
         call_data: project_manager::SetWindowPropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let window = self.data.windows.get_required(&call_data.id)?;
-        let Some(window) = window.set_properties(call_data.properties) else {
-            return Ok(());
-        };
-        let new_data = self
-            .data
-            .update_window(&mut notifications, call_data.id, window)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::WindowId::new(&call_data.id)?;
+        let properties = model::WindowProperties::try_from(call_data.properties)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project.set_window_properties(changes, id, properties)
+        })
+        .await
     }
+
+    // -----------------------------------------------------------------------
+    // Templates
+    // -----------------------------------------------------------------------
 
     async fn new_template(
         &mut self,
         call_data: project_manager::NewTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data = self.data.new_template(&mut notifications, call_data.id)?;
+        let id = model::TemplateId::new(&call_data.id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| project.new_template(changes, id).map(Some))
+            .await
     }
 
     async fn clear_template(
         &mut self,
         call_data: project_manager::ClearTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data = self.data.clear_template(&mut notifications, call_data.id)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::TemplateId::new(&call_data.id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| Ok(project.clear_template(changes, &id)))
+            .await
     }
 
     async fn rename_template(
         &mut self,
         call_data: project_manager::RenameTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data =
-            self.data
-                .rename_template(&mut notifications, call_data.id, call_data.new_id)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::TemplateId::new(&call_data.id)?;
+        let new_id = model::TemplateId::new(&call_data.new_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| project.rename_template(changes, &id, new_id))
+            .await
     }
 
     async fn clone_template(
         &mut self,
         call_data: project_manager::CloneTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let new_data =
-            self.data
-                .clone_template(&mut notifications, call_data.id, call_data.new_id)?;
+        let id = model::TemplateId::new(&call_data.id)?;
+        let new_id = model::TemplateId::new(&call_data.new_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project.clone_template(changes, &id, new_id).map(Some)
+        })
+        .await
     }
 
     async fn set_template_properties(
         &mut self,
         call_data: project_manager::SetTemplatePropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let template = self.data.templates.get_required(&call_data.id)?;
-        let Some(template) = template.set_properties(call_data.properties) else {
-            return Ok(());
-        };
-        let new_data = self
-            .data
-            .update_template(&mut notifications, call_data.id, template)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::TemplateId::new(&call_data.id)?;
+        let properties = model::TemplateProperties::try_from(call_data.properties)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project.set_template_properties(changes, id, properties)
+        })
+        .await
     }
+
+    // -----------------------------------------------------------------------
+    // Template exports
+    // -----------------------------------------------------------------------
 
     async fn set_template_export(
         &mut self,
         call_data: project_manager::SetTemplateExportUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let template = self.data.templates.get_required(&call_data.id)?;
-        let template = template.set_export(
-            call_data.export_id,
-            call_data.member_type,
-            call_data.value_type,
-        );
-        let new_data = self
-            .data
-            .update_template(&mut notifications, call_data.id, template)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::TemplateId::new(&call_data.id)?;
+        let export_id = model::ExportId::new(&call_data.export_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project
+                .set_template_export(
+                    changes,
+                    id,
+                    export_id,
+                    call_data.member_type,
+                    call_data.value_type,
+                )
+                .map(Some)
+        })
+        .await
     }
 
     async fn clear_template_export(
         &mut self,
         call_data: project_manager::ClearTemplateExportUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let template = self.data.templates.get_required(&call_data.id)?;
-        let Some(template) = template.clear_export(call_data.export_id) else {
-            return Ok(());
-        };
-        let new_data = self
-            .data
-            .update_template(&mut notifications, call_data.id, template)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::TemplateId::new(&call_data.id)?;
+        let export_id = model::ExportId::new(&call_data.export_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project.clear_template_export(changes, id, &export_id)
+        })
+        .await
     }
 
     async fn set_template_bulk_patterns(
         &mut self,
         call_data: project_manager::SetTemplateBulkPatternsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let template = self.data.templates.get_required(&call_data.id)?;
-        let Some(template) = template.set_bulk_patterns(call_data.patterns)? else {
-            return Ok(());
-        };
-        let new_data = self
-            .data
-            .update_template(&mut notifications, call_data.id, template)?;
-        let Some(new_data) = new_data else {
-            return Ok(());
-        };
+        let id = model::TemplateId::new(&call_data.id)?;
+        let patterns = model::wire::bulk_patterns(call_data.patterns)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project.set_template_bulk_patterns(changes, id, &patterns)
+        })
+        .await
     }
+
+    // -----------------------------------------------------------------------
+    // Controls
+    // -----------------------------------------------------------------------
 
     async fn new_control(
         &mut self,
         call_data: project_manager::NewControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let control = <Arc<project_manager::UiControlData> as ControlOps>::new(
-            call_data.x,
-            call_data.y,
-            call_data.r#type,
-        );
-        let controls = view.get_controls();
-        let controls = controls.with_inserted(call_data.id, control)?;
-        let view = view.set_controls(controls);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.view_id, view)?;
+        let view = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let id = model::ControlId::new(&call_data.id)?;
+        let kind = call_data.r#type.into();
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project
+                .new_control(changes, &view, id, call_data.x, call_data.y, kind)
+                .map(Some)
+        })
+        .await
     }
 
     async fn clear_control(
         &mut self,
         call_data: project_manager::ClearControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let controls = view.get_controls();
-        let Some(controls) = controls.with_cleared(&call_data.id)? else {
-            return Ok(());
-        };
-        let view = view.set_controls(controls);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.view_id, view)?;
+        let view = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let id = model::ControlId::new(&call_data.id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| project.clear_control(changes, &view, &id))
+            .await
     }
 
     async fn rename_control(
         &mut self,
         call_data: project_manager::RenameControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let controls = view.get_controls();
-        let Some(controls) = controls.with_renamed(&call_data.id, &call_data.new_id)? else {
-            return Ok(());
-        };
-        let view = view.set_controls(controls);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.view_id, view)?;
+        let view = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let id = model::ControlId::new(&call_data.id)?;
+        let new_id = model::ControlId::new(&call_data.new_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project.rename_control(changes, &view, &id, &new_id)
+        })
+        .await
     }
 
     async fn clone_control(
         &mut self,
         call_data: project_manager::CloneControlUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let source_view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let source_controls = source_view.get_controls();
-        let source = source_controls.get_required(&call_data.id)?;
-        let same_view = call_data.view_type == call_data.target_view_type
-            && call_data.view_id == call_data.target_view_id;
-        let control = source.clone_new(same_view);
+        let source = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let target = model::wire::view_key(call_data.target_view_type, &call_data.target_view_id)?;
+        let id = model::ControlId::new(&call_data.id)?;
+        let new_id = model::ControlId::new(&call_data.new_id)?;
 
-        let view = self
-            .data
-            .get_view(call_data.target_view_type, &call_data.target_view_id)?;
-        let controls = view.get_controls();
-        let controls = controls.with_inserted(call_data.new_id, control)?;
-        let view = view.set_controls(controls);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.target_view_id, view)?;
-
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project
+                .clone_control(changes, &source, &id, &target, new_id)
+                .map(Some)
+        })
+        .await
     }
 
     async fn set_control_properties(
         &mut self,
         call_data: project_manager::SetControlPropertiesUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let controls = view.get_controls();
-        let control = controls.get_required(&call_data.id)?;
-        let Some(control) = control.set_properties(call_data.properties) else {
-            return Ok(());
-        };
-        let controls = controls.with_updated(call_data.id, control)?;
-        let view = view.set_controls(controls);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.view_id, view)?;
+        let view = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let id = model::ControlId::new(&call_data.id)?;
+        let properties = model::ControlProperties::try_from(call_data.properties)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project.set_control_properties(changes, &view, id, properties)
+        })
+        .await
     }
+
+    // -----------------------------------------------------------------------
+    // Template instances
+    // -----------------------------------------------------------------------
 
     async fn new_template_instance(
         &mut self,
         call_data: project_manager::NewTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let template = self.data.templates.get_required(&call_data.template_id)?;
-        let view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let templates = view.get_templates();
-        let template_instance =
-            <Arc<project_manager::UiTemplateInstanceData> as TemplateInstanceOps>::new(
-                call_data.template_id,
-                &template,
-                call_data.x,
-                call_data.y,
-            )?;
-        let templates = templates.with_inserted(call_data.id, template_instance)?;
-        let view = view.set_templates(templates);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.view_id, view)?;
+        let view = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let id = model::TemplateInstanceId::new(&call_data.id)?;
+        let template_id = model::TemplateId::new(&call_data.template_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project
+                .new_template_instance(changes, &view, id, template_id, call_data.x, call_data.y)
+                .map(Some)
+        })
+        .await
     }
 
     async fn clear_template_instance(
         &mut self,
         call_data: project_manager::ClearTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let templates = view.get_templates();
-        let Some(templates) = templates.with_cleared(&call_data.id)? else {
-            return Ok(());
-        };
-        let view = view.set_templates(templates);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.view_id, view)?;
+        let view = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let id = model::TemplateInstanceId::new(&call_data.id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project.clear_template_instance(changes, &view, &id)
+        })
+        .await
     }
 
     async fn rename_template_instance(
         &mut self,
         call_data: project_manager::RenameTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let templates = view.get_templates();
-        let Some(templates) = templates.with_renamed(&call_data.id, &call_data.new_id)? else {
-            return Ok(());
-        };
-        let view = view.set_templates(templates);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.view_id, view)?;
+        let view = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let id = model::TemplateInstanceId::new(&call_data.id)?;
+        let new_id = model::TemplateInstanceId::new(&call_data.new_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project.rename_template_instance(changes, &view, &id, &new_id)
+        })
+        .await
     }
 
     async fn clone_template_instance(
         &mut self,
         call_data: project_manager::CloneTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let templates = view.get_templates();
-        let source = templates.get_required(&call_data.id)?;
-        let template = source.clone_new();
+        let view = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let id = model::TemplateInstanceId::new(&call_data.id)?;
+        let new_id = model::TemplateInstanceId::new(&call_data.new_id)?;
 
-        let templates = templates.with_inserted(call_data.new_id, template)?;
-        let view = view.set_templates(templates);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.view_id, view)?;
-
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project
+                .clone_template_instance(changes, &view, &id, new_id)
+                .map(Some)
+        })
+        .await
     }
 
     async fn move_template_instance(
         &mut self,
         call_data: project_manager::MoveTemplateInstanceUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let templates = view.get_templates();
-        let template = templates.get_required(&call_data.id)?;
-        let template = template.r#move(call_data.x, call_data.y);
-        let templates = templates.with_updated(call_data.id, template)?;
-        let view = view.set_templates(templates);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.view_id, view)?;
+        let view = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let id = model::TemplateInstanceId::new(&call_data.id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project
+                .move_template_instance(changes, &view, id, call_data.x, call_data.y)
+                .map(Some)
+        })
+        .await
     }
 
     async fn set_template_instance_template(
         &mut self,
         call_data: project_manager::SetTemplateInstanceTemplateUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let target_template = self.data.templates.get_required(&call_data.template_id)?;
-        let view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let templates = view.get_templates();
-        let template = templates.get_required(&call_data.id)?;
-        let template = template.set_template(call_data.template_id, target_template);
-        let templates = templates.with_updated(call_data.id, template)?;
-        let view = view.set_templates(templates);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.view_id, view)?;
+        let view = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let id = model::TemplateInstanceId::new(&call_data.id)?;
+        let template_id = model::TemplateId::new(&call_data.template_id)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project
+                .set_template_instance_template(changes, &view, id, template_id)
+                .map(Some)
+        })
+        .await
     }
 
+    /// The awkward one: a binding targets either a component member, looked up
+    /// in the project, or an export of the enclosing template, looked up in the
+    /// view the instance sits in. The operation takes the view key and derives
+    /// the owner from it, so there is no owner argument for a handler to get
+    /// wrong.
     async fn set_template_instance_bindings(
         &mut self,
         call_data: project_manager::SetTemplateInstanceBindingsUiProjectCall,
     ) -> Result<(), ProjectManagerActorError> {
-        let mut notifications = Vec::new();
-        let view = self
-            .data
-            .get_view(call_data.view_type, &call_data.view_id)?;
-        let templates = view.get_templates();
-        let template = templates.get_required(&call_data.id)?;
-        let template = template.set_bindings(&self.data, view.as_template(), call_data.bindings)?;
-        let templates = templates.with_updated(call_data.id, template)?;
-        let view = view.set_templates(templates);
-        let new_data = self
-            .data
-            .update_view(&mut notifications, call_data.view_id, view)?;
+        let view = model::wire::view_key(call_data.view_type, &call_data.view_id)?;
+        let id = model::TemplateInstanceId::new(&call_data.id)?;
+        let bindings = model::wire::bindings(call_data.bindings)?;
 
-        self.apply_update(new_data, notifications).await
+        self.apply_model_update(|project, changes| {
+            project
+                .set_template_instance_bindings(changes, &view, id, bindings)
+                .map(Some)
+        })
+        .await
     }
 }

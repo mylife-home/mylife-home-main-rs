@@ -30,6 +30,7 @@ use crate::{
 };
 
 mod core_project;
+mod model;
 mod ui_project;
 
 const PROJECT_MANAGER_NAME: &str = "project-manager";
@@ -418,8 +419,12 @@ pub enum ProjectManagerActorError {
     SerializationError(#[from] serde_json::Error),
     #[error("Actor communication error: {0}")]
     ActorCommunicationError(#[from] CallError),
-    #[error("Failed to process data: {0}")]
-    DataProcessingError(String),
+    /// A stored project that does not hold together. Reachable only from the
+    /// summary walk, which reads raw stored data rather than the model.
+    #[error("Inconsistent project data: {0}")]
+    InconsistentProjectData(String),
+    #[error("UI model error: {0}")]
+    UiModelError(#[from] ui_project::model::UiModelError),
     #[error("Opened project error: {0}")]
     OpenedProjectError(Box<CallError<ProjectManagerActorError>>),
     #[error("Notifier not found: {0}")]
@@ -601,7 +606,7 @@ impl ProjectManager {
                     let usage = match &component.definition.r#type {
                         project_manager::CoreComponentDefinitionType::Plugin => {
                             let Some(plugin) = project.plugins.get(&component.definition.id) else {
-                                return Err(ProjectManagerActorError::DataProcessingError(
+                                return Err(ProjectManagerActorError::InconsistentProjectData(
                                     format!(
                                         "Plugin '{}' not found in project",
                                         &component.definition.id
