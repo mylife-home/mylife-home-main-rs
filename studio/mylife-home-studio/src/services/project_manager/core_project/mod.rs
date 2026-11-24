@@ -11,6 +11,11 @@ use crate::{
 
 use kameo::{error::Infallible, message, prelude::*};
 
+pub mod model;
+
+#[cfg(test)]
+mod tests;
+
 pub fn new_core_project_data() -> Arc<project_manager::CoreProject> {
     Arc::new(project_manager::CoreProject {
         components: HashMap::new(),
