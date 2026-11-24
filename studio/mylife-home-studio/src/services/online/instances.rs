@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use common::{
     InitData,
@@ -13,7 +13,7 @@ use common::{
     utils::actors::{ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors},
 };
 use kameo::{message, prelude::*};
-use studio_web_api::{online, protocol, ui_model};
+use studio_web_api::{core_model, online, protocol, ui_model};
 use thiserror::Error;
 
 use crate::web::{DispatcherBuilder, NotifierManager, ServiceRequest, SessionEvent};
@@ -42,6 +42,63 @@ impl OnlineInstancesHandle {
         capability: String,
     ) -> Result<Vec<String>, CallError<OnlineInstancesError>> {
         self.0.call(InstancesWithCapability(capability)).await
+    }
+
+    /// What an instance currently runs, and what to change about it.
+    ///
+    /// These are the four calls a core deploy makes, plus the save that keeps
+    /// the result across a restart.
+    pub async fn core_list_components(
+        &self,
+        instance_name: String,
+    ) -> Result<Vec<core_model::ComponentConfig>, CallError<OnlineInstancesError>> {
+        self.0.call(CoreListComponents(instance_name)).await
+    }
+
+    pub async fn core_add_component(
+        &self,
+        instance_name: String,
+        config: core_model::ComponentConfig,
+    ) -> Result<(), CallError<OnlineInstancesError>> {
+        self.0.call(CoreAddComponent(instance_name, config)).await
+    }
+
+    pub async fn core_remove_component(
+        &self,
+        instance_name: String,
+        id: String,
+    ) -> Result<(), CallError<OnlineInstancesError>> {
+        self.0.call(CoreRemoveComponent(instance_name, id)).await
+    }
+
+    pub async fn core_list_bindings(
+        &self,
+        instance_name: String,
+    ) -> Result<Vec<core_model::BindingConfig>, CallError<OnlineInstancesError>> {
+        self.0.call(CoreListBindings(instance_name)).await
+    }
+
+    pub async fn core_add_binding(
+        &self,
+        instance_name: String,
+        config: core_model::BindingConfig,
+    ) -> Result<(), CallError<OnlineInstancesError>> {
+        self.0.call(CoreAddBinding(instance_name, config)).await
+    }
+
+    pub async fn core_remove_binding(
+        &self,
+        instance_name: String,
+        config: core_model::BindingConfig,
+    ) -> Result<(), CallError<OnlineInstancesError>> {
+        self.0.call(CoreRemoveBinding(instance_name, config)).await
+    }
+
+    pub async fn core_store_save(
+        &self,
+        instance_name: String,
+    ) -> Result<(), CallError<OnlineInstancesError>> {
+        self.0.call(CoreStoreSave(instance_name)).await
     }
 
     /// Deploy a UI definition to the online instances
@@ -307,6 +364,157 @@ impl message::Message<types::InstanceInfo> for OnlineInstances {
     }
 }
 
+const COMPONENTS_API: &str = "components-api";
+const BINDINGS_API: &str = "bindings-api";
+const STORE_API: &str = "store-api";
+
+/// A store save walks the disk on the target, which on a small board is slow
+/// enough that the default timeout is not enough.
+const STORE_SAVE_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[derive(Debug)]
+struct CoreListComponents(String);
+
+impl message::Message<CoreListComponents> for OnlineInstances {
+    type Reply = Result<Vec<core_model::ComponentConfig>, OnlineInstancesError>;
+
+    async fn handle(
+        &mut self,
+        msg: CoreListComponents,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.check_capability(&msg.0, COMPONENTS_API)?;
+        Ok(self
+            .rpc
+            .call::<_, Vec<core_model::ComponentConfig>>(msg.0, "components.list", &(), None)
+            .await?)
+    }
+}
+
+#[derive(Debug)]
+struct CoreAddComponent(String, core_model::ComponentConfig);
+
+impl message::Message<CoreAddComponent> for OnlineInstances {
+    type Reply = Result<(), OnlineInstancesError>;
+
+    async fn handle(
+        &mut self,
+        msg: CoreAddComponent,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.check_capability(&msg.0, COMPONENTS_API)?;
+        self.rpc
+            .call::<_, ()>(msg.0, "components.add", &msg.1, None)
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, serde::Serialize)]
+struct ComponentRemoveRpcReq {
+    id: String,
+}
+
+#[derive(Debug)]
+struct CoreRemoveComponent(String, String);
+
+impl message::Message<CoreRemoveComponent> for OnlineInstances {
+    type Reply = Result<(), OnlineInstancesError>;
+
+    async fn handle(
+        &mut self,
+        msg: CoreRemoveComponent,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.check_capability(&msg.0, COMPONENTS_API)?;
+        self.rpc
+            .call::<_, ()>(
+                msg.0,
+                "components.remove",
+                &ComponentRemoveRpcReq { id: msg.1 },
+                None,
+            )
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct CoreListBindings(String);
+
+impl message::Message<CoreListBindings> for OnlineInstances {
+    type Reply = Result<Vec<core_model::BindingConfig>, OnlineInstancesError>;
+
+    async fn handle(
+        &mut self,
+        msg: CoreListBindings,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.check_capability(&msg.0, BINDINGS_API)?;
+        Ok(self
+            .rpc
+            .call::<_, Vec<core_model::BindingConfig>>(msg.0, "bindings.list", &(), None)
+            .await?)
+    }
+}
+
+#[derive(Debug)]
+struct CoreAddBinding(String, core_model::BindingConfig);
+
+impl message::Message<CoreAddBinding> for OnlineInstances {
+    type Reply = Result<(), OnlineInstancesError>;
+
+    async fn handle(
+        &mut self,
+        msg: CoreAddBinding,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.check_capability(&msg.0, BINDINGS_API)?;
+        self.rpc
+            .call::<_, ()>(msg.0, "bindings.add", &msg.1, None)
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct CoreRemoveBinding(String, core_model::BindingConfig);
+
+impl message::Message<CoreRemoveBinding> for OnlineInstances {
+    type Reply = Result<(), OnlineInstancesError>;
+
+    async fn handle(
+        &mut self,
+        msg: CoreRemoveBinding,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.check_capability(&msg.0, BINDINGS_API)?;
+        self.rpc
+            .call::<_, ()>(msg.0, "bindings.remove", &msg.1, None)
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct CoreStoreSave(String);
+
+impl message::Message<CoreStoreSave> for OnlineInstances {
+    type Reply = Result<(), OnlineInstancesError>;
+
+    async fn handle(
+        &mut self,
+        msg: CoreStoreSave,
+        _ctx: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.check_capability(&msg.0, STORE_API)?;
+        self.rpc
+            .call::<_, ()>(msg.0, "store.save", &(), Some(STORE_SAVE_TIMEOUT))
+            .await?;
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 struct InstancesWithCapability(String);
 
@@ -350,6 +558,26 @@ impl message::Message<DeployUiDefinition> for OnlineInstances {
 }
 
 impl OnlineInstances {
+    fn check_capability(
+        &self,
+        instance_name: &str,
+        capability: &'static str,
+    ) -> Result<(), OnlineInstancesError> {
+        let declared = self
+            .instances
+            .get(instance_name)
+            .is_some_and(|info| info.capabilities.iter().any(|item| item == capability));
+
+        if declared {
+            return Ok(());
+        }
+
+        Err(OnlineInstancesError::MissingCapability {
+            instance_name: instance_name.to_owned(),
+            capability,
+        })
+    }
+
     fn with_capability<'a>(&'a self, capability: &'a str) -> impl Iterator<Item = String> + 'a {
         self.instances
             .iter()
