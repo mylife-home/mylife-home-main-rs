@@ -15,6 +15,7 @@
 mod bindings;
 mod components;
 mod copy;
+mod deploy;
 mod fixture;
 mod ids;
 mod import;
@@ -23,4 +24,5 @@ mod naming;
 mod plugins;
 mod resolver;
 mod templates;
+mod validation;
 mod wire;

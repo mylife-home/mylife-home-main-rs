@@ -1,12 +1,14 @@
+mod deploy;
 mod import;
 pub mod model;
 pub mod resolver;
+mod validation;
 
 #[cfg(test)]
 mod tests;
 
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     mem,
     sync::Arc,
 };
@@ -17,10 +19,15 @@ use studio_web_api::project_manager;
 use serde::Serialize;
 
 use common::components::registry::RegistryHandle;
+use studio_web_api::project_manager::DeployChanges;
+use studio_web_api::project_manager::core_validation::{Item, Severity};
 
 use crate::{
-    services::project_manager::{
-        InitialEmitter, ProjectManagerActorError, ProjectManagerHandler, ProjectModel,
+    services::{
+        online::OnlineInstancesHandle,
+        project_manager::{
+            InitialEmitter, ProjectManagerActorError, ProjectManagerHandler, ProjectModel,
+        },
     },
     utils::fs_collection::{self, FsCollectionHandle, Update},
     web::{NotifierManager, SessionEvent, SessionHandle},
@@ -311,9 +318,9 @@ impl message::Message<Call> for CoreProject {
             Call::ApplyBulkUpdates(call_data) => {
                 map_call_result(self.apply_bulk_updates(call_data).await)
             }
-            Call::Validate => todo!("validate"),
-            Call::PrepareDeploy => todo!("prepare-deploy"),
-            Call::ApplyDeploy(_) => todo!("apply-deploy"),
+            Call::Validate => map_call_result(self.validate().await),
+            Call::PrepareDeploy => map_call_result(self.prepare_deploy().await),
+            Call::ApplyDeploy(call_data) => map_call_result(self.apply_deploy(call_data).await),
         }
     }
 }
@@ -717,6 +724,30 @@ impl CoreProject {
             .await
     }
 
+    /// Everything wrong with the project, as the designer's check reports it.
+    ///
+    /// The deploy path runs the same pass with different options: it has
+    /// somewhere to put the bindings to worry about, and it cannot proceed
+    /// over a difference this one only reports.
+    async fn validate(
+        &mut self,
+    ) -> Result<project_manager::ValidateCoreProjectCallResult, ProjectManagerActorError> {
+        let resolved = resolver::resolve(&self.model)?;
+        let online = online_snapshot(true).await?;
+
+        let validation = validation::validate(
+            &resolved,
+            &online,
+            validation::Options {
+                online_severity: Severity::Error,
+                check_bindings_instance: true,
+            },
+        )?;
+
+        Ok(project_manager::ValidateCoreProjectCallResult { validation })
+    }
+
+    /// What taking in what is running would change.
     async fn prepare_import_from_online(
         &mut self,
         call_data: project_manager::PrepareImportFromOnlineCoreProjectCall,
@@ -826,6 +857,103 @@ impl CoreProject {
 
         Ok(project_manager::ApplyBulkUpdatesCoreProjectCallResult { stats })
     }
+
+    /// What deploying onto the running instances would change.
+    ///
+    /// Nothing is touched here. The task list goes back to the designer inside
+    /// `server_data` and comes back untouched on the apply call, so what the
+    /// user agreed to is what runs.
+    async fn prepare_deploy(
+        &mut self,
+    ) -> Result<project_manager::PrepareDeployCoreProjectCallResult, ProjectManagerActorError> {
+        let resolved = resolver::resolve(&self.model)?;
+        let online = online_snapshot(true).await?;
+
+        let validation = validation::validate(
+            &resolved,
+            &online,
+            validation::Options {
+                online_severity: Severity::Error,
+                check_bindings_instance: true,
+            },
+        )?;
+
+        if Item::has_error(&validation) {
+            return Ok(project_manager::PrepareDeployCoreProjectCallResult {
+                validation,
+                changes: DeployChanges {
+                    components: Vec::new(),
+                    bindings: Vec::new(),
+                },
+                server_data: serde_json::Value::Null,
+            });
+        }
+
+        let store = online_store(&resolved).await?;
+        let plan = deploy::prepare_to_online(&resolved, &store)?;
+
+        Ok(project_manager::PrepareDeployCoreProjectCallResult {
+            validation,
+            changes: plan.changes,
+            server_data: serde_json::to_value(&plan.tasks)?,
+        })
+    }
+
+    /// Carry out the plan the designer agreed to.
+    ///
+    /// Each instance that was touched then saves its store, so the deploy
+    /// survives a restart.
+    async fn apply_deploy(
+        &mut self,
+        call_data: project_manager::ApplyDeployCoreProjectCall,
+    ) -> Result<(), ProjectManagerActorError> {
+        let tasks: Vec<deploy::Task> = serde_json::from_value(call_data.server_data)?;
+
+        let resolved = resolver::resolve(&self.model)?;
+        let instances = OnlineInstancesHandle::new()?;
+        let mut touched = BTreeSet::new();
+
+        for task in tasks {
+            touched.insert(task.instance_name.clone());
+
+            match (&task.object, task.change_type) {
+                (deploy::TaskObject::Component { id }, deploy::TaskChange::Add) => {
+                    let config =
+                        deploy::component_config(&resolved, &model::ComponentId::new(id)?)?;
+                    instances
+                        .core_add_component(task.instance_name, config)
+                        .await?;
+                }
+
+                (deploy::TaskObject::Component { id }, deploy::TaskChange::Delete) => {
+                    instances
+                        .core_remove_component(task.instance_name, id.clone())
+                        .await?;
+                }
+
+                (deploy::TaskObject::Binding { id }, deploy::TaskChange::Add) => {
+                    let config = deploy::binding_config(&model::BindingId::new(id)?)?;
+                    instances
+                        .core_add_binding(task.instance_name, config)
+                        .await?;
+                }
+
+                (deploy::TaskObject::Binding { id }, deploy::TaskChange::Delete) => {
+                    let config = deploy::binding_config(&model::BindingId::new(id)?)?;
+                    instances
+                        .core_remove_binding(task.instance_name, config)
+                        .await?;
+                }
+            }
+        }
+
+        for instance in touched {
+            instances.core_store_save(instance.clone()).await?;
+            tracing::debug!(instance, project = self.name, "core store saved");
+        }
+
+        Ok(())
+    }
 }
 
 /// Every plugin and component the registry knows about.
@@ -860,6 +988,101 @@ async fn online_source() -> Result<import::OnlineSource, ProjectManagerActorErro
         plugins,
         components,
     })
+}
+
+/// What the instances currently hold, for the instances this project deploys
+/// to and for the one carrying the bindings.
+async fn online_store(
+    project: &resolver::ResolvedProject,
+) -> Result<deploy::OnlineStore, ProjectManagerActorError> {
+    let instances = OnlineInstancesHandle::new()?;
+
+    let (bindings_instance, bindings) = if project.bindings().is_empty() {
+        (None, Vec::new())
+    } else {
+        // Validation has already established there is exactly one.
+        let carriers = instances
+            .instances_with_capability(validation::BINDINGS_API.to_owned())
+            .await?;
+
+        match carriers.into_iter().next() {
+            Some(instance) => {
+                let bindings = instances.core_list_bindings(instance.clone()).await?;
+                (Some(instance), bindings)
+            }
+            None => return Err(model::CoreModelError::BindingsInstanceNeeded.into()),
+        }
+    };
+
+    let mut components = BTreeMap::new();
+
+    for instance in project.instances()?.keys() {
+        components.insert(
+            instance.to_string(),
+            instances.core_list_components(instance.to_string()).await?,
+        );
+    }
+
+    Ok(deploy::OnlineStore {
+        bindings_instance,
+        bindings,
+        components,
+    })
+}
+
+/// What the project is checked against, read once so the checks themselves
+/// stay a function of two values.
+async fn online_snapshot(
+    check_bindings_instance: bool,
+) -> Result<validation::Online, ProjectManagerActorError> {
+    let registry = RegistryHandle::new()?;
+
+    // A plugin or a component with no instance is local to this studio, so it
+    // is not something a project deploys against.
+    let mut plugins = Vec::new();
+
+    for plugin in registry.get_plugins().await? {
+        let Some(instance) = plugin.instance else {
+            continue;
+        };
+
+        let import =
+            import::plugin_from_metadata(&model::InstanceId::new(instance)?, &plugin.metadata)?;
+        plugins.push((import.id, Arc::new(import.plugin)));
+    }
+
+    let mut components = Vec::new();
+
+    for component in registry.get_components().await? {
+        let Some(instance) = component.instance else {
+            continue;
+        };
+
+        let instance = model::InstanceId::new(instance)?;
+        let import = import::plugin_from_metadata(&instance, &component.plugin)?;
+
+        components.push((
+            model::ComponentId::new(component.component_id)?,
+            validation::OnlineComponent {
+                instance,
+                plugin: Arc::new(import.plugin),
+            },
+        ));
+    }
+
+    let bindings_instances = if check_bindings_instance {
+        OnlineInstancesHandle::new()?
+            .instances_with_capability(validation::BINDINGS_API.to_owned())
+            .await?
+    } else {
+        Vec::new()
+    };
+
+    Ok(validation::Online::new(
+        plugins,
+        components,
+        bindings_instances,
+    ))
 }
 
 fn toolbox_display(action: &str) -> Result<model::ToolboxDisplay, model::CoreModelError> {
