@@ -9,7 +9,8 @@ use crate::{
     services::{
         online::OnlineInstancesHandle,
         project_manager::{
-            InitialEmitter, ProjectManagerActorError, ProjectManagerHandler, ProjectModel,
+            InitialEmitter, PendingCall, ProjectManagerActorError, ProjectManagerHandler,
+            ProjectModel,
         },
     },
     utils::fs_collection::{self, FsCollectionHandle, Update},
@@ -113,25 +114,35 @@ impl UiProjectHandle {
         Ok(res.map_err(|e| ProjectManagerActorError::ActorCommunicationError(CallError::from(e)))?)
     }
 
-    pub async fn call(
+    /// Puts the call on the actor's mailbox and hands back its reply.
+    ///
+    /// The mailbox position is taken here, so calls keep the order they
+    /// arrived in; only the waiting happens elsewhere.
+    pub fn enqueue_call(
         &self,
         session: SessionHandle,
         notifier_id: String,
         call_data: project_manager::ProjectCall,
-    ) -> Result<project_manager::ProjectCallResult, ProjectManagerActorError> {
-        let res = self
+    ) -> Result<PendingCall, ProjectManagerActorError> {
+        let pending = self
             .0
             .ask(Call {
                 call_data,
                 session,
                 notifier_id,
             })
-            .try_send()
-            .await;
+            .try_enqueue()
+            .map_err(|error| {
+                ProjectManagerActorError::OpenedProjectError(Box::new(CallError::from(
+                    error.map_err(|never: Infallible| match never {}),
+                )))
+            })?;
 
-        Ok(res.map_err(|e| {
-            ProjectManagerActorError::OpenedProjectError(Box::new(CallError::from(e)))
-        })?)
+        Ok(Box::pin(async move {
+            pending.await.map_err(|error| {
+                ProjectManagerActorError::OpenedProjectError(Box::new(CallError::from(error)))
+            })
+        }))
     }
 
     pub async fn session_event(&self, event: SessionEvent) -> Vec<String> {

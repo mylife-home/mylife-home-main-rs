@@ -11,6 +11,7 @@ use std::{
 use common::utils::actors::{
     ActorHandle, CallError, HandleLookupError, SpawnedActor, SpawnedActors,
 };
+use futures::future::BoxFuture;
 use kameo::{message, prelude::*};
 use studio_web_api::{component_model, project_manager, protocol};
 use thiserror::Error;
@@ -79,6 +80,10 @@ impl ProjectManagerHandler {
             })
     }
 }
+
+/// A call waiting on a project's mailbox for its reply.
+pub type PendingCall =
+    BoxFuture<'static, Result<project_manager::ProjectCallResult, ProjectManagerActorError>>;
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -334,15 +339,17 @@ impl OpenedProjectEntry {
         })
     }
 
-    pub async fn call(
+    pub fn enqueue_call(
         &self,
         session: SessionHandle,
         notifier_id: String,
         call_data: project_manager::ProjectCall,
-    ) -> Result<project_manager::ProjectCallResult, ProjectManagerActorError> {
+    ) -> Result<PendingCall, ProjectManagerActorError> {
         match &self.handle {
-            OpenedProjectHandle::Core(handle) => handle.call(session, notifier_id, call_data).await,
-            OpenedProjectHandle::Ui(handle) => handle.call(session, notifier_id, call_data).await,
+            OpenedProjectHandle::Core(handle) => {
+                handle.enqueue_call(session, notifier_id, call_data)
+            }
+            OpenedProjectHandle::Ui(handle) => handle.enqueue_call(session, notifier_id, call_data),
         }
     }
 
@@ -1143,8 +1150,8 @@ impl message::Message<ServiceRequest<CallOpenedReq>> for ProjectManager {
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         let call = request.into_call();
-        let request = call.request();
-        let notifier_id = request.notifier_id.clone();
+        let notifier_id = call.request().notifier_id.clone();
+        let call_data = call.request().call_data.clone();
 
         let project = match self.get_project(&notifier_id) {
             Ok(project) => project,
@@ -1154,22 +1161,23 @@ impl message::Message<ServiceRequest<CallOpenedReq>> for ProjectManager {
             }
         };
 
-        let res = match project
-            .call(
-                call.session().clone(),
-                notifier_id,
-                request.call_data.clone(),
-            )
-            .await
-        {
-            Ok(res) => res,
+        let pending = match project.enqueue_call(call.session().clone(), notifier_id, call_data) {
+            Ok(pending) => pending,
             Err(err) => {
                 call.reply_error(err);
                 return;
             }
         };
 
-        call.reply_ok(CallOpenedRes(res));
+        // The reply is waited for off this actor: a project reaching back into
+        // the manager mid-call would otherwise be waiting on the actor that is
+        // waiting on it.
+        tokio::spawn(async move {
+            match pending.await {
+                Ok(res) => call.reply_ok(CallOpenedRes(res)),
+                Err(err) => call.reply_error(err),
+            }
+        });
     }
 }
 
