@@ -32,12 +32,19 @@ pub enum ObjectType {
 
 register_ts!(ObjectType);
 
+/// What accepting one change would drag along with it.
+///
+/// Tagged by `type` on the wire, which is what the designer switches on to
+/// show it. Each one carries `templateId`, empty for the project view itself,
+/// the same way a call spells it.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager-core-import-data.ts")]
-#[serde(rename_all = "camelCase")]
-pub struct Impact {
-    pub r#type: String,
-    pub template_id: String,
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum Impact {
+    ComponentConfig(ComponentConfigImpact),
+    ComponentDelete(ComponentDeleteImpact),
+    BindingDelete(BindingDeleteImpact),
+    TemplateExport(TemplateExportImpact),
 }
 
 register_ts!(Impact);
@@ -46,7 +53,6 @@ register_ts!(Impact);
 #[ts(export, export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct BindingDeleteImpact {
-    pub r#type: String,
     pub template_id: String,
     pub binding_id: String,
 }
@@ -57,7 +63,6 @@ register_ts!(BindingDeleteImpact);
 #[ts(export, export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentDeleteImpact {
-    pub r#type: String,
     pub template_id: String,
     pub component_id: String,
 }
@@ -68,7 +73,6 @@ register_ts!(ComponentDeleteImpact);
 #[ts(export, export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentConfigImpact {
-    pub r#type: String,
     pub template_id: String,
     pub component_id: String,
     /// update = reset
@@ -81,7 +85,6 @@ register_ts!(ComponentConfigImpact);
 #[ts(export, export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct TemplateExportImpact {
-    pub r#type: String,
     pub template_id: String,
     pub config_export_deletes: Vec<String>,
     pub member_export_deletes: Vec<String>,
@@ -99,22 +102,47 @@ pub struct VersionChange {
 
 register_ts!(VersionChange);
 
+/// One thing an import would change.
+///
+/// Tagged by `objectType` on the wire. Every member carries the same head:
+/// `key` is what a selection names, `dependencies` are the other changes this
+/// one needs, and `impacts` is what accepting it drags along.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager-core-import-data.ts")]
-#[serde(rename_all = "camelCase")]
-pub struct ObjectChange {
-    /// for selection
-    pub key: String,
-    /// component/plugin/template id
-    pub id: String,
-    pub change_type: ChangeType,
-    pub object_type: ObjectType,
-    /// components changes may depend on plugins changes
-    pub dependencies: Vec<String>,
-    pub impacts: Vec<Impact>,
+#[serde(tag = "objectType", rename_all = "lowercase")]
+pub enum ObjectChange {
+    Plugin(PluginChange),
+    Component(ComponentChange),
+    Template(TemplateChange),
 }
 
 register_ts!(ObjectChange);
+
+impl ObjectChange {
+    pub fn key(&self) -> &str {
+        match self {
+            ObjectChange::Plugin(change) => &change.key,
+            ObjectChange::Component(change) => &change.key,
+            ObjectChange::Template(change) => &change.key,
+        }
+    }
+
+    pub fn dependencies(&self) -> &[String] {
+        match self {
+            ObjectChange::Plugin(change) => &change.dependencies,
+            ObjectChange::Component(change) => &change.dependencies,
+            ObjectChange::Template(change) => &change.dependencies,
+        }
+    }
+
+    pub fn impacts_mut(&mut self) -> &mut Vec<Impact> {
+        match self {
+            ObjectChange::Plugin(change) => &mut change.impacts,
+            ObjectChange::Component(change) => &mut change.impacts,
+            ObjectChange::Template(change) => &mut change.impacts,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager-core-import-data.ts")]
@@ -123,7 +151,6 @@ pub struct PluginChange {
     pub key: String,
     pub id: String,
     pub change_type: ChangeType,
-    pub object_type: ObjectType,
     pub dependencies: Vec<String>,
     pub impacts: Vec<Impact>,
     pub instance_name: String,
@@ -155,7 +182,6 @@ pub struct ComponentChange {
     pub key: String,
     pub id: String,
     pub change_type: ChangeType,
-    pub object_type: ObjectType,
     pub dependencies: Vec<String>,
     pub impacts: Vec<Impact>,
     pub instance_name: String,
@@ -176,7 +202,6 @@ pub struct TemplateChange {
     pub key: String,
     pub id: String,
     pub change_type: ChangeType,
-    pub object_type: ObjectType,
     pub dependencies: Vec<String>,
     pub impacts: Vec<Impact>,
     /// templates changes are only export deletion

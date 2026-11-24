@@ -71,7 +71,7 @@ pub struct ConfigItem {
 
 register_ts!(ConfigItem);
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "component-model.ts")]
 pub enum ConfigType {

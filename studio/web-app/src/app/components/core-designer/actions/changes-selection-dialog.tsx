@@ -305,7 +305,7 @@ const TreeNode: FunctionComponent<{ indent: number; node: string }> = ({ indent,
       case 'component':
         return (<ComponentChangeItem indent={indent} node={nodeKey} />);
       default:
-        throw new Error(`Unknown object type: '${change.objectType}'`);
+        throw new Error(`Unknown object type: '${(change as coreImportData.ObjectChange).objectType}'`);
     }
   } else {
     const itemStats = stats[nodeKey];
@@ -586,8 +586,8 @@ const ChangeImpacts: FunctionComponent<{ node: string; }> = ({ node: nodeKey }) 
             );
           }
 
-          default: 
-            throw new Error(`Unhandled impact type: '${impact.type}'`);
+          default:
+            throw new Error(`Unhandled impact type: '${(impact as coreImportData.Impact).type}'`);
         }
       })}
     </>
@@ -947,7 +947,7 @@ function getChangeInstanceName(change: coreImportData.ObjectChange) {
       return `(Pas d'instance)`;
 
     default:
-      throw new Error(`Unsupported object type: '${change.objectType}'`);
+      throw new Error(`Unsupported object type: '${(change as coreImportData.ObjectChange).objectType}'`);
   }
 }
 

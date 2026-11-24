@@ -5,8 +5,6 @@ use ts_rs::TS;
 
 use crate::register_ts;
 
-use super::ItemType;
-
 // ===========================================================================
 // coreValidation types
 // ===========================================================================
@@ -22,7 +20,7 @@ pub enum ChangeType {
 
 register_ts!(ChangeType);
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
@@ -33,21 +31,49 @@ pub enum Severity {
 
 register_ts!(Severity);
 
+/// One thing validation found.
+///
+/// Tagged by `type` on the wire, which is what the designer switches on to
+/// pick how to display it. The variant is the tag, so a value cannot say it is
+/// one thing and carry another.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager-core-validation.ts")]
-#[serde(rename_all = "camelCase")]
-pub struct Item {
-    pub r#type: ItemType,
-    pub severity: Severity,
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum Item {
+    PluginChanged(PluginChanged),
+    ExistingComponentId(ExistingComponentId),
+    BadExternalComponent(BadExternalComponent),
+    InvalidBindingApi(InvalidBindingApi),
+    ComponentBadConfig(ComponentBadConfig),
+    BindingMismatch(BindingMismatch),
 }
 
 register_ts!(Item);
+
+impl Item {
+    pub fn severity(&self) -> Severity {
+        match self {
+            Item::PluginChanged(item) => item.severity,
+            Item::ExistingComponentId(item) => item.severity,
+            Item::BadExternalComponent(item) => item.severity,
+            Item::InvalidBindingApi(item) => item.severity,
+            Item::ComponentBadConfig(item) => item.severity,
+            Item::BindingMismatch(item) => item.severity,
+        }
+    }
+
+    /// Whether anything found is bad enough to stop a deploy.
+    pub fn has_error(items: &[Item]) -> bool {
+        items
+            .iter()
+            .any(|item| matches!(item.severity(), Severity::Error))
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct PluginChanged {
-    pub r#type: ItemType,
     pub severity: Severity,
     pub instance_name: String,
     pub module: String,
@@ -89,7 +115,6 @@ register_ts!(VersionedPluginIdentity);
 #[ts(export, export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ExistingComponentId {
-    pub r#type: ItemType,
     pub severity: Severity,
     pub component_id: String,
     pub project: PluginIdentity,
@@ -104,11 +129,11 @@ register_ts!(ExistingComponentId);
 #[ts(export, export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct BadExternalComponent {
-    pub r#type: ItemType,
     pub severity: Severity,
     pub component_id: String,
     pub project: VersionedPluginIdentity,
-    pub existing: VersionedPluginIdentity,
+    /// `None` when nothing online carries that id at all.
+    pub existing: Option<VersionedPluginIdentity>,
 }
 
 register_ts!(BadExternalComponent);
@@ -117,7 +142,6 @@ register_ts!(BadExternalComponent);
 #[ts(export, export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct InvalidBindingApi {
-    pub r#type: ItemType,
     pub severity: Severity,
     /// error if none or multiple
     pub instance_names: Vec<String>,
@@ -129,7 +153,6 @@ register_ts!(InvalidBindingApi);
 #[ts(export, export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentBadConfig {
-    pub r#type: ItemType,
     pub severity: Severity,
     pub component_id: String,
     pub instance_name: String,
@@ -144,7 +167,6 @@ register_ts!(ComponentBadConfig);
 #[ts(export, export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct BindingMismatch {
-    pub r#type: ItemType,
     pub severity: Severity,
     pub source_component: String,
     pub source_state: String,

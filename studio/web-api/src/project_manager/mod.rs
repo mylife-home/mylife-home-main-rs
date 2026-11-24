@@ -66,20 +66,6 @@ register_ts!(CoreToolboxDisplay);
 
 // ---- core validation value unions ----
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
-#[serde(rename_all = "kebab-case")]
-pub enum ItemType {
-    PluginChanged,
-    ExistingComponentId,
-    BadExternalComponent,
-    InvalidBindingApi,
-    ComponentBadConfig,
-    BindingMismatch,
-}
-
-register_ts!(ItemType);
-
 /// null | 'standard' | 'external' on the wire; model the null via Option at the
 /// use site, this enum is the non-null part.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
