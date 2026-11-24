@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::str::FromStr;
 use std::sync::OnceLock;
 
 use regex::Regex;
-use serde::de::DeserializeOwned;
+use serde::de::{self, Deserialize, DeserializeOwned, Deserializer};
 
 static CONFIG: OnceLock<HashMap<String, toml::Value>> = OnceLock::new();
 
@@ -25,6 +27,28 @@ pub fn section<T: DeserializeOwned>(name: &str) -> T {
         .clone()
         .try_into()
         .unwrap_or_else(|e| panic!("invalid config section '{}': {}", name, e))
+}
+
+/// Reads an optional setting, taking an empty value for an absent one.
+///
+/// A setting left to the environment expands to nothing when its variable is
+/// unset, so a config written that way carries empty strings for everything
+/// nobody set. Use it with `#[serde(default, deserialize_with = ...)]`.
+pub fn empty_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr,
+    T::Err: Display,
+{
+    let Some(raw) = Option::<String>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+
+    if raw.is_empty() {
+        return Ok(None);
+    }
+
+    raw.parse().map(Some).map_err(de::Error::custom)
 }
 
 fn sections() -> &'static HashMap<String, toml::Value> {
