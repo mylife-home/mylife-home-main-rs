@@ -3,11 +3,6 @@ name = "mylife-home-ui"
 version = "3.0.9"
 edition = "2024"
 
-[profile.release]
-lto = true
-strip = true
-codegen-units = 1
-
 [dependencies]
 common = { path = "../../common" }
 ui-web-api = { path = "../web-api" }
