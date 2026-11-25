@@ -10,7 +10,7 @@ use crate::register_ts;
 // ===========================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
+#[ts(export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum ChangeType {
     Add,
@@ -21,7 +21,7 @@ pub enum ChangeType {
 register_ts!(ChangeType);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
+#[ts(export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     Info,
@@ -37,7 +37,7 @@ register_ts!(Severity);
 /// pick how to display it. The variant is the tag, so a value cannot say it is
 /// one thing and carry another.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
+#[ts(export_to = "project-manager-core-validation.ts")]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Item {
     PluginChanged(PluginChanged),
@@ -71,7 +71,7 @@ impl Item {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
+#[ts(export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct PluginChanged {
     pub severity: Severity,
@@ -89,7 +89,7 @@ pub struct PluginChanged {
 register_ts!(PluginChanged);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
+#[ts(export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct PluginIdentity {
     pub instance_name: String,
@@ -100,7 +100,7 @@ pub struct PluginIdentity {
 register_ts!(PluginIdentity);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
+#[ts(export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct VersionedPluginIdentity {
     pub instance_name: String,
@@ -112,7 +112,7 @@ pub struct VersionedPluginIdentity {
 register_ts!(VersionedPluginIdentity);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
+#[ts(export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ExistingComponentId {
     pub severity: Severity,
@@ -126,7 +126,7 @@ register_ts!(ExistingComponentId);
 /// may be only severity:info if plugin has same members;
 /// if existing is empty then it's missing
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
+#[ts(export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct BadExternalComponent {
     pub severity: Severity,
@@ -139,7 +139,7 @@ pub struct BadExternalComponent {
 register_ts!(BadExternalComponent);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
+#[ts(export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct InvalidBindingApi {
     pub severity: Severity,
@@ -150,7 +150,7 @@ pub struct InvalidBindingApi {
 register_ts!(InvalidBindingApi);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
+#[ts(export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentBadConfig {
     pub severity: Severity,
@@ -164,7 +164,7 @@ pub struct ComponentBadConfig {
 register_ts!(ComponentBadConfig);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-validation.ts")]
+#[ts(export_to = "project-manager-core-validation.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct BindingMismatch {
     pub severity: Severity,

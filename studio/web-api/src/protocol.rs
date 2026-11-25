@@ -5,7 +5,7 @@ use crate::register_ts;
 
 /// A message sent from the server. Discriminated by `type`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "protocol.ts")]
+#[ts(export_to = "protocol.ts")]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum ServerMessage {
     ServiceResponse(ServiceResponse),
@@ -15,7 +15,7 @@ pub enum ServerMessage {
 register_ts!(ServerMessage);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "protocol.ts")]
+#[ts(export_to = "protocol.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceRequest {
     pub request_id: String,
@@ -27,7 +27,7 @@ pub struct ServiceRequest {
 register_ts!(ServiceRequest);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "protocol.ts")]
+#[ts(export_to = "protocol.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceResponse {
     pub request_id: String,
@@ -41,7 +41,7 @@ pub struct ServiceResponse {
 register_ts!(ServiceResponse);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "protocol.ts")]
+#[ts(export_to = "protocol.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceResponseError {
     pub r#type: String,
@@ -52,7 +52,7 @@ pub struct ServiceResponseError {
 register_ts!(ServiceResponseError);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "protocol.ts")]
+#[ts(export_to = "protocol.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct Notification {
     pub notifier_type: String,
@@ -64,7 +64,7 @@ pub struct Notification {
 register_ts!(Notification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "protocol.ts")]
+#[ts(export_to = "protocol.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct NotifierId {
     pub notifier_id: String,

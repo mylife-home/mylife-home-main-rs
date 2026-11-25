@@ -11,7 +11,7 @@ use crate::register_ts;
 // ===========================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum ChangeType {
     Add,
@@ -22,7 +22,7 @@ pub enum ChangeType {
 register_ts!(ChangeType);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum ObjectType {
     Component,
@@ -38,7 +38,7 @@ register_ts!(ObjectType);
 /// show it. Each one carries `templateId`, empty for the project view itself,
 /// the same way a call spells it.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Impact {
     ComponentConfig(ComponentConfigImpact),
@@ -50,7 +50,7 @@ pub enum Impact {
 register_ts!(Impact);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct BindingDeleteImpact {
     pub template_id: String,
@@ -60,7 +60,7 @@ pub struct BindingDeleteImpact {
 register_ts!(BindingDeleteImpact);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentDeleteImpact {
     pub template_id: String,
@@ -70,7 +70,7 @@ pub struct ComponentDeleteImpact {
 register_ts!(ComponentDeleteImpact);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentConfigImpact {
     pub template_id: String,
@@ -82,7 +82,7 @@ pub struct ComponentConfigImpact {
 register_ts!(ComponentConfigImpact);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct TemplateExportImpact {
     pub template_id: String,
@@ -93,7 +93,7 @@ pub struct TemplateExportImpact {
 register_ts!(TemplateExportImpact);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct VersionChange {
     pub before: String,
@@ -108,7 +108,7 @@ register_ts!(VersionChange);
 /// `key` is what a selection names, `dependencies` are the other changes this
 /// one needs, and `impacts` is what accepting it drags along.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(tag = "objectType", rename_all = "lowercase")]
 pub enum ObjectChange {
     Plugin(PluginChange),
@@ -145,7 +145,7 @@ impl ObjectChange {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct PluginChange {
     pub key: String,
@@ -164,7 +164,7 @@ pub struct PluginChange {
 register_ts!(PluginChange);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentChangeConfigEntry {
     pub r#type: ChangeType,
@@ -176,7 +176,7 @@ register_ts!(ComponentChangeConfigEntry);
 
 /// component changes are always on project directly, not inside templates
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentChange {
     pub key: String,
@@ -196,7 +196,7 @@ register_ts!(ComponentChange);
 
 /// used on exports removes, to apply the impact analysis on the changes
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager-core-import-data.ts")]
+#[ts(export_to = "project-manager-core-import-data.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct TemplateChange {
     pub key: String,

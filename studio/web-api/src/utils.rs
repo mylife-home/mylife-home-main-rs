@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```ignore
 /// #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-/// #[ts(export, export_to = "file.ts")]
+/// #[ts(export_to = "file.ts")]
 /// #[serde(rename_all = "camelCase")]
 /// struct MyObject {
 ///     pub field: String,

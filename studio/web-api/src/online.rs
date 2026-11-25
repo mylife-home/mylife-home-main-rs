@@ -11,7 +11,7 @@ use crate::register_ts;
 // ===========================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceInfoWifi {
     pub rssi: i32,
@@ -20,7 +20,7 @@ pub struct InstanceInfoWifi {
 register_ts!(InstanceInfoWifi);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceInfo {
     /// 'ui' | 'studio' | 'core' | 'driver? (for arduino/esp/...)'
@@ -43,7 +43,7 @@ register_ts!(InstanceInfo);
 
 /// Update to an instance's info. Discriminated by `operation`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(tag = "operation", rename_all = "lowercase")]
 pub enum UpdateInstanceInfoData {
     Set(SetInstanceInfoData),
@@ -53,7 +53,7 @@ pub enum UpdateInstanceInfoData {
 register_ts!(UpdateInstanceInfoData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetInstanceInfoData {
     pub instance_name: String,
@@ -63,7 +63,7 @@ pub struct SetInstanceInfoData {
 register_ts!(SetInstanceInfoData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearInstanceInfoData {
     pub instance_name: String,
@@ -72,7 +72,7 @@ pub struct ClearInstanceInfoData {
 register_ts!(ClearInstanceInfoData);
 
 #[derive(Debug, Clone, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SystemRestart {
     pub instance_name: String,
@@ -86,7 +86,7 @@ register_ts!(SystemRestart);
 // ===========================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct State {
     pub component: String,
@@ -100,7 +100,7 @@ register_ts!(State);
 /// Update to the component registry. Discriminated by `operation`, then by
 /// `type` within the `set` case.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(tag = "operation", rename_all = "lowercase")]
 pub enum UpdateComponentData {
     Clear(ClearData),
@@ -110,7 +110,7 @@ pub enum UpdateComponentData {
 register_ts!(UpdateComponentData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearData {
     pub instance_name: String,
@@ -122,7 +122,7 @@ register_ts!(ClearData);
 
 /// The `set` payload, discriminated by `type` into component / plugin / state.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum SetData {
     Component(SetComponentData),
@@ -133,7 +133,7 @@ pub enum SetData {
 register_ts!(SetData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetComponentData {
     pub instance_name: String,
@@ -143,7 +143,7 @@ pub struct SetComponentData {
 register_ts!(SetComponentData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetPluginData {
     pub instance_name: String,
@@ -153,7 +153,7 @@ pub struct SetPluginData {
 register_ts!(SetPluginData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetStateData {
     pub instance_name: String,
@@ -164,7 +164,7 @@ register_ts!(SetStateData);
 
 /// Component update target kind, used by ClearData.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum ComponentDataType {
     Plugin,
@@ -175,7 +175,7 @@ pub enum ComponentDataType {
 register_ts!(ComponentDataType);
 
 #[derive(Debug, Clone, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentAction {
     pub component_id: String,
@@ -192,7 +192,7 @@ register_ts!(ComponentAction);
 
 /// A history record. Discriminated by `type`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum HistoryRecord {
     InstanceSet(InstanceHistoryRecord),
@@ -205,7 +205,7 @@ pub enum HistoryRecord {
 register_ts!(HistoryRecord);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceHistoryRecord {
     #[ts(type = "number")]
@@ -216,7 +216,7 @@ pub struct InstanceHistoryRecord {
 register_ts!(InstanceHistoryRecord);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentSetHistoryRecord {
     #[ts(type = "number")]
@@ -231,7 +231,7 @@ pub struct ComponentSetHistoryRecord {
 register_ts!(ComponentSetHistoryRecord);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentClearHistoryRecord {
     #[ts(type = "number")]
@@ -243,7 +243,7 @@ pub struct ComponentClearHistoryRecord {
 register_ts!(ComponentClearHistoryRecord);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct StateHistoryRecord {
     #[ts(type = "number")]
@@ -262,7 +262,7 @@ register_ts!(StateHistoryRecord);
 // ===========================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "online.ts")]
+#[ts(export_to = "online.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     pub transport_connected: bool,

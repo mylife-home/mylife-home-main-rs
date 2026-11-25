@@ -22,7 +22,7 @@ pub mod core_validation;
 
 /// add / update / delete
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum ChangeType {
     Add,
@@ -33,7 +33,7 @@ pub enum ChangeType {
 register_ts!(ChangeType);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectType {
     Ui,
@@ -43,7 +43,7 @@ pub enum ProjectType {
 register_ts!(ProjectType);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum CoreComponentDefinitionType {
     Plugin,
@@ -53,7 +53,7 @@ pub enum CoreComponentDefinitionType {
 register_ts!(CoreComponentDefinitionType);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum CoreToolboxDisplay {
     Show,
@@ -69,7 +69,7 @@ register_ts!(CoreToolboxDisplay);
 /// null | 'standard' | 'external' on the wire; model the null via Option at the
 /// use site, this enum is the non-null part.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum ComponentsImportType {
     Standard,
@@ -79,7 +79,7 @@ pub enum ComponentsImportType {
 register_ts!(ComponentsImportType);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum UiControlType {
     Display,
@@ -89,7 +89,7 @@ pub enum UiControlType {
 register_ts!(UiControlType);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum ViewType {
     Window,
@@ -104,14 +104,14 @@ register_ts!(ViewType);
 
 /// A component's configuration: opaque values keyed by config name.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[ts(type = "{ [name: string]: any; }")]
 pub struct CoreComponentConfiguration(pub HashMap<String, serde_json::Value>);
 
 register_ts!(CoreComponentConfiguration);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CorePosition {
     pub x: i32,
@@ -121,7 +121,7 @@ pub struct CorePosition {
 register_ts!(CorePosition);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreComponentDefinition {
     pub r#type: CoreComponentDefinitionType,
@@ -132,7 +132,7 @@ pub struct CoreComponentDefinition {
 register_ts!(CoreComponentDefinition);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreComponentData {
     pub definition: CoreComponentDefinition,
@@ -144,7 +144,7 @@ pub struct CoreComponentData {
 register_ts!(CoreComponentData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreBindingData {
     pub source_component: String,
@@ -156,7 +156,7 @@ pub struct CoreBindingData {
 register_ts!(CoreBindingData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CorePluginData {
     pub name: String,
@@ -173,7 +173,7 @@ pub struct CorePluginData {
 register_ts!(CorePluginData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreTemplateConfigExport {
     pub component: String,
@@ -183,7 +183,7 @@ pub struct CoreTemplateConfigExport {
 register_ts!(CoreTemplateConfigExport);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreTemplateMemberExport {
     pub component: String,
@@ -193,7 +193,7 @@ pub struct CoreTemplateMemberExport {
 register_ts!(CoreTemplateMemberExport);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreTemplateExports {
     pub config: HashMap<String, CoreTemplateConfigExport>,
@@ -203,7 +203,7 @@ pub struct CoreTemplateExports {
 register_ts!(CoreTemplateExports);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreTemplate {
     pub components: HashMap<String, CoreComponentData>,
@@ -214,7 +214,7 @@ pub struct CoreTemplate {
 register_ts!(CoreTemplate);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreView {
     pub components: HashMap<String, CoreComponentData>,
@@ -224,7 +224,7 @@ pub struct CoreView {
 register_ts!(CoreView);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreProject {
     pub components: HashMap<String, CoreComponentData>,
@@ -236,7 +236,7 @@ pub struct CoreProject {
 register_ts!(CoreProject);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CoreProjectInfo {
     pub instances_count: usize,
@@ -253,7 +253,7 @@ register_ts!(CoreProjectInfo);
 // ===========================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiResourceData {
     pub mime: String,
@@ -263,7 +263,7 @@ pub struct UiResourceData {
 register_ts!(UiResourceData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiStyleData {
     #[ts(type = "object")]
@@ -273,7 +273,7 @@ pub struct UiStyleData {
 register_ts!(UiStyleData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiComponentData {
     pub plugin: String,
@@ -282,7 +282,7 @@ pub struct UiComponentData {
 register_ts!(UiComponentData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiPluginData {
     pub name: String,
@@ -296,7 +296,7 @@ pub struct UiPluginData {
 register_ts!(UiPluginData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiTemplateInstanceBinding {
     pub component_id: Option<String>,
@@ -306,7 +306,7 @@ pub struct UiTemplateInstanceBinding {
 register_ts!(UiTemplateInstanceBinding);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiTemplateInstanceData {
     pub template_id: String,
@@ -318,7 +318,7 @@ pub struct UiTemplateInstanceData {
 register_ts!(UiTemplateInstanceData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiControlTextContextItemData {
     pub id: String,
@@ -332,7 +332,7 @@ pub struct UiControlTextContextItemData {
 register_ts!(UiControlTextContextItemData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiControlTextData {
     pub context: Vec<UiControlTextContextItemData>,
@@ -342,7 +342,7 @@ pub struct UiControlTextData {
 register_ts!(UiControlTextData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiControlData {
     pub style: Style,
@@ -362,7 +362,7 @@ pub struct UiControlData {
 register_ts!(UiControlData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiActionData {
     pub component: Option<UiActionComponentData>,
@@ -397,7 +397,7 @@ pub type UiControlDisplayMapItemData = ControlDisplayMapItem;
 
 // Used TS-side only for now
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiViewData {
     pub height: i32,
@@ -409,7 +409,7 @@ pub struct UiViewData {
 register_ts!(UiViewData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiWindowData {
     pub height: i32,
@@ -423,7 +423,7 @@ pub struct UiWindowData {
 register_ts!(UiWindowData);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiTemplateExport {
     pub bulk_pattern: Option<String>,
@@ -435,7 +435,7 @@ pub struct UiTemplateExport {
 register_ts!(UiTemplateExport);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiTemplateData {
     pub height: i32,
@@ -454,7 +454,7 @@ register_ts!(UiTemplateData);
 pub struct UiDefaultWindowData(pub HashMap<String, Option<String>>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiProject {
     pub resources: Arc<HashMap<String, Arc<UiResourceData>>>,
@@ -469,7 +469,7 @@ pub struct UiProject {
 register_ts!(UiProject);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiProjectInfo {
     pub windows_count: usize,
@@ -482,7 +482,7 @@ pub struct UiProjectInfo {
 register_ts!(UiProjectInfo);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiElementPathNode {
     pub r#type: String,
@@ -494,7 +494,7 @@ register_ts!(UiElementPathNode);
 pub type UiElementPath = Vec<Arc<UiElementPathNode>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiValidationError {
     pub path: UiElementPath,
@@ -504,7 +504,7 @@ pub struct UiValidationError {
 register_ts!(UiValidationError);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UiBreakingOperation {
     pub operation: String,
@@ -520,7 +520,7 @@ register_ts!(UiBreakingOperation);
 
 /// Notifications about the project list. Discriminated by `operation`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(tag = "operation", rename_all = "lowercase")]
 pub enum UpdateListNotification {
     Set(SetListNotification),
@@ -531,7 +531,7 @@ pub enum UpdateListNotification {
 register_ts!(UpdateListNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetListNotification {
     pub r#type: ProjectType,
@@ -542,14 +542,14 @@ pub struct SetListNotification {
 register_ts!(SetListNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[ts(type = "{}")]
 pub struct ProjectInfo(pub serde_json::Value);
 
 register_ts!(ProjectInfo);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearListNotification {
     pub r#type: ProjectType,
@@ -559,7 +559,7 @@ pub struct ClearListNotification {
 register_ts!(ClearListNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameListNotification {
     pub r#type: ProjectType,
@@ -575,7 +575,7 @@ register_ts!(RenameListNotification);
 
 /// All project-update notifications, discriminated by `operation`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(tag = "operation", rename_all = "kebab-case")]
 pub enum UpdateProjectNotification {
     SetName(SetNameProjectNotification),
@@ -615,7 +615,7 @@ pub enum UpdateProjectNotification {
 register_ts!(UpdateProjectNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetNameProjectNotification {
     pub name: String,
@@ -624,7 +624,7 @@ pub struct SetNameProjectNotification {
 register_ts!(SetNameProjectNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 pub struct ResetProjectNotification {}
 
 register_ts!(ResetProjectNotification);
@@ -632,7 +632,7 @@ register_ts!(ResetProjectNotification);
 // ---- UI notifications ----
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetUiDefaultWindowNotification {
     pub default_window: Arc<UiDefaultWindowData>,
@@ -641,7 +641,7 @@ pub struct SetUiDefaultWindowNotification {
 register_ts!(SetUiDefaultWindowNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetUiComponentDataNotification {
     pub components: Arc<HashMap<String, Arc<UiComponentData>>>,
@@ -651,7 +651,7 @@ pub struct SetUiComponentDataNotification {
 register_ts!(SetUiComponentDataNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetUiResourceNotification {
     pub id: String,
@@ -661,7 +661,7 @@ pub struct SetUiResourceNotification {
 register_ts!(SetUiResourceNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearUiResourceNotification {
     pub id: String,
@@ -670,7 +670,7 @@ pub struct ClearUiResourceNotification {
 register_ts!(ClearUiResourceNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameUiResourceNotification {
     pub id: String,
@@ -680,7 +680,7 @@ pub struct RenameUiResourceNotification {
 register_ts!(RenameUiResourceNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetUiStyleNotification {
     pub id: String,
@@ -690,7 +690,7 @@ pub struct SetUiStyleNotification {
 register_ts!(SetUiStyleNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearUiStyleNotification {
     pub id: String,
@@ -699,7 +699,7 @@ pub struct ClearUiStyleNotification {
 register_ts!(ClearUiStyleNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameUiStyleNotification {
     pub id: String,
@@ -709,7 +709,7 @@ pub struct RenameUiStyleNotification {
 register_ts!(RenameUiStyleNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetUiWindowNotification {
     pub id: String,
@@ -719,7 +719,7 @@ pub struct SetUiWindowNotification {
 register_ts!(SetUiWindowNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearUiWindowNotification {
     pub id: String,
@@ -728,7 +728,7 @@ pub struct ClearUiWindowNotification {
 register_ts!(ClearUiWindowNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameUiWindowNotification {
     pub id: String,
@@ -738,7 +738,7 @@ pub struct RenameUiWindowNotification {
 register_ts!(RenameUiWindowNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetUiTemplateNotification {
     pub id: String,
@@ -748,7 +748,7 @@ pub struct SetUiTemplateNotification {
 register_ts!(SetUiTemplateNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearUiTemplateNotification {
     pub id: String,
@@ -757,7 +757,7 @@ pub struct ClearUiTemplateNotification {
 register_ts!(ClearUiTemplateNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameUiTemplateNotification {
     pub id: String,
@@ -769,7 +769,7 @@ register_ts!(RenameUiTemplateNotification);
 // ---- Core notifications ----
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetCorePluginsNotification {
     pub plugins: HashMap<String, CorePluginData>,
@@ -778,7 +778,7 @@ pub struct SetCorePluginsNotification {
 register_ts!(SetCorePluginsNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetCorePluginToolboxDisplayNotification {
     pub id: String,
@@ -788,7 +788,7 @@ pub struct SetCorePluginToolboxDisplayNotification {
 register_ts!(SetCorePluginToolboxDisplayNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetCorePluginNotification {
     pub id: String,
@@ -798,7 +798,7 @@ pub struct SetCorePluginNotification {
 register_ts!(SetCorePluginNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearCorePluginNotification {
     pub id: String,
@@ -807,7 +807,7 @@ pub struct ClearCorePluginNotification {
 register_ts!(ClearCorePluginNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetCoreComponentNotification {
     /// null if no template
@@ -819,7 +819,7 @@ pub struct SetCoreComponentNotification {
 register_ts!(SetCoreComponentNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearCoreComponentNotification {
     /// null if no template
@@ -830,7 +830,7 @@ pub struct ClearCoreComponentNotification {
 register_ts!(ClearCoreComponentNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameCoreComponentNotification {
     /// null if no template
@@ -842,7 +842,7 @@ pub struct RenameCoreComponentNotification {
 register_ts!(RenameCoreComponentNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetCoreBindingNotification {
     /// null if no template
@@ -854,7 +854,7 @@ pub struct SetCoreBindingNotification {
 register_ts!(SetCoreBindingNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearCoreBindingNotification {
     /// null if no template
@@ -865,7 +865,7 @@ pub struct ClearCoreBindingNotification {
 register_ts!(ClearCoreBindingNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetCoreTemplateNotification {
     pub id: String,
@@ -875,7 +875,7 @@ pub struct SetCoreTemplateNotification {
 register_ts!(SetCoreTemplateNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearCoreTemplateNotification {
     pub id: String,
@@ -884,7 +884,7 @@ pub struct ClearCoreTemplateNotification {
 register_ts!(ClearCoreTemplateNotification);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameCoreTemplateNotification {
     pub id: String,
@@ -898,14 +898,14 @@ register_ts!(RenameCoreTemplateNotification);
 // ===========================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[ts(type = "{}")]
 pub struct ProjectCall(pub serde_json::Value);
 
 register_ts!(ProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[ts(type = "{}")]
 pub struct ProjectCallResult(pub serde_json::Value);
 
@@ -917,7 +917,7 @@ register_ts!(ProjectCallResult);
 
 /// All UI project calls, discriminated by `operation`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(tag = "operation", rename_all = "kebab-case")]
 pub enum UiProjectCall {
     // validate / refresh / deploy handled by dedicated calls below where they carry data;
@@ -970,7 +970,7 @@ pub enum UiProjectCall {
 register_ts!(UiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RefreshComponentsFromProjectUiProjectCall {
     pub project_id: String,
@@ -979,7 +979,7 @@ pub struct RefreshComponentsFromProjectUiProjectCall {
 register_ts!(RefreshComponentsFromProjectUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyRefreshComponentsUiProjectCall {
     #[ts(type = "unknown")]
@@ -989,7 +989,7 @@ pub struct ApplyRefreshComponentsUiProjectCall {
 register_ts!(ApplyRefreshComponentsUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetDefaultWindowUiProjectCall {
     pub default_window: UiDefaultWindowData,
@@ -998,7 +998,7 @@ pub struct SetDefaultWindowUiProjectCall {
 register_ts!(SetDefaultWindowUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetResourceUiProjectCall {
     pub id: String,
@@ -1008,7 +1008,7 @@ pub struct SetResourceUiProjectCall {
 register_ts!(SetResourceUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearResourceUiProjectCall {
     pub id: String,
@@ -1017,7 +1017,7 @@ pub struct ClearResourceUiProjectCall {
 register_ts!(ClearResourceUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameResourceUiProjectCall {
     pub id: String,
@@ -1027,7 +1027,7 @@ pub struct RenameResourceUiProjectCall {
 register_ts!(RenameResourceUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetStyleUiProjectCall {
     pub id: String,
@@ -1037,7 +1037,7 @@ pub struct SetStyleUiProjectCall {
 register_ts!(SetStyleUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearStyleUiProjectCall {
     pub id: String,
@@ -1046,7 +1046,7 @@ pub struct ClearStyleUiProjectCall {
 register_ts!(ClearStyleUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameStyleUiProjectCall {
     pub id: String,
@@ -1056,7 +1056,7 @@ pub struct RenameStyleUiProjectCall {
 register_ts!(RenameStyleUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct NewWindowUiProjectCall {
     pub id: String,
@@ -1065,7 +1065,7 @@ pub struct NewWindowUiProjectCall {
 register_ts!(NewWindowUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearWindowUiProjectCall {
     pub id: String,
@@ -1074,7 +1074,7 @@ pub struct ClearWindowUiProjectCall {
 register_ts!(ClearWindowUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameWindowUiProjectCall {
     pub id: String,
@@ -1084,7 +1084,7 @@ pub struct RenameWindowUiProjectCall {
 register_ts!(RenameWindowUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CloneWindowUiProjectCall {
     pub id: String,
@@ -1094,7 +1094,7 @@ pub struct CloneWindowUiProjectCall {
 register_ts!(CloneWindowUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetWindowPropertiesUiProjectCall {
     pub id: String,
@@ -1120,7 +1120,7 @@ pub struct UiWindowProperties {
 register_ts!(UiWindowProperties);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct NewTemplateUiProjectCall {
     pub id: String,
@@ -1129,7 +1129,7 @@ pub struct NewTemplateUiProjectCall {
 register_ts!(NewTemplateUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearTemplateUiProjectCall {
     pub id: String,
@@ -1138,7 +1138,7 @@ pub struct ClearTemplateUiProjectCall {
 register_ts!(ClearTemplateUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameTemplateUiProjectCall {
     pub id: String,
@@ -1148,7 +1148,7 @@ pub struct RenameTemplateUiProjectCall {
 register_ts!(RenameTemplateUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CloneTemplateUiProjectCall {
     pub id: String,
@@ -1158,7 +1158,7 @@ pub struct CloneTemplateUiProjectCall {
 register_ts!(CloneTemplateUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetTemplatePropertiesUiProjectCall {
     pub id: String,
@@ -1180,7 +1180,7 @@ pub struct UiTemplateProperties {
 register_ts!(UiTemplateProperties);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetTemplateExportUiProjectCall {
     pub id: String,
@@ -1192,7 +1192,7 @@ pub struct SetTemplateExportUiProjectCall {
 register_ts!(SetTemplateExportUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearTemplateExportUiProjectCall {
     pub id: String,
@@ -1202,7 +1202,7 @@ pub struct ClearTemplateExportUiProjectCall {
 register_ts!(ClearTemplateExportUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetTemplateBulkPatternsUiProjectCall {
     pub id: String,
@@ -1212,7 +1212,7 @@ pub struct SetTemplateBulkPatternsUiProjectCall {
 register_ts!(SetTemplateBulkPatternsUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct NewControlUiProjectCall {
     pub view_type: ViewType,
@@ -1226,7 +1226,7 @@ pub struct NewControlUiProjectCall {
 register_ts!(NewControlUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearControlUiProjectCall {
     pub view_type: ViewType,
@@ -1237,7 +1237,7 @@ pub struct ClearControlUiProjectCall {
 register_ts!(ClearControlUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameControlUiProjectCall {
     pub view_type: ViewType,
@@ -1249,7 +1249,7 @@ pub struct RenameControlUiProjectCall {
 register_ts!(RenameControlUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CloneControlUiProjectCall {
     pub view_type: ViewType,
@@ -1263,7 +1263,7 @@ pub struct CloneControlUiProjectCall {
 register_ts!(CloneControlUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetControlPropertiesUiProjectCall {
     pub view_type: ViewType,
@@ -1301,7 +1301,7 @@ pub struct UiControlProperties {
 register_ts!(UiControlProperties);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct NewTemplateInstanceUiProjectCall {
     pub view_type: ViewType,
@@ -1315,7 +1315,7 @@ pub struct NewTemplateInstanceUiProjectCall {
 register_ts!(NewTemplateInstanceUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearTemplateInstanceUiProjectCall {
     pub view_type: ViewType,
@@ -1326,7 +1326,7 @@ pub struct ClearTemplateInstanceUiProjectCall {
 register_ts!(ClearTemplateInstanceUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameTemplateInstanceUiProjectCall {
     pub view_type: ViewType,
@@ -1338,7 +1338,7 @@ pub struct RenameTemplateInstanceUiProjectCall {
 register_ts!(RenameTemplateInstanceUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CloneTemplateInstanceUiProjectCall {
     pub view_type: ViewType,
@@ -1350,7 +1350,7 @@ pub struct CloneTemplateInstanceUiProjectCall {
 register_ts!(CloneTemplateInstanceUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct MoveTemplateInstanceUiProjectCall {
     pub view_type: ViewType,
@@ -1363,7 +1363,7 @@ pub struct MoveTemplateInstanceUiProjectCall {
 register_ts!(MoveTemplateInstanceUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetTemplateInstanceTemplateUiProjectCall {
     pub view_type: ViewType,
@@ -1375,7 +1375,7 @@ pub struct SetTemplateInstanceTemplateUiProjectCall {
 register_ts!(SetTemplateInstanceTemplateUiProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetTemplateInstanceBindingsUiProjectCall {
     pub view_type: ViewType,
@@ -1389,7 +1389,7 @@ register_ts!(SetTemplateInstanceBindingsUiProjectCall);
 // ---- UI call results ----
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ValidateUiProjectCallResult {
     pub errors: Vec<UiValidationError>,
@@ -1398,7 +1398,7 @@ pub struct ValidateUiProjectCallResult {
 register_ts!(ValidateUiProjectCallResult);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RefreshComponentsUiProjectCallResult {
     pub breaking_operations: Vec<UiBreakingOperation>,
@@ -1409,7 +1409,7 @@ pub struct RefreshComponentsUiProjectCallResult {
 register_ts!(RefreshComponentsUiProjectCallResult);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct DeployUiProjectCallResult {
     /// null when there were no validation errors
@@ -1426,7 +1426,7 @@ register_ts!(DeployUiProjectCallResult);
 
 /// All core project calls, discriminated by `operation`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(tag = "operation", rename_all = "kebab-case")]
 pub enum CoreProjectCall {
     UpdateToolbox(UpdateToolboxCoreProjectCall),
@@ -1454,7 +1454,7 @@ pub enum CoreProjectCall {
 register_ts!(CoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateToolboxCoreProjectCall {
     pub item_type: String,
@@ -1465,7 +1465,7 @@ pub struct UpdateToolboxCoreProjectCall {
 register_ts!(UpdateToolboxCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetTemplateCoreProjectCall {
     pub template_id: String,
@@ -1474,7 +1474,7 @@ pub struct SetTemplateCoreProjectCall {
 register_ts!(SetTemplateCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearTemplateCoreProjectCall {
     pub template_id: String,
@@ -1483,7 +1483,7 @@ pub struct ClearTemplateCoreProjectCall {
 register_ts!(ClearTemplateCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameTemplateCoreProjectCall {
     pub template_id: String,
@@ -1493,7 +1493,7 @@ pub struct RenameTemplateCoreProjectCall {
 register_ts!(RenameTemplateCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetTemplateExportCoreProjectCall {
     /// null for the project's own view, a template id otherwise
@@ -1508,7 +1508,7 @@ pub struct SetTemplateExportCoreProjectCall {
 register_ts!(SetTemplateExportCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearTemplateExportCoreProjectCall {
     pub template_id: String,
@@ -1519,7 +1519,7 @@ pub struct ClearTemplateExportCoreProjectCall {
 register_ts!(ClearTemplateExportCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetComponentCoreProjectCall {
     /// null for the project's own view, a template id otherwise
@@ -1533,7 +1533,7 @@ pub struct SetComponentCoreProjectCall {
 register_ts!(SetComponentCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct MoveComponentsCoreProjectCall {
     /// null for the project's own view, a template id otherwise
@@ -1545,7 +1545,7 @@ pub struct MoveComponentsCoreProjectCall {
 register_ts!(MoveComponentsCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigureComponentCoreProjectCall {
     /// null for the project's own view, a template id otherwise
@@ -1559,7 +1559,7 @@ pub struct ConfigureComponentCoreProjectCall {
 register_ts!(ConfigureComponentCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct RenameComponentCoreProjectCall {
     /// null for the project's own view, a template id otherwise
@@ -1571,7 +1571,7 @@ pub struct RenameComponentCoreProjectCall {
 register_ts!(RenameComponentCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearComponentsCoreProjectCall {
     /// null for the project's own view, a template id otherwise
@@ -1582,7 +1582,7 @@ pub struct ClearComponentsCoreProjectCall {
 register_ts!(ClearComponentsCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CopyComponentsToTemplateCoreProjectCall {
     /// null for the project's own view, a template id otherwise
@@ -1594,7 +1594,7 @@ pub struct CopyComponentsToTemplateCoreProjectCall {
 register_ts!(CopyComponentsToTemplateCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct SetBindingCoreProjectCall {
     /// null for the project's own view, a template id otherwise
@@ -1605,7 +1605,7 @@ pub struct SetBindingCoreProjectCall {
 register_ts!(SetBindingCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ClearBindingCoreProjectCall {
     /// null for the project's own view, a template id otherwise
@@ -1616,7 +1616,7 @@ pub struct ClearBindingCoreProjectCall {
 register_ts!(ClearBindingCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct PrepareImportFromOnlineCoreProjectCall {
     pub config: ImportFromOnlineConfig,
@@ -1625,7 +1625,7 @@ pub struct PrepareImportFromOnlineCoreProjectCall {
 register_ts!(PrepareImportFromOnlineCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct PrepareImportFromProjectCoreProjectCall {
     pub config: ImportFromProjectConfig,
@@ -1634,7 +1634,7 @@ pub struct PrepareImportFromProjectCoreProjectCall {
 register_ts!(PrepareImportFromProjectCoreProjectCall);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyBulkUpdatesCoreProject {
     pub selection: Vec<String>,
@@ -1645,7 +1645,7 @@ pub struct ApplyBulkUpdatesCoreProject {
 register_ts!(ApplyBulkUpdatesCoreProject);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyDeployCoreProjectCall {
     #[ts(type = "unknown")]
@@ -1657,7 +1657,7 @@ register_ts!(ApplyDeployCoreProjectCall);
 // ---- import configs ----
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ImportFromOnlineConfig {
     pub import_plugins: bool,
@@ -1668,7 +1668,7 @@ pub struct ImportFromOnlineConfig {
 register_ts!(ImportFromOnlineConfig);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ImportFromProjectConfig {
     pub import_plugins: bool,
@@ -1682,7 +1682,7 @@ register_ts!(ImportFromProjectConfig);
 // ---- core call results ----
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CopyComponentsStats {
     pub components: i32,
@@ -1692,7 +1692,7 @@ pub struct CopyComponentsStats {
 register_ts!(CopyComponentsStats);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct CopyComponentsCoreProjectCallResult {
     pub stats: CopyComponentsStats,
@@ -1701,7 +1701,7 @@ pub struct CopyComponentsCoreProjectCallResult {
 register_ts!(CopyComponentsCoreProjectCallResult);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct BulkUpdatesStats {
     pub plugins: i32,
@@ -1713,7 +1713,7 @@ pub struct BulkUpdatesStats {
 register_ts!(BulkUpdatesStats);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyBulkUpdatesCoreProjectCallResult {
     pub stats: BulkUpdatesStats,
@@ -1722,7 +1722,7 @@ pub struct ApplyBulkUpdatesCoreProjectCallResult {
 register_ts!(ApplyBulkUpdatesCoreProjectCallResult);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct PrepareBulkUpdatesCoreProjectCallResult {
     pub changes: Vec<ObjectChange>,
@@ -1733,7 +1733,7 @@ pub struct PrepareBulkUpdatesCoreProjectCallResult {
 register_ts!(PrepareBulkUpdatesCoreProjectCallResult);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ValidateCoreProjectCallResult {
     pub validation: Vec<Item>,
@@ -1742,7 +1742,7 @@ pub struct ValidateCoreProjectCallResult {
 register_ts!(ValidateCoreProjectCallResult);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct PrepareDeployCoreProjectCallResult {
     pub validation: Vec<Item>,
@@ -1756,7 +1756,7 @@ register_ts!(PrepareDeployCoreProjectCallResult);
 // ---- deploy changes ----
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct DeployChanges {
     pub components: Vec<ComponentDeployChange>,
@@ -1766,7 +1766,7 @@ pub struct DeployChanges {
 register_ts!(DeployChanges);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentDeployChange {
     pub r#type: ChangeType,
@@ -1777,7 +1777,7 @@ pub struct ComponentDeployChange {
 register_ts!(ComponentDeployChange);
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "project-manager.ts")]
+#[ts(export_to = "project-manager.ts")]
 #[serde(rename_all = "camelCase")]
 pub struct BindingDeployChange {
     /// no update
