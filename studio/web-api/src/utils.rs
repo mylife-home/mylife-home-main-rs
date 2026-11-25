@@ -6,9 +6,10 @@ use serde::{Deserialize, Serialize};
 ///
 /// This won't be translated to TypeScript directly, as the representing version of this would be Partial<T>.
 ///
-/// Example type:
+/// Example type, for reading rather than running: it stands for the shape a
+/// caller writes, not for code that compiles on its own.
 ///
-/// ```rust
+/// ```ignore
 /// #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 /// #[ts(export, export_to = "file.ts")]
 /// #[serde(rename_all = "camelCase")]

@@ -7,7 +7,7 @@ ui-setup:
 	cd web-app/bundler && npm install
 
 ui-gen-api:
-	TS_RS_EXPORT_DIR=web-app/src/app/api cargo run --manifest-path web-api/Cargo.toml
+	TS_RS_EXPORT_DIR=web-app/src/app/api/generated cargo run --manifest-path web-api/Cargo.toml
 
 ui-run:
 	cd web-app/bundler && npm run dev
