@@ -1,4 +1,5 @@
 **/node_modules/
 **/web-app/dist/
-**/web-app/src/app/api/
+studio/web-app/src/app/api/generated/
+ui/web-app/src/app/api/
 target/
