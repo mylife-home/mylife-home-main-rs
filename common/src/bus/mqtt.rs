@@ -367,7 +367,7 @@ impl IoWorker {
                             }
                         }
                         Some(Err(error)) => {
-                            self.emit_event(MqttEvent::Error(Arc::new(error.into())));
+                            self.emit_event(MqttEvent::Error(Arc::new(error)));
                             self.connected = false;
                         }
                     }
@@ -379,7 +379,7 @@ impl IoWorker {
     }
 
     fn clear_command_queue(&mut self) {
-        while let Ok(_) = self.command_rx.try_recv() {}
+        while self.command_rx.try_recv().is_ok() {}
     }
 
     /// Closes and drops the current TCP stream if one is present.
@@ -401,8 +401,7 @@ impl IoWorker {
     }
 
     /// Establishes a TCP connection, sends the CONNECT packet, and waits for a
-    /// CONNACK before returning the connected stream and any leftover buffered
-    /// bytes.
+    /// CONNACK before returning the connected stream.
     async fn connect_once(&self) -> Result<Framed<TcpStream, PacketCodec>, MqttError> {
         let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&self.server_address))
             .await
@@ -415,37 +414,33 @@ impl IoWorker {
 
         stream.send(self.build_connect_packet()).await?;
 
-        loop {
-            let Some(res) =
-                timeout(CONNECT_TIMEOUT, stream.next())
-                    .await
-                    .map_err(|_| MqttError::Timeout {
-                        reason: String::from("connack timeout"),
-                    })?
-            else {
-                return Err(MqttError::ConnectionRefused {
-                    reason: String::from("connection closed by peer during handshake"),
-                });
-            };
+        let Some(res) =
+            timeout(CONNECT_TIMEOUT, stream.next())
+                .await
+                .map_err(|_| MqttError::Timeout {
+                    reason: String::from("connack timeout"),
+                })?
+        else {
+            return Err(MqttError::ConnectionRefused {
+                reason: String::from("connection closed by peer during handshake"),
+            });
+        };
 
-            let packet = res?;
+        let packet = res?;
 
-            match packet {
-                Packet::ConnAck(connack) => {
-                    if connack.code == ConnectReturnCode::Success {
-                        return Ok(stream);
-                    }
-
-                    return Err(MqttError::ConnectionRefused {
-                        reason: format!("broker refused connection: {:?}", connack.code),
-                    });
+        match packet {
+            Packet::ConnAck(connack) => {
+                if connack.code == ConnectReturnCode::Success {
+                    return Ok(stream);
                 }
-                other => {
-                    return Err(MqttError::ConnectionRefused {
-                        reason: format!("expected connack during handshake, got {other:?}"),
-                    });
-                }
+
+                Err(MqttError::ConnectionRefused {
+                    reason: format!("broker refused connection: {:?}", connack.code),
+                })
             }
+            other => Err(MqttError::ConnectionRefused {
+                reason: format!("expected connack during handshake, got {other:?}"),
+            }),
         }
     }
 
@@ -557,13 +552,13 @@ impl IoWorker {
         })
     }
 
-    fn build_publish_packet<'a>(&self, topic: String, payload: Bytes, retain: bool) -> Packet {
+    fn build_publish_packet(&self, topic: String, payload: Bytes, retain: bool) -> Packet {
         Packet::Publish(Publish {
             pkid: 1,
             dup: false,
             qos: QoS::AtMostOnce,
             retain,
-            topic: topic,
+            topic,
             payload,
         })
     }

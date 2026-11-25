@@ -128,10 +128,11 @@ where
 
 impl TypedFrom<i64> for Value {
     fn typed_from(value: i64, ty: &metadata::Type) -> Self {
-        if let metadata::Type::Range(range) = ty {
-            if *range.start() <= value && value <= *range.end() {
-                return Value::Range(value);
-            }
+        if let metadata::Type::Range(range) = ty
+            && *range.start() <= value
+            && value <= *range.end()
+        {
+            return Value::Range(value);
         }
 
         panic!("Cannot convert from i64 to Value of type {:?}", ty);
@@ -157,7 +158,7 @@ impl TypedFrom<String> for Value {
     }
 }
 
-fn is_enum_member(list: &Vec<String>, value: &String) -> bool {
+fn is_enum_member(list: &[String], value: &String) -> bool {
     list.iter().any(|candidate| candidate == value)
 }
 
@@ -203,10 +204,10 @@ impl TypedTryFrom<Value> for String {
     fn typed_try_from(value: Value, ty: &metadata::Type) -> Result<Self, Self::Error> {
         match ty {
             metadata::Type::Enum(list) => {
-                if let Value::Enum(value) = &value {
-                    if is_enum_member(list, &value) {
-                        return Ok(value.clone());
-                    }
+                if let Value::Enum(value) = &value
+                    && is_enum_member(list, value)
+                {
+                    return Ok(value.clone());
                 }
 
                 Err(ValueConversionError::ValueMismatch(ValueMismatchData {

@@ -243,11 +243,9 @@ impl message::Message<LocalUpdate> for Metadata {
             self.metadata.insert(msg.path.clone(), mvalue);
             self.publish(&msg.path, Some(value));
             tracing::trace!(path = msg.path, "set");
-        } else {
-            if self.metadata.remove(&msg.path).is_some() {
-                self.publish(&msg.path, None);
-                tracing::trace!(path = msg.path, "clear");
-            }
+        } else if self.metadata.remove(&msg.path).is_some() {
+            self.publish(&msg.path, None);
+            tracing::trace!(path = msg.path, "clear");
         }
     }
 }
@@ -309,7 +307,7 @@ impl Remote {
             return;
         }
 
-        if topic.remaining.len() == 0 {
+        if topic.remaining.is_empty() {
             tracing::warn!(topic = msg.topic(), "malformed metadata topic, ignored");
             return;
         };

@@ -192,7 +192,7 @@ impl SessionHandle {
         let notification = protocol::Notification {
             notifier_type: notifier_type.to_string(),
             notifier_id: notifier_id.to_string(),
-            data: match serde_json::to_value(&data) {
+            data: match serde_json::to_value(data) {
                 Ok(value) => value,
                 Err(error) => {
                     tracing::error!(%error, session = ?self.id(), notifier_type, notifier_id, "failed to serialize notification data");
@@ -438,10 +438,10 @@ impl Heartbeat {
     fn on_elapsed(&mut self) -> HeartbeatAction {
         let now = Instant::now();
 
-        if let Some(deadline) = self.pong_deadline {
-            if now >= deadline {
-                return HeartbeatAction::Stop;
-            }
+        if let Some(deadline) = self.pong_deadline
+            && now >= deadline
+        {
+            return HeartbeatAction::Stop;
         }
 
         if now >= self.idle_deadline {

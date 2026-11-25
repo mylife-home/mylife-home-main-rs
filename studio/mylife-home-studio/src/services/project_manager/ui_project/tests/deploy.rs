@@ -19,8 +19,7 @@ fn definition(project: &Project) -> ui_model::Definition {
 /// the order two independent errors happen to come out in.
 fn errors(project: &Project) -> Vec<String> {
     let mut messages: Vec<_> = deploy(project)
-        .err()
-        .expect("expected the deploy to be refused")
+        .expect_err("expected the deploy to be refused")
         .into_iter()
         .map(|error| error.message)
         .collect();
@@ -474,7 +473,7 @@ fn an_error_says_where_it_was_found() {
         display_properties(Some(component_ref("gone", "state"))),
     );
 
-    let errors = deploy(&project).err().expect("refused");
+    let errors = deploy(&project).expect_err("refused");
     let error = errors
         .iter()
         .find(|error| error.message.contains("'gone'"))
@@ -526,8 +525,7 @@ fn two_broken_controls_in_one_view_are_both_reported() {
     let project = set_control(&project, &window_view("win"), &control_id("second"), broken);
 
     let reported: Vec<_> = deploy(&project)
-        .err()
-        .expect("refused")
+        .expect_err("refused")
         .iter()
         .filter_map(|error| {
             error

@@ -79,34 +79,34 @@ impl str::FromStr for Type {
                     return Err(TypeParseError::new(input, TypeParseErrorReason::MinMax));
                 }
 
-                return Ok(Type::Range(min..=max));
+                Ok(Type::Range(min..=max))
             }
             "text" => {
-                if args != "" {
+                if !args.is_empty() {
                     return Err(TypeParseError::new(
                         input,
                         TypeParseErrorReason::UnexpectedArgs,
                     ));
                 }
-                return Ok(Type::Text);
+                Ok(Type::Text)
             }
             "float" => {
-                if args != "" {
+                if !args.is_empty() {
                     return Err(TypeParseError::new(
                         input,
                         TypeParseErrorReason::UnexpectedArgs,
                     ));
                 }
-                return Ok(Type::Float);
+                Ok(Type::Float)
             }
             "bool" => {
-                if args != "" {
+                if !args.is_empty() {
                     return Err(TypeParseError::new(
                         input,
                         TypeParseErrorReason::UnexpectedArgs,
                     ));
                 }
-                return Ok(Type::Bool);
+                Ok(Type::Bool)
             }
             "enum" => {
                 let matchs = ENUM_PARSER
@@ -121,23 +121,21 @@ impl str::FromStr for Type {
                     return Err(TypeParseError::new(input, TypeParseErrorReason::BadArgs));
                 }
 
-                return Ok(Type::Enum(values));
+                Ok(Type::Enum(values))
             }
             "complex" => {
-                if args != "" {
+                if !args.is_empty() {
                     return Err(TypeParseError::new(
                         input,
                         TypeParseErrorReason::UnexpectedArgs,
                     ));
                 }
-                return Ok(Type::Complex);
+                Ok(Type::Complex)
             }
-            _ => {
-                return Err(TypeParseError::new(
-                    input,
-                    TypeParseErrorReason::UnknownType,
-                ));
-            }
+            _ => Err(TypeParseError::new(
+                input,
+                TypeParseErrorReason::UnknownType,
+            )),
         }
     }
 }

@@ -101,7 +101,7 @@ impl Component {
         let config = self
             .config
             .as_ref()
-            .ok_or_else(|| CoreModelError::ComponentHasNoConfig)?;
+            .ok_or(CoreModelError::ComponentHasNoConfig)?;
 
         // An exported config item is removed from the component's own map: the
         // template instance supplies it. Setting it here would resurrect a key

@@ -234,16 +234,16 @@ fn every_change_becomes_the_notification_that_matches_it() {
     assert_eq!(notifications.len(), changes.len());
 
     for (change, notification) in changes.iter().zip(&notifications) {
-        let matched = match (kind(change), notification) {
-            ("reset", N::Reset(_)) => true,
-            ("set-default-window", N::SetUiDefaultWindow(_)) => true,
-            ("set-component-data", N::SetUiComponentData(_)) => true,
-            ("set-resource", N::SetUiResource(_)) => true,
-            ("set-style", N::SetUiStyle(_)) => true,
-            ("set-window", N::SetUiWindow(_)) => true,
-            ("set-template", N::SetUiTemplate(_)) => true,
-            _ => false,
-        };
+        let matched = matches!(
+            (kind(change), notification),
+            ("reset", N::Reset(_))
+                | ("set-default-window", N::SetUiDefaultWindow(_))
+                | ("set-component-data", N::SetUiComponentData(_))
+                | ("set-resource", N::SetUiResource(_))
+                | ("set-style", N::SetUiStyle(_))
+                | ("set-window", N::SetUiWindow(_))
+                | ("set-template", N::SetUiTemplate(_))
+        );
 
         assert!(matched, "{} did not convert as itself", kind(change));
     }

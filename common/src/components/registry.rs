@@ -914,7 +914,7 @@ impl From<Option<Arc<String>>> for InstanceName {
 
 impl From<Option<String>> for InstanceName {
     fn from(value: Option<String>) -> Self {
-        Self(value.map(|s| Arc::new(s)))
+        Self(value.map(Arc::new))
     }
 }
 

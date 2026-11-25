@@ -154,7 +154,7 @@ impl ModelBuilder {
             width: control.width,
             x: control.x,
             y: control.y,
-            display: display,
+            display,
             text: control.text,
             primary_action: control.primary_action,
             secondary_action: control.secondary_action,
@@ -171,7 +171,7 @@ impl ModelBuilder {
 
         // TODO: we should be more strict here
         // a resource should be either set or null, but not empty
-        if id == "" {
+        if id.is_empty() {
             return Ok(None);
         }
 
@@ -270,13 +270,12 @@ impl ModelBuilder {
     fn extract_required_component_states(&mut self, model: api::Model) {
         for window in model.windows {
             for control in window.controls {
-                if let Some(display) = control.display {
-                    if let Some(id) = display.component_id
-                        && let Some(state) = display.component_state
-                    {
-                        self.required_component_states
-                            .push(RequiredComponentState { id, state });
-                    }
+                if let Some(display) = control.display
+                    && let Some(id) = display.component_id
+                    && let Some(state) = display.component_state
+                {
+                    self.required_component_states
+                        .push(RequiredComponentState { id, state });
                 }
 
                 if let Some(text) = control.text {

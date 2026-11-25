@@ -246,10 +246,10 @@ impl message::Message<Subscribe> for Client {
         let topic = msg.0.as_str();
 
         if self.subscriptions.insert(topic.to_owned()) {
-            if let Some(mqtt_client) = &self.mqtt_client {
-                if let Err(error) = mqtt_client.subscribe(vec![topic.to_owned()]) {
-                    tracing::error!(%error, topic, "failed to subscribe to topic");
-                }
+            if let Some(mqtt_client) = &self.mqtt_client
+                && let Err(error) = mqtt_client.subscribe(vec![topic.to_owned()])
+            {
+                tracing::error!(%error, topic, "failed to subscribe to topic");
             }
 
             tracing::trace!(topic, "subscribed to topic");
@@ -408,10 +408,10 @@ impl Client {
 
     /// Publish a message to a topic, sending a publish request to the MQTT client.
     fn publish(&self, topic: Topic, payload: Bytes, retain: bool) {
-        if let Some(mqtt_client) = &self.mqtt_client {
-            if let Err(error) = mqtt_client.publish(topic.to_string(), payload, retain) {
-                tracing::error!(%error, %topic, "failed to publish message to topic");
-            }
+        if let Some(mqtt_client) = &self.mqtt_client
+            && let Err(error) = mqtt_client.publish(topic.to_string(), payload, retain)
+        {
+            tracing::error!(%error, %topic, "failed to publish message to topic");
         }
     }
 
@@ -553,12 +553,8 @@ impl Message {
     /// Parse the topic to extract usefull parts
     pub fn parse_topic(&'_ self) -> Option<ParsedTopic<'_>> {
         let mut parts = self.topic.splitn(3, '/');
-        let Some(instance) = parts.next() else {
-            return None;
-        };
-        let Some(domain) = parts.next() else {
-            return None;
-        };
+        let instance = parts.next()?;
+        let domain = parts.next()?;
         let remaining = parts.next().unwrap_or_default();
 
         Some(ParsedTopic {

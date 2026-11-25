@@ -23,7 +23,7 @@ impl<Data: serde::Serialize> Clone for Notifier<Data> {
             session: self.session.clone(),
             notifier_type: self.notifier_type.clone(),
             notifier_id: self.notifier_id.clone(),
-            _phantom: self._phantom.clone(),
+            _phantom: self._phantom,
         }
     }
 }
@@ -132,9 +132,7 @@ impl<Data: serde::Serialize> NotifierManager<Data> {
         session: &SessionHandle,
         notifier_id: &str,
     ) -> Option<&Notifier<Data>> {
-        let Some(notifier) = self.notifiers.get(notifier_id) else {
-            return None;
-        };
+        let notifier = self.notifiers.get(notifier_id)?;
 
         // Ensure the notifier belongs to the specified session.
         if notifier.session.id() != session.id() {

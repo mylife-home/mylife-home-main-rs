@@ -84,9 +84,7 @@ impl UiProjectHandle {
     ) -> Result<(String, InitialEmitter), ProjectManagerActorError> {
         let res = self.0.ask(Open { session }).try_send().await;
 
-        Ok(res.map_err(|e| {
-            ProjectManagerActorError::OpenedProjectError(Box::new(CallError::from(e)))
-        })?)
+        res.map_err(|e| ProjectManagerActorError::OpenedProjectError(Box::new(CallError::from(e))))
     }
 
     pub async fn close(
@@ -103,15 +101,13 @@ impl UiProjectHandle {
             .try_send()
             .await;
 
-        Ok(res.map_err(|e| {
-            ProjectManagerActorError::OpenedProjectError(Box::new(CallError::from(e)))
-        })?)
+        res.map_err(|e| ProjectManagerActorError::OpenedProjectError(Box::new(CallError::from(e))))
     }
 
     pub async fn get_model(&self) -> Result<Arc<model::Project>, ProjectManagerActorError> {
         let res = self.0.ask(Get).try_send().await;
 
-        Ok(res.map_err(|e| ProjectManagerActorError::ActorCommunicationError(CallError::from(e)))?)
+        res.map_err(|e| ProjectManagerActorError::ActorCommunicationError(CallError::from(e)))
     }
 
     /// Puts the call on the actor's mailbox and hands back its reply.

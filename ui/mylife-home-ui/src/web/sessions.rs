@@ -386,7 +386,7 @@ impl Session {
                 .map(|id| self.get_component_state(id)),
         )
         .await;
-        let reset = Reset(HashMap::from_iter(states.into_iter().filter_map(|x| x)));
+        let reset = Reset(HashMap::from_iter(states.into_iter().flatten()));
 
         self.send(MessageType::State, &reset).await;
     }
@@ -570,10 +570,10 @@ impl Heartbeat {
     fn on_elapsed(&mut self) -> HeartbeatAction {
         let now = Instant::now();
 
-        if let Some(deadline) = self.pong_deadline {
-            if now >= deadline {
-                return HeartbeatAction::Stop;
-            }
+        if let Some(deadline) = self.pong_deadline
+            && now >= deadline
+        {
+            return HeartbeatAction::Stop;
         }
 
         if now >= self.idle_deadline {

@@ -153,13 +153,13 @@ struct Model {
 #[derive(Debug, Error)]
 enum ModelActorError {
     #[error("Failed to lookup actor handle: {0}")]
-    HandleLookupError(#[from] HandleLookupError),
+    HandleLookup(#[from] HandleLookupError),
     #[error("Failed to add rpc service: {0}")]
-    RpcServiceAddError(#[from] CallError<RpcServiceAddError>),
+    RpcServiceAdd(#[from] CallError<RpcServiceAddError>),
     #[error("Failed to remove rpc service: {0}")]
-    RpcServiceRemoveError(#[from] CallError<RpcServiceRemoveError>),
+    RpcServiceRemove(#[from] CallError<RpcServiceRemoveError>),
     #[error("Failed to set definition: {0}")]
-    ModelBuildError(#[from] ModelBuildError),
+    ModelBuild(#[from] ModelBuildError),
 }
 
 impl Actor for Model {

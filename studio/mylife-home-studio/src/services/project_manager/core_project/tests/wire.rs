@@ -183,18 +183,18 @@ fn every_change_becomes_the_notification_that_matches_it() {
     assert_eq!(notifications.len(), changes.len());
 
     for (change, notification) in changes.iter().zip(&notifications) {
-        let matched = match (kind(change), notification) {
-            ("reset", N::Reset(_)) => true,
-            ("set-plugins", N::SetCorePlugins(_)) => true,
-            ("set-plugin-display", N::SetCorePluginToolboxDisplay(_)) => true,
-            ("set-template", N::SetCoreTemplate(_)) => true,
-            ("set-component", N::SetCoreComponent(_)) => true,
-            ("clear-component", N::ClearCoreComponent(_)) => true,
-            ("rename-component", N::RenameCoreComponent(_)) => true,
-            ("set-binding", N::SetCoreBinding(_)) => true,
-            ("clear-binding", N::ClearCoreBinding(_)) => true,
-            _ => false,
-        };
+        let matched = matches!(
+            (kind(change), notification),
+            ("reset", N::Reset(_))
+                | ("set-plugins", N::SetCorePlugins(_))
+                | ("set-plugin-display", N::SetCorePluginToolboxDisplay(_))
+                | ("set-template", N::SetCoreTemplate(_))
+                | ("set-component", N::SetCoreComponent(_))
+                | ("clear-component", N::ClearCoreComponent(_))
+                | ("rename-component", N::RenameCoreComponent(_))
+                | ("set-binding", N::SetCoreBinding(_))
+                | ("clear-binding", N::ClearCoreBinding(_))
+        );
 
         assert!(matched, "{} did not convert as itself", kind(change));
     }

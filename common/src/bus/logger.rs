@@ -442,10 +442,12 @@ mod rfc3339 {
             if s[pos..].len() == 5 && !s[pos..].contains(':') {
                 s.insert(pos + 3, ':');
             }
-        } else if let Some(pos) = s.rfind('-') {
-            if pos > 10 && s[pos..].len() == 5 && !s[pos..].contains(':') {
-                s.insert(pos + 3, ':');
-            }
+        } else if let Some(pos) = s.rfind('-')
+            && pos > 10
+            && s[pos..].len() == 5
+            && !s[pos..].contains(':')
+        {
+            s.insert(pos + 3, ':');
         }
 
         let dt = DateTime::parse_from_rfc3339(&s).map_err(serde::de::Error::custom)?;

@@ -665,8 +665,8 @@ impl ProjectManager {
             resources_count: project.resources.len(),
             resources_size: project
                 .resources
-                .iter()
-                .map(|(_, res)| resource_binary_length(res))
+                .values()
+                .map(|res| resource_binary_length(res))
                 .sum(),
             styles_count: project.styles.len(),
             components_count: project.components.len(),

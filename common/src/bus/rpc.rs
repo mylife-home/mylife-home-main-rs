@@ -102,7 +102,7 @@ impl RpcHandle {
         Request: Serialize + 'static,
         Reply: DeserializeOwned + 'static,
     {
-        let input = serde_json::to_value(&data).map_err(|e| RpcClientError::Serialization(e))?;
+        let input = serde_json::to_value(data).map_err(RpcClientError::Serialization)?;
 
         let output = self
             .0
@@ -114,7 +114,7 @@ impl RpcHandle {
             })
             .await?;
 
-        Ok(serde_json::from_value(output).map_err(|e| RpcClientError::Deserialization(e))?)
+        serde_json::from_value(output).map_err(RpcClientError::Deserialization)
     }
 }
 
@@ -195,7 +195,7 @@ impl message::Message<client::Message> for Rpc {
         msg: client::Message,
         _ctx: &mut message::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        for (_, service) in &self.services {
+        for service in self.services.values() {
             service.clone().on_message(&msg);
         }
 
@@ -614,7 +614,7 @@ impl ClientCall {
         };
 
         let payload = Bytes::from_owner(
-            serde_json::to_vec(&request).map_err(|e| RpcCallError::RequestSerializationError(e))?,
+            serde_json::to_vec(&request).map_err(RpcCallError::RequestSerializationError)?,
         );
 
         client.subscribe(reply_topic.clone().into());
@@ -647,8 +647,8 @@ impl ClientCall {
     }
 
     fn process_message(&self, payload: &Bytes) -> Result<Value, RpcCallError> {
-        let reply: RpcReply = serde_json::from_slice(payload)
-            .map_err(|e| RpcCallError::ReplyDeserializationError(e))?;
+        let reply: RpcReply =
+            serde_json::from_slice(payload).map_err(RpcCallError::ReplyDeserializationError)?;
 
         if let Some(error) = reply.error {
             return Err(RpcCallError::RemoteError(RemoteError::from(error)));

@@ -228,10 +228,10 @@ impl InstanceInfoProvider {
         };
 
         for line in content.lines() {
-            if let Some((key, value)) = line.split_once('=') {
-                if key == "PRETTY_NAME" {
-                    return Some(value.trim().trim_matches('"').to_owned());
-                }
+            if let Some((key, value)) = line.split_once('=')
+                && key == "PRETTY_NAME"
+            {
+                return Some(value.trim().trim_matches('"').to_owned());
             }
         }
 

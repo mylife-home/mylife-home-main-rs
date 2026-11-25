@@ -166,17 +166,15 @@ impl message::Message<client::Message> for Remote {
                     "cannot execute local component action"
                 );
             }
-        } else {
-            if let Err(error) =
-                self.handle_state_change(topic.instance, component_id, member_name, msg.payload())
-            {
-                tracing::error!(
-                    %error,
-                    component_id,
-                    state = member_name,
-                    "cannot update local component state"
-                );
-            }
+        } else if let Err(error) =
+            self.handle_state_change(topic.instance, component_id, member_name, msg.payload())
+        {
+            tracing::error!(
+                %error,
+                component_id,
+                state = member_name,
+                "cannot update local component state"
+            );
         }
     }
 }
@@ -336,6 +334,10 @@ impl message::Message<registry::ComponentExecuteAction> for Remote {
 }
 
 #[derive(Debug, Error)]
+#[allow(
+    clippy::enum_variant_names,
+    reason = "the suffix names what went missing, which is the whole error"
+)]
 enum ExecuteActionError {
     #[error("component not found")]
     ComponentNotFound,
