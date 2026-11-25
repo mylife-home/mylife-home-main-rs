@@ -372,7 +372,7 @@ impl message::Message<Call> for UiProject {
                 map_call_result(self.clone_control(call_data).await)
             }
             project_manager::UiProjectCall::SetControlProperties(call_data) => {
-                map_call_result(self.set_control_properties(call_data).await)
+                map_call_result(self.set_control_properties(*call_data).await)
             }
 
             project_manager::UiProjectCall::NewTemplateInstance(call_data) => {

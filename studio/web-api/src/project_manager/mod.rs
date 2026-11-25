@@ -956,7 +956,7 @@ pub enum UiProjectCall {
     ClearControl(ClearControlUiProjectCall),
     RenameControl(RenameControlUiProjectCall),
     CloneControl(CloneControlUiProjectCall),
-    SetControlProperties(SetControlPropertiesUiProjectCall),
+    SetControlProperties(Box<SetControlPropertiesUiProjectCall>),
 
     NewTemplateInstance(NewTemplateInstanceUiProjectCall),
     ClearTemplateInstance(ClearTemplateInstanceUiProjectCall),
