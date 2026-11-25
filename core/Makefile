@@ -1,6 +1,6 @@
 PWD := $(CURDIR)
 
-.PHONY: run build fmt
+.PHONY: run build
 
 run:
 	cargo run --manifest-path mylife-home-core/Cargo.toml
@@ -8,5 +8,4 @@ run:
 build:
 	cargo build --release --manifest-path mylife-home-core/Cargo.toml
 
-fmt:
-	cargo fmt --all
+include $(dir $(lastword $(MAKEFILE_LIST)))../rust.mk

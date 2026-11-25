@@ -5,7 +5,7 @@ DOCKER_PACKAGE_VERSION ?= $(shell cargo metadata --no-deps --quiet --format-vers
 DOCKER_IMAGE_TAG ?= $(DOCKER_REPOSITORY)/$(DOCKER_PACKAGE_NAME):$(DOCKER_PACKAGE_VERSION)
 DOCKER_IMAGE_LATEST_TAG ?= $(DOCKER_REPOSITORY)/$(DOCKER_PACKAGE_NAME):latest
 
-.PHONY: ui-setup ui-gen-api ui-run ui-build run build fmt docker-publish docker-build
+.PHONY: ui-setup ui-gen-api ui-run ui-build run build docker-publish docker-build docker-run
 
 ui-setup:
 	cd web-app && npm install
@@ -26,8 +26,6 @@ run:
 build:
 	cargo build --release --target x86_64-unknown-linux-musl --manifest-path mylife-home-ui/Cargo.toml
 
-fmt:
-	cargo fmt --all
 
 docker-publish: docker-build
 	docker push "$(DOCKER_IMAGE_TAG)"
@@ -38,3 +36,5 @@ docker-build:
 
 docker-run:
 	docker run -e BUS_SERVER=rpi-dev-home-main:1883 -p 8001:80 -ti --rm --name mylife-home-ui vincenttr/mylife-home-ui
+
+include $(dir $(lastword $(MAKEFILE_LIST)))../rust.mk

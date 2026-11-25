@@ -1,6 +1,6 @@
 PWD := $(CURDIR)
 
-.PHONY: run build fmt
+.PHONY: ui-setup ui-gen-api ui-run ui-check ui-build run build
 
 ui-setup:
 	cd web-app && npm install
@@ -25,5 +25,4 @@ run:
 build:
 	cargo build --release --manifest-path mylife-home-studio/Cargo.toml
 
-fmt:
-	cargo fmt --all
+include $(dir $(lastword $(MAKEFILE_LIST)))../rust.mk
