@@ -6,7 +6,7 @@ import CloseIcon from '@material-ui/icons/Close';
 import CheckIcon from '@material-ui/icons/Check';
 import HourglassEmptyIcon from '@material-ui/icons/HourglassEmpty';
 
-import { name, version } from '../../../../../package.json';
+import { name } from '../../../../../package.json';
 import { isOnline, getRunningRequestsIds } from '../../../store/status/selectors';
 import { isTransportConnected } from '../../../store/online-status/selectors';
 import StatusBar, { StatusSeparator, StatusItem } from '../../lib/status-bar';
@@ -42,7 +42,7 @@ const Status: FunctionComponent<{ className?: string }> = ({ className }) => {
 export default Status;
 
 const Version: FunctionComponent = () => {
-  return <Typography>{`${name} v${version}`}</Typography>;
+  return <Typography>{`${name} v${__APP_VERSION__}`}</Typography>;
 };
 
 const Connection: FunctionComponent = () => {
