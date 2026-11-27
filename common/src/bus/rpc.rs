@@ -704,6 +704,9 @@ struct RpcRequest {
     reply_topic: String,
 }
 
+/// A successful reply carries `output`, null when the call has nothing to
+/// return. A failed reply carries `error` alone. The Node implementation omits
+/// `output` entirely on a void reply, which is read back as null.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RpcReply {
