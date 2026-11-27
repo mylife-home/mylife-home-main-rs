@@ -1,6 +1,6 @@
 {
   "name": "bundler",
-  "version": "1.0.0",
+  "private": true,
   "scripts": {
     "build": "vite build",
     "dev": "vite",
