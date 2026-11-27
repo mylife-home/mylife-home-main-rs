@@ -64,18 +64,19 @@ static SINKS: LazyLock<Arc<Sinks>> = LazyLock::new(|| {
 });
 
 /// Installs the global subscriber. Call once, early. Sinks are added separately.
+///
+/// `logger_level` governs both outputs, the console and the sinks, so an event
+/// below it is never built: the filters are per-layer, which lets `tracing`
+/// skip the call site entirely.
 pub fn init() {
-    let config: ObservabilityConfig = config::section("observability");
-
-    let fanout = FanoutLayer {
-        sinks: SINKS.clone(),
-    };
-    let registry = tracing_subscriber::registry().with(fanout);
-    if let Some(console_level) = config
+    let level = config::section::<ObservabilityConfig>("observability")
         .logger_level
-        .and_then(Into::<Option<tracing::Level>>::into)
-    {
-        registry.with(console_layer(console_level)).init();
+        .and_then(Into::<Option<tracing::Level>>::into);
+
+    let registry = tracing_subscriber::registry().with(fanout_layer(level));
+
+    if let Some(level) = level {
+        registry.with(console_layer(level)).init();
     } else {
         registry.init();
     }
@@ -199,6 +200,20 @@ where
 {
     let filter = EventsOnly.and(LevelFilter::from_level(level));
     tracing_subscriber::fmt::layer().with_filter(filter)
+}
+
+/// The layer feeding the registered sinks. `None` silences them, as it
+/// silences the console.
+fn fanout_layer<S>(level: Option<tracing::Level>) -> impl Layer<S>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    let filter = EventsOnly.and(level.map_or(LevelFilter::OFF, LevelFilter::from_level));
+
+    FanoutLayer {
+        sinks: SINKS.clone(),
+    }
+    .with_filter(filter)
 }
 
 struct EventsOnly;
